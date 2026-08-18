@@ -9,6 +9,7 @@ import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
+import type { AgentCaseIndexProvider } from "./composeGuide/caseIndex.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AutoCompactPolicy } from "../compact/definitions/auto-compact.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
@@ -79,6 +80,11 @@ export interface NovelAgentOptions {
   platform?: string;
   /** 小说全局约束提供者（node 层每调用读 NOVEL.md；失败返回 undefined → 动态段占位） */
   novelConstraintsProvider?: NovelConstraintsProvider;
+  /**
+   * 案例索引提供者（node 层 seed + 扫描 .novel/cases）：project_stage full 注入时
+   * 按工作流前缀过滤附「本工作流参考案例」footer（第九批）；缺省不附。
+   */
+  agentCaseIndexProvider?: AgentCaseIndexProvider;
   /** compose 模式状态提供者（compose_mode nudge 装配；缺省不注入该 nudge） */
   composeState?: ComposeModeStateProvider;
   /** compose 工具服务（novel.compose 组 Enter/ExitComposeMode；缺省用 composeState 自建兜底） */
@@ -126,7 +132,16 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     () => ContextNudgePolicy
   >([
     ["todo_idle", () => new TodoIdleNudgePolicy()],
-    ["project_stage", () => new ProjectStageNudgePolicy({ handle: opts.handle })],
+    [
+      "project_stage",
+      () =>
+        new ProjectStageNudgePolicy({
+          handle: opts.handle,
+          ...(opts.agentCaseIndexProvider !== undefined
+            ? { caseIndexProvider: opts.agentCaseIndexProvider }
+            : {}),
+        }),
+    ],
     ...(opts.composeState === undefined
       ? []
       : ([

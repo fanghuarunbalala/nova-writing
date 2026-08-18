@@ -6,9 +6,11 @@ import {
   FULL_TEXT_OF,
   classifyProjectStage,
   nextActionOf,
+  renderCaseFooter,
   renderFullText,
   renderSparseText,
 } from "../project-stage.js";
+import type { GuideCaseEntry } from "../../../agent/composeGuide/types.js";
 import type { LoopContext } from "../../../loop/LoopContext.js";
 import type { RunProgress } from "../../../loop/types.js";
 import type {
@@ -224,15 +226,17 @@ describe("renderFullText / renderSparseText", () => {
     expect(text).toContain("## 工作流路线图");
     expect(text).toContain("## 全局规则");
     expect(text).toContain("情绪优先");
+    expect(text).toContain("分节确认");
   });
 
-  it("开书 full：采集创意+篇幅（冷启动不带推荐），默认经设计模式派 Compose 构思，确认后写入 NOVEL.md 或正式稿", () => {
+  it("开书 full：采集创意+篇幅（冷启动不带推荐），默认经设计模式分节构思（五节逐节确认），确认后写入 NOVEL.md 或正式稿", () => {
     const text = FULL_TEXT_OF.collect;
     expect(text.startsWith("## 开书推荐工作流")).toBe(true);
     expect(text).toContain("一句话创意（开放填空，绝不配选项）");
     expect(text).toContain("每章推荐字数");
-    expect(text).toContain("建议先行");
-    expect(text).toContain("默认经设计模式构思");
+    expect(text).toContain("默认经设计模式分节构思");
+    expect(text).toContain("① 主角（性格/身份/金手指）");
+    expect(text).toContain("绝不一次输出成套方案");
     expect(text).toContain("写入 NOVEL.md 或者正式稿");
   });
 
@@ -375,5 +379,71 @@ describe("ProjectStageNudgePolicy v2（persistent full/sparse）", () => {
     const cleared = mockLoop({ messages: [] });
     await policy.persistentNudgeIfNeeded(cleared.loop, run());
     expect(cleared.appended[0]!.nudge).toBe(PROJECT_STAGE_NUDGE_FULL);
+  });
+});
+
+describe("full 尾部「本工作流参考案例」footer（第九批）", () => {
+  const entries: GuideCaseEntry[] = [
+    { file: "世界观设计案例.md", path: ".novel/cases/世界观设计案例.md", taskType: "world-design", summary: "世界观", order: 26 },
+    { file: "人物设计案例.md", path: ".novel/cases/人物设计案例.md", taskType: "character-design", summary: "人物", order: 20 },
+    { file: "总纲设计案例.md", path: ".novel/cases/总纲设计案例.md", taskType: "outline-overview", summary: "总纲", order: 15 },
+    { file: "大纲细化设计案例.md", path: ".novel/cases/大纲细化设计案例.md", taskType: "act-design", summary: "幕设计", order: 10 },
+    { file: "大纲-场景设计案例.md", path: ".novel/cases/大纲-场景设计案例.md", taskType: "scene-design", summary: "场景", order: 12 },
+    { file: "正文撰写案例.md", path: ".novel/cases/正文撰写案例.md", taskType: "prose-draft", summary: "正文", order: 30 },
+  ];
+
+  it("renderCaseFooter 按工作流前缀过滤：开书=世界观/人物/总纲；大纲=总纲/幕/场景；正文=prose 系；收尾/空库不附", () => {
+    const collect = renderCaseFooter("collect", entries);
+    expect(collect).toContain(".novel/cases/世界观设计案例.md");
+    expect(collect).toContain(".novel/cases/人物设计案例.md");
+    expect(collect).toContain("task=outline-overview");
+    expect(collect).not.toContain("act-design");
+    expect(collect).not.toContain("prose-");
+    const outline = renderCaseFooter("expand_outline", entries);
+    expect(outline).toContain("task=outline-overview");
+    expect(outline).toContain("task=act-design");
+    expect(outline).toContain("task=scene-design");
+    expect(outline).not.toContain("world-design");
+    const prose = renderCaseFooter("write_prose", entries);
+    expect(prose).toContain("task=prose-draft");
+    expect(prose).not.toContain("act-design");
+    expect(renderCaseFooter("complete", entries)).toBe("");
+    expect(renderCaseFooter("collect", [])).toBe("");
+  });
+
+  it("renderFullText：有索引附案例 footer（全局规则之后）；无索引不附", () => {
+    const withCases = renderFullText({ workflow: "collect" }, entries);
+    expect(withCases).toContain("## 本工作流参考案例");
+    expect(withCases.indexOf("## 全局规则")).toBeLessThan(
+      withCases.indexOf("## 本工作流参考案例"),
+    );
+    const bare = renderFullText({ workflow: "collect" });
+    expect(bare).not.toContain("## 本工作流参考案例");
+  });
+
+  it("policy：caseIndexProvider 注入时 full 含案例 footer；sparse 不附；provider 异常降级不阻断", async () => {
+    const policy = new ProjectStageNudgePolicy({
+      handle: statefulHandle(),
+      caseIndexProvider: async () => entries,
+    });
+    const { loop, appended } = mockLoop();
+    await policy.persistentNudgeIfNeeded(loop, run());
+    expect(appended[0]!.content).toContain("## 本工作流参考案例");
+    expect(appended[0]!.content).toContain(".novel/cases/世界观设计案例.md");
+    // 同工作流第二 run → sparse，无案例 footer
+    const again = mockLoop();
+    await policy.persistentNudgeIfNeeded(again.loop, run());
+    expect(again.appended[0]!.content).not.toContain("## 本工作流参考案例");
+    // provider 抛错 → full 照常注入、无 footer
+    const failing = new ProjectStageNudgePolicy({
+      handle: statefulHandle(),
+      caseIndexProvider: async () => {
+        throw new Error("scan down");
+      },
+    });
+    const failedRun = mockLoop();
+    await failing.persistentNudgeIfNeeded(failedRun.loop, run());
+    expect(failedRun.appended[0]!.content).toContain("## 开书推荐工作流");
+    expect(failedRun.appended[0]!.content).not.toContain("## 本工作流参考案例");
   });
 });

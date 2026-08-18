@@ -459,6 +459,17 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				})
 		: undefined;
 
+	// compose 案例引导 seed（进程级共享 memo：main 的 full 案例 footer 与 Compose
+	// builder 共用一次 seed；扫描走 mtime 缓存）。logger 闭包后置——调用时已初始化
+	let agentCasesSeeded: Promise<boolean> | undefined;
+	const ensureAgentCasesSeeded = () =>
+		(agentCasesSeeded ??= seedAgentCasesIfNeeded(workspace, logger));
+	// project_stage full 尾部「本工作流参考案例」footer 的索引来源（第九批）
+	const agentCaseIndexProvider = async () => {
+		await ensureAgentCasesSeeded();
+		return scanAgentCases(workspace, logger);
+	};
+
 	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）。
 	// BookAnalyst 不委托子代理（delegation disabled）——不装配编排；
 	// 运行参数存在时：Explore/Compose 各自走解析后的连接与采样（如 Explore → Fast 档）
@@ -508,9 +519,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 								sampling: composeClassifierSampling(),
 							})
 						: undefined;
-					let seededOnce: Promise<boolean> | undefined;
-					const ensureSeeded = () =>
-						(seededOnce ??= seedAgentCasesIfNeeded(workspace, logger));
+					const ensureSeeded = () => ensureAgentCasesSeeded();
 					let guideOnce: Promise<LLMessage[] | undefined> | undefined;
 					return buildNovelComposeAgent({
 						workspace,
@@ -643,12 +652,14 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
 		//（失败返回 undefined → 动态段渲染占位）
 		platform: PLATFORM_LABELS[process.platform] ?? process.platform,
-		novelConstraintsProvider: async () => {
-			const content = await readNovelGlobalConstraintsSafe(workspace, logger);
-			return content === undefined
-				? undefined
-				: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
-		},
+			novelConstraintsProvider: async () => {
+				const content = await readNovelGlobalConstraintsSafe(workspace, logger);
+				return content === undefined
+					? undefined
+					: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
+			},
+			// project_stage full 尾部案例 footer 的索引来源（seed + mtime 缓存扫描）
+			agentCaseIndexProvider,
 		// compose 状态（nudge/权限门共享）+ 工具服务（novel.compose 组）+ 每次 provider
 		// call 发起时晋升 pendingMode（mode.set 记录后由本钩子生效，PRD F1 双态）
 		composeState,

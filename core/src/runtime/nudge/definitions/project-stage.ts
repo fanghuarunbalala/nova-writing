@@ -24,6 +24,9 @@ import type {
   StoryOutlineSnapshot,
   StoryUnitWithLeaf,
 } from "../../../novel/contract/snapshot.js";
+import type { AgentCaseIndexProvider } from "../../agent/composeGuide/caseIndex.js";
+import type { GuideCaseEntry } from "../../agent/composeGuide/types.js";
+import { renderAgentCasesIndex } from "../../agent/composeGuide/caseIndex.js";
 
 /** full 注入标记（压缩清扫/摘要过滤/UI 识别用） */
 export const PROJECT_STAGE_NUDGE_FULL = "project_stage_full";
@@ -34,6 +37,11 @@ export const PROJECT_STAGE_NUDGE_SPARSE = "project_stage_sparse";
 export interface ProjectStageNudgeDeps {
   /** novel-db 查询客户端（buildNovelAgent 的 opts.handle；结构化便于测试替身） */
   readonly handle: Pick<NovelHandle, "query">;
+  /**
+   * 案例索引提供者（node 层注入：seed + 扫描 .novel/cases）：full 注入时取索引、
+   * 按工作流前缀过滤后以「本工作流参考案例」footer 附尾（第九批）。缺省不附。
+   */
+  readonly caseIndexProvider?: AgentCaseIndexProvider;
 }
 
 /** 项目阶段（= 工作流种类；full 按「每种每纪元一次」去重） */
@@ -169,8 +177,8 @@ const COLLECT_FULL_TEXT = [
   "## 开书推荐工作流：从一句话到吸引人的故事",
   "入口：尚无已确认的故事核（项目可能已有零散设定或旧稿）。",
   "1. 用一次 AskUserQuestion（≤2 问）采集：一句话创意（开放填空，绝不配选项）＋目标篇幅与每章推荐字数（冷启动不带「推荐」）。规划可逐步展开：先固化故事核与创作范围（如先定第一卷），其余后续再说，不要求一次定完全书。",
-  "2. **默认经设计模式构思**：EnterComposeMode 后派**草案创作（Compose）子代理**出故事构建方案——建议先行，基于创意给出主角/冲突/基调/书名等 2-3 个候选方向，你审阅修订后写入设计草稿，ExitComposeMode 经作者审批应用；与作者的问答互动必须由你本人完成。",
-  "3. 作者确认后的内容按要求写入 NOVEL.md 或者正式稿。",
+  "2. **默认经设计模式分节构思**：EnterComposeMode 后把故事构建拆成固定小节逐节推进——① 主角（性格/身份/金手指）② 灵魂设定（创意核心意象）③ 世界观与力量体系 ④ 基调与书名 ⑤ 故事核汇总（NOVEL.md 固化清单）。每节派**草案创作（Compose）子代理**出候选（一次只委派当前小节，prompt 只要求该节内容，节内可并列 2-3 个候选），你审阅修订后写入设计草稿并**只呈现当前一节**，作者确认或修正后才进入下一节，绝不一次输出成套方案；与作者的问答互动必须由你本人完成。",
+  "3. 五节逐节确认完毕后 ExitComposeMode 提交审批；经作者批准后，故事核固化清单按要求写入 NOVEL.md 或者正式稿。",
 ].join("\n");
 
 const OUTLINE_FULL_TEXT = [
@@ -232,13 +240,56 @@ const GLOBAL_RULES_FOOTER = [
   "- 不静默回退：需要重跑上一工作流时必须告知作者原因。",
   "- 种子生长不是回退：后续阶段补充前序信息（含直接修正并告知），不视为流程倒退。",
   "- 逐步展开：规划不要求一次定完；完成一步后给出下一步建议，但**不主动要求作者继续完善**，按作者节奏推进。",
+  "- 分节确认：成套设计按小节推进，每节只呈现该节候选（可并列 2-3 个供选），作者确认或修正后才进入下一节，绝不一次输出全套方案——成套输出的纠正成本远高于逐节确认的往返成本。",
   "- 不硬写：没有 5 要素不强行成文；「足够」= 5 要素完整而非完美。",
   "- 情绪优先：一切创作决策以情绪效果为第一判据。",
 ].join("\n");
 
-/** 渲染 full 全文（工作流全文 + 路线图 + 全局规则；raw markdown） */
-export function renderFullText(action: ProjectStageAction): string {
-  return [FULL_TEXT_OF[action.workflow], ROADMAP_FOOTER, GLOBAL_RULES_FOOTER].join("\n\n");
+/**
+ * 工作流 → 案例标签前缀（第九批，作者定稿映射）：
+ * 开书 = 世界观/人物/总纲；大纲 = 总纲/幕细化/场景；正文 = prose 系；收尾无。
+ * 前缀匹配对后续新增案例自动生效（如新加 prose-xxx 摘录自动进正文工作流）。
+ */
+const CASE_PREFIXES_BY_WORKFLOW: Readonly<Record<ProjectStagePhase, readonly string[]>> =
+  Object.freeze({
+    collect: ["world-", "character-", "outline-"],
+    expand_outline: ["outline-", "act-", "scene-"],
+    write_prose: ["prose-"],
+    complete: [],
+  });
+
+/** 案例 footer 标题（.novel/cases 相对路径，主代理可 Read 对照/委派时点名） */
+const CASE_FOOTER_HEADER =
+  "## 本工作流参考案例（.novel/cases/，按需 Read 对照；委派 Compose 时可在 prompt 中点名）";
+
+/**
+ * 渲染工作流案例 footer（前缀过滤；无匹配/收尾工作流 → 空串不附）
+ * @param workflow 工作流种类
+ * @param entries 案例条目（已排序）
+ * @returns footer 文本；空串 = 不附
+ */
+export function renderCaseFooter(
+  workflow: ProjectStagePhase,
+  entries: readonly GuideCaseEntry[],
+): string {
+  const prefixes = CASE_PREFIXES_BY_WORKFLOW[workflow];
+  if (prefixes.length === 0 || entries.length === 0) return "";
+  const matched = entries.filter((e) => prefixes.some((p) => e.taskType.startsWith(p)));
+  if (matched.length === 0) return "";
+  return [CASE_FOOTER_HEADER, renderAgentCasesIndex(matched)].join("\n");
+}
+
+/** 渲染 full 全文（工作流全文 + 路线图 + 全局规则 [+ 案例 footer]；raw markdown） */
+export function renderFullText(
+  action: ProjectStageAction,
+  caseEntries?: readonly GuideCaseEntry[],
+): string {
+  const parts = [FULL_TEXT_OF[action.workflow], ROADMAP_FOOTER, GLOBAL_RULES_FOOTER];
+  if (caseEntries !== undefined) {
+    const caseFooter = renderCaseFooter(action.workflow, caseEntries);
+    if (caseFooter !== "") parts.push(caseFooter);
+  }
+  return parts.join("\n\n");
 }
 
 /** 渲染 sparse 一行心跳 */
@@ -271,6 +322,8 @@ function workflowOfFullText(content: string): ProjectStagePhase | undefined {
  */
 export class ProjectStageNudgePolicy implements ContextNudgePolicy {
   private readonly handle: Pick<NovelHandle, "query">;
+  /** 案例索引提供者（缺省无——full 不附案例 footer） */
+  private readonly caseIndexProvider: AgentCaseIndexProvider | undefined;
   /** 本纪元已注入 full 的工作流集合（压缩/清空重置） */
   private readonly injectedWorkflows = new Set<ProjectStagePhase>();
   /** 首次求值 seed-scan 守卫（重启幂等） */
@@ -282,6 +335,7 @@ export class ProjectStageNudgePolicy implements ContextNudgePolicy {
 
   constructor(deps: ProjectStageNudgeDeps) {
     this.handle = deps.handle;
+    this.caseIndexProvider = deps.caseIndexProvider;
   }
 
   /**
@@ -311,7 +365,11 @@ export class ProjectStageNudgePolicy implements ContextNudgePolicy {
     }
     if (!this.injectedWorkflows.has(action.workflow)) {
       loop.appendRunMessages([
-        { role: "system", content: renderFullText(action), nudge: PROJECT_STAGE_NUDGE_FULL },
+        {
+          role: "system",
+          content: renderFullText(action, await this.readCaseEntries()),
+          nudge: PROJECT_STAGE_NUDGE_FULL,
+        },
       ]);
       this.injectedWorkflows.add(action.workflow);
       return true;
@@ -342,6 +400,16 @@ export class ProjectStageNudgePolicy implements ContextNudgePolicy {
           }
         }
       }
+    }
+  }
+
+  /** 取案例索引（provider 缺失/异常 → undefined 不附 footer；不阻断 full 注入） */
+  private async readCaseEntries(): Promise<readonly GuideCaseEntry[] | undefined> {
+    if (this.caseIndexProvider === undefined) return undefined;
+    try {
+      return await this.caseIndexProvider();
+    } catch {
+      return undefined;
     }
   }
 

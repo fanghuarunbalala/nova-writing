@@ -16,6 +16,9 @@ import { fileURLToPath } from "node:url";
 import type { Logger } from "../../log/Logger.js";
 import type { GuideCaseEntry } from "../../runtime/agent/composeGuide/types.js";
 
+// 索引渲染迁至 runtime 层（composeGuide/caseIndex.ts，供 nudge 复用）；此处 re-export 保持兼容
+export { renderAgentCasesIndex } from "../../runtime/agent/composeGuide/caseIndex.js";
+
 /** 案例运行时目录（workspace 相对；展示用正斜杠） */
 export const AGENT_CASES_DIR = ".novel/cases";
 /** 单份案例大小上限（对齐 NOVEL.md，防大文件吞 prompt） */
@@ -214,25 +217,8 @@ export async function readAgentCaseContent(
   try {
     const fileStat = await stat(target);
     if (!fileStat.isFile() || fileStat.size > AGENT_CASE_MAX_BYTES) return undefined;
-    return await readFile(target, "utf-8");
+    return await readFile(target, "utf8");
   } catch {
     return undefined;
   }
-}
-
-/**
- * 渲染索引文本（每案一行：路径｜标签｜摘要），供 novel.compose.guide 动态段注入。
- * @param entries 案例条目（已排序）
- * @returns 索引文本
- */
-export function renderAgentCasesIndex(entries: readonly GuideCaseEntry[]): string {
-  return entries
-    .map((e) => {
-      const tags = [`task=${e.taskType}`];
-      if (e.characterType !== undefined) tags.push(`character=${e.characterType}`);
-      if (e.situation !== undefined) tags.push(`situation=${e.situation}`);
-      const summary = e.summary !== "" ? ` ｜ ${e.summary}` : "";
-      return `- ${e.path} ｜ ${tags.join(" ")}${summary}`;
-    })
-    .join("\n");
 }

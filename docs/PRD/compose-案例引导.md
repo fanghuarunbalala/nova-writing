@@ -139,7 +139,7 @@ flowchart LR
   - 不做 subagent journal 级持久化（live-only 维持，见 §7）。
   - seed 只做"缺失即拷贝"，**永不覆盖** `.novel/cases/` 内既有文件（用户本地改动优先；母版升级传播策略见 §7）。
   - 注入不构成"硬保证"：案例是概率性提升；硬约束仍靠标准段条文 + 主代理审批闸门。
-  - 不给 explorer / main agent 接入本机制（仅 Compose）。
+  - 不给 explorer / main agent 接入本机制（仅 Compose）。main agent 的**路径可见性**经 project_stage full 尾部「本工作流参考案例」footer 提供（PRD project-stage-nudge 第九批：按工作流前缀过滤的索引行，主代理可 Read 对照/委派时点名）——非 novel-guide 注入机制，不改变本机制"仅 Compose"的边界。
 
 ## 6. 验收标准
 

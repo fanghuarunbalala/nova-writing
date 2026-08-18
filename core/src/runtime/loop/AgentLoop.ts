@@ -27,6 +27,9 @@ const DEFAULT_MAX_TURNS = 100;
 /** text-delta 合并窗口（ms）：相邻 delta 合并为一条事件，压低跨进程传输频率（gui-performance-2 功能点一） */
 const DELTA_COALESCE_MS = 32;
 
+/** 思考心跳窗口（ms）：reasoning 只报累计字符数（无内容），1s 一条足够指示活性 */
+const REASONING_HEARTBEAT_MS = 1_000;
+
 /** 累积两段 token 用量 */
 function addUsage(
   acc: { inputTokens: number; outputTokens: number } | undefined,
@@ -63,6 +66,9 @@ export class AgentLoop {
   private pendingDeltaText = "";
   private pendingDeltaOnEvent?: (e: LoopEvent) => void;
   private deltaFlushTimer: ReturnType<typeof setTimeout> | undefined;
+  /** 思考心跳：本轮 reasoning 累计字符数（只计数不携内容，1s 节流上报活性） */
+  private reasoningChars = 0;
+  private reasoningHeartbeatTimer: ReturnType<typeof setTimeout> | undefined;
   /** 输入队列（run 排队 / control 抢占） */
   private inbox: LoopInput[] = [];
   /** 是否正在 drain / run */
@@ -469,13 +475,22 @@ export class AgentLoop {
     const providerStartedAt = Date.now();
     for (let attempt = 0; ; attempt++) {
       this.config.debugger?.record(call); // 记录每次请求（相邻差异在 html 展示）
+      // 每 turn 重置思考计数（新一轮 reasoning 从 0 起报；保险丝重试同）。
+      this.resetReasoningHeartbeat();
       try {
         const result = await this.config.provider.call(call, (d) => {
-          // reasoning delta 在 loop 层直接丢弃（思考内容不上链、UI 不展示思考中态）：
-          // 不 emit 任何事件，省去 hub/WS/IPC 全链传输成本。见 docs/PRD/gui-performance.md。
+          if (d.type === "reasoning-delta") {
+            // 思考内容不上链（gui-performance 一期决策保留）：只累计字符数，
+            // 1s 节流发无内容心跳（UI「深度思考中 · 约 N 字」活性指示）。
+            this.reasoningChars += d.text.length;
+            this.bufferReasoningHeartbeat(onEvent);
+            return;
+          }
           if (d.type !== "text-delta") return;
-          // text-delta 进合并缓冲（32ms 尾窗冲刷；任何其他事件发射前强制冲刷保序）：
+          // 正文开始 = 思考结束：取消未触发的心跳（防止过期 thinking 态回跳），再进合并缓冲
+          // （32ms 尾窗冲刷；任何其他事件发射前强制冲刷保序）：
           // 每 SSE chunk 一条 RPC → ≤~30Hz 合并事件，见 docs/PRD/gui-performance-2.md 功能点一。
+          this.cancelReasoningHeartbeat();
           this.bufferDelta(onEvent, d.text);
         });
         return {
@@ -614,6 +629,33 @@ export class AgentLoop {
     this.emit(onEvent, "user.message", { persist: true, seq: run.seq, text });
   }
 
+  /** 缓冲思考心跳（1s 尾窗；窗口内幂等排程，只发累计计数不发内容） */
+  private bufferReasoningHeartbeat(onEvent: ((e: LoopEvent) => void) | undefined): void {
+    if (this.reasoningHeartbeatTimer !== undefined) return;
+    this.reasoningHeartbeatTimer = setTimeout(() => {
+      this.reasoningHeartbeatTimer = undefined;
+      if (this.reasoningChars <= 0) return;
+      this.emit(onEvent, "assistant.delta", {
+        kind: "reasoning",
+        text: "",
+        chars: this.reasoningChars,
+      });
+    }, REASONING_HEARTBEAT_MS);
+  }
+
+  /** 取消未触发的思考心跳（正文开始 / 非 delta 事件发射时：防过期 thinking 态回跳） */
+  private cancelReasoningHeartbeat(): void {
+    if (this.reasoningHeartbeatTimer === undefined) return;
+    clearTimeout(this.reasoningHeartbeatTimer);
+    this.reasoningHeartbeatTimer = undefined;
+  }
+
+  /** 每 turn 重置思考计数（新一轮 reasoning 从 0 起报） */
+  private resetReasoningHeartbeat(): void {
+    this.cancelReasoningHeartbeat();
+    this.reasoningChars = 0;
+  }
+
   /** 缓冲 text-delta（32ms 尾窗合并成一条事件；窗口内幂等排程） */
   private bufferDelta(onEvent: ((e: LoopEvent) => void) | undefined, text: string): void {
     this.pendingDeltaText += text;
@@ -647,8 +689,12 @@ export class AgentLoop {
     extra: Record<string, unknown>,
   ): void {
     // 保序不变量：非 delta 事件发射前先冲刷缓冲中的流文本（本 turn 全部文本
-    // 先于 assistant.message / 工具事件到达消费端）
-    if (type !== "assistant.delta") this.flushPendingDelta();
+    // 先于 assistant.message / 工具事件到达消费端）；同时取消待发思考心跳
+    // （turn 已收口，迟发会把 UI 拽回 thinking 态）
+    if (type !== "assistant.delta") {
+      this.flushPendingDelta();
+      this.cancelReasoningHeartbeat();
+    }
     const event = {
       type,
       seq: 0,

@@ -44,6 +44,17 @@ function delta(text: string, agentId?: string): ProjectedEvent {
     ...(agentId !== undefined ? { agentId } : {}),
   } as ProjectedEvent;
 }
+/** 思考心跳（kind:"reasoning"，text 恒空只带累计字符数） */
+function reasoningHeartbeat(chars: number): ProjectedEvent {
+  return {
+    type: "assistant.delta",
+    kind: "reasoning",
+    text: "",
+    chars,
+    ...base,
+    ts: new Date().toISOString(),
+  } as ProjectedEvent;
+}
 function userMessage(text: string, agentId?: string): ProjectedEvent {
   return {
     type: "user.message",
@@ -404,7 +415,7 @@ describe("ConversationProjection delta 置脏与合并发布（gui-performance-2
   });
 });
 
-describe("ConversationProjection run-start 即 generating（首 token 前状态行就绪）", () => {
+describe("ConversationProjection run-start 即 thinking（首 token 前状态行就绪；text delta 切 generating）", () => {
   function runStart(seq: number): ProjectedEvent {
     return {
       type: "run-start",
@@ -426,25 +437,42 @@ describe("ConversationProjection run-start 即 generating（首 token 前状态�
     } as unknown as ProjectedEvent;
   }
 
-  it("实时 run-start → liveState=generating；run-end 收口清除", async () => {
+  it("实时 run-start → liveState=thinking；run-end 收口清除", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1", async () => []);
     await proj.start();
     expect(proj.getSnapshot().liveState).toBeUndefined();
     fake.push(runStart(1));
-    expect(proj.getSnapshot().liveState).toBe("generating");
+    expect(proj.getSnapshot().liveState).toBe("thinking");
     fake.push(runEndOf(2));
     expect(proj.getSnapshot().liveState).toBeUndefined();
   });
 
-  it("history 重放 run-start（中断 run 的 journal，无 run-end）不置 generating", async () => {
+  it("思考心跳 → thinking + thinkingChars；首个 text delta → generating 并清计数", async () => {
+    const fake = fakeHandle();
+    const proj = new ConversationProjection(fake.handle, "c1", async () => []);
+    await proj.start();
+    fake.push(runStart(1));
+    fake.push(reasoningHeartbeat(1200));
+    let snapshot = proj.getSnapshot();
+    expect(snapshot.liveState).toBe("thinking");
+    expect(snapshot.thinkingChars).toBe(1200);
+    fake.push(delta("正文"));
+    snapshot = proj.getSnapshot();
+    expect(snapshot.liveState).toBe("generating");
+    expect(snapshot.thinkingChars).toBeUndefined();
+    fake.push(runEndOf(2));
+    expect(proj.getSnapshot().liveState).toBeUndefined();
+  });
+
+  it("history 重放 run-start（中断 run 的 journal，无 run-end）不置 thinking", async () => {
     const fake = fakeHandle();
     const proj = new ConversationProjection(fake.handle, "c1", async () => [runStart(1)]);
     await proj.start();
     expect(proj.getSnapshot().liveState).toBeUndefined();
   });
 
-  it("重放期间缓冲的实时 run-start（重放完成后冲刷）→ generating", async () => {
+  it("重放期间缓冲的实时 run-start（重放完成后冲刷）→ thinking", async () => {
     const fake = fakeHandle();
     let release: ((value: void) => void) | undefined;
     const gate = new Promise<void>((resolve) => {
@@ -458,7 +486,7 @@ describe("ConversationProjection run-start 即 generating（首 token 前状态�
     fake.push(runStart(3)); // history 未返回 → 进入缓冲
     release!();
     await started;
-    expect(proj.getSnapshot().liveState).toBe("generating");
+    expect(proj.getSnapshot().liveState).toBe("thinking");
   });
 });
 

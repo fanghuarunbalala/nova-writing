@@ -280,8 +280,9 @@ function ActiveChatSurface({
     [timeline, queuedSends, askItems],
   );
 
-  // 三态推导（对齐旧版优先级）：failed > waiting（待审批/待作答，CMS 队列派生）> generating。
-  // thinking 态已随 loop 层丢弃 reasoning delta 移除；waiting 复用 GenStatus 沙漏+摇摆动画。
+  // 状态推导（对齐旧版优先级）：failed > waiting（待审批/待作答，CMS 队列派生）>
+  // thinking（reasoning 心跳/run-start）> generating（text delta）。
+  // waiting 复用 GenStatus 沙漏+摇摆动画；thinking 为脑形呼吸（深度思考中 · 约 N 字）。
   // waiting + 唤起回调 → 状态行升级为可点胶囊（点击打开审批弹窗；纯提问挂起无弹窗，保持普通等待行）。
   const waitingCount = pendingApprovalCount + pendingAskingCount;
   let status: GenStatusProps | undefined;
@@ -303,6 +304,8 @@ function ActiveChatSurface({
         ? { onWaitingClick: () => onSummonApproval() }
         : {}),
     };
+  } else if (projection?.liveState === "thinking") {
+    status = { phase: "thinking", queuedCount, thinkingChars: projection.thinkingChars };
   } else if (projection?.liveState === "generating") {
     status = { phase: "generating", queuedCount };
   } else if (queuedCount > 0) {
@@ -407,9 +410,11 @@ function ActiveChatSurface({
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
           debugLog("[renderer] onSend 触发:", input.text.slice(0, 40));
           // 无条件乐观回显：空闲发送 flight（「发送中」旋转图标，落定即止）；
-          // 生成/审批中发送 queued（「排队中」秒表，等上一 run 收口接续）。
+          // 生成/思考/审批中发送 queued（「排队中」秒表，等上一 run 收口接续）。
           const phase =
-            status?.phase === "generating" || status?.phase === "waiting" ? "queued" : "flight";
+            status?.phase === "generating" || status?.phase === "thinking" || status?.phase === "waiting"
+              ? "queued"
+              : "flight";
           const ghostId = ++queuedSeqRef.current;
           // 幽灵入队诊断：phase 判定依据 statusPhase（generating/waiting → queued，
           // 空闲 → flight）。NOVEL_LOG_LEVEL=verbose 时输出（pnpm gui:debug 自带）。

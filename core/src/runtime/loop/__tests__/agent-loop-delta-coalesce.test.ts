@@ -141,3 +141,121 @@ describe("AgentLoop text-delta 合并", () => {
     expect(types.indexOf("assistant.delta")).toBeLessThan(types.indexOf("assistant.message"));
   });
 });
+
+describe("AgentLoop reasoning 心跳（无内容、1s 节流、正文开始即取消）", () => {
+  /** 全量事件里挑出 reasoning 心跳 */
+  function heartbeats(events: LoopEvent[]): { chars: number; text: string }[] {
+    return events
+      .filter(
+        (e): e is Extract<LoopEvent, { type: "assistant.delta" }> =>
+          e.type === "assistant.delta" && e.kind === "reasoning",
+      )
+      .map((e) => ({ chars: e.chars ?? -1, text: e.text }));
+  }
+
+  it("1s 窗口合并：连续 reasoning chunk → 至多 1 条/秒、chars 为累计值、text 恒空", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider: Provider = {
+        call: async (
+          _call: ProviderCall,
+          onDelta?: (d: { type: "text-delta" | "reasoning-delta"; text: string }) => void,
+        ) => {
+          // ~3 秒思考，每 90ms 一个 chunk（每个 10 字符，避开 1s 边界巧合）
+          for (let i = 0; i < 33; i++) {
+            onDelta?.({ type: "reasoning-delta", text: "0123456789" });
+            await vi.advanceTimersByTimeAsync(90);
+          }
+          return stopResult("ok");
+        },
+      };
+      const loop = makeLoop(provider);
+      const events: LoopEvent[] = [];
+      const running = loop.run("hi", { sampling: { model: "m" } }, (e) => events.push(e));
+      await vi.advanceTimersByTimeAsync(200);
+      await running;
+      const beats = heartbeats(events);
+      // ~2.97s 思考 → 2-3 条心跳（turn 收口时未到期的尾窗心跳被取消，属预期）
+      expect(beats.length).toBeGreaterThanOrEqual(2);
+      expect(beats.length).toBeLessThanOrEqual(3);
+      for (const b of beats) expect(b.text).toBe("");
+      // 累计语义：chars 单调不减（每条心跳 = 当时的累计字符数）
+      for (let i = 1; i < beats.length; i++) {
+        expect(beats[i]!.chars).toBeGreaterThan(beats[i - 1]!.chars);
+      }
+      expect(beats[0]!.chars).toBeGreaterThanOrEqual(90);
+      // 思考内容零上链：本 turn 无正文 → 除心跳外无任何 text delta
+      const textDeltas = events.filter(
+        (e): e is Extract<LoopEvent, { type: "assistant.delta" }> =>
+          e.type === "assistant.delta" && e.kind !== "reasoning",
+      );
+      expect(textDeltas).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("正文开始 → 心跳取消（不残留 thinking 回跳），text delta 正常发射", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider: Provider = {
+        call: async (
+          _call: ProviderCall,
+          onDelta?: (d: { type: "text-delta" | "reasoning-delta"; text: string }) => void,
+        ) => {
+          onDelta?.({ type: "reasoning-delta", text: "x".repeat(50) });
+          await vi.advanceTimersByTimeAsync(300); // 心跳窗口内（<1s 未触发）
+          onDelta?.({ type: "text-delta", text: "正文" });
+          await vi.advanceTimersByTimeAsync(2000); // 原 1s 心跳到期点
+          return stopResult("正文");
+        },
+      };
+      const loop = makeLoop(provider);
+      const events: LoopEvent[] = [];
+      const running = loop.run("hi", { sampling: { model: "m" } }, (e) => events.push(e));
+      await vi.advanceTimersByTimeAsync(300);
+      await running;
+      expect(heartbeats(events)).toHaveLength(0); // 取消于首个 text delta
+      const textDeltas = events.filter(
+        (e): e is Extract<LoopEvent, { type: "assistant.delta" }> =>
+          e.type === "assistant.delta" && e.kind !== "reasoning",
+      );
+      expect(textDeltas.map((e) => e.text)).toEqual(["正文"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("跨 turn 重置：第二轮思考从 0 重新计数", async () => {
+    vi.useFakeTimers();
+    try {
+      let turn = 0;
+      const provider: Provider = {
+        call: async (
+          _call: ProviderCall,
+          onDelta?: (d: { type: "text-delta" | "reasoning-delta"; text: string }) => void,
+        ) => {
+          turn += 1;
+          if (turn === 1) {
+            onDelta?.({ type: "reasoning-delta", text: "y".repeat(1000) });
+            await vi.advanceTimersByTimeAsync(1100); // 首轮心跳触发
+            return toolCallResult();
+          }
+          onDelta?.({ type: "reasoning-delta", text: "z".repeat(80) });
+          await vi.advanceTimersByTimeAsync(1100); // 次轮心跳触发
+          return stopResult("done");
+        },
+      };
+      const loop = makeLoop(provider);
+      const events: LoopEvent[] = [];
+      const running = loop.run("hi", { sampling: { model: "m" } }, (e) => events.push(e));
+      await vi.advanceTimersByTimeAsync(300);
+      await running;
+      const beats = heartbeats(events);
+      expect(beats[0]!.chars).toBe(1000);
+      expect(beats.at(-1)!.chars).toBe(80); // 重置后重新累计
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

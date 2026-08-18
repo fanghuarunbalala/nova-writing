@@ -206,6 +206,19 @@ describe("GenStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/0s/);
   });
 
+  it("shows the thinking indicator with seconds and chars hint", () => {
+    render(<GenStatus phase="thinking" thinkingChars={3200} />);
+    expect(screen.getByRole("status")).toHaveTextContent("深度思考中");
+    expect(screen.getByRole("status")).toHaveTextContent(/0s/);
+    expect(screen.getByRole("status")).toHaveTextContent("约 3.2 千字");
+  });
+
+  it("thinking without enough chars omits the hint", () => {
+    render(<GenStatus phase="thinking" thinkingChars={120} />);
+    expect(screen.getByRole("status")).toHaveTextContent("深度思考中");
+    expect(screen.getByRole("status")).not.toHaveTextContent("推演");
+  });
+
   it("shows the waiting indicator without seconds", () => {
     render(<GenStatus phase="waiting" />);
     expect(screen.getByRole("status")).toHaveTextContent("正在审批");

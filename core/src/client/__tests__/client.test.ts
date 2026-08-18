@@ -213,11 +213,19 @@ describe("ConversationProjection（liveState）", () => {
 		return { projection, emit: (e) => listener?.(e) };
 	}
 
-	it("reasoning delta → 防御性忽略（loop 层已丢弃不发送）：不产生 liveState、timeline 无新项", async () => {
+	it("reasoning 心跳 → liveState=thinking + thinkingChars；内容不入正文（思考内容不上链不变）", async () => {
 		const { projection, emit } = makeLiveProjection();
 		await projection.start();
+		emit(evt({ type: "assistant.delta", kind: "reasoning", text: "", chars: 2400 }));
+		const snapshot = projection.getSnapshot();
+		expect(snapshot.liveState).toBe("thinking");
+		expect(snapshot.thinkingChars).toBe(2400);
+		// 心跳不建流式项（正文未开始）
+		expect(snapshot.timeline).toHaveLength(0);
+		// 无 chars 的防御形态（旧端/异常来源）：thinking 态但不更新计数
 		emit(evt({ type: "assistant.delta", kind: "reasoning", text: "让我想想" }));
-		expect(projection.getSnapshot().liveState).toBeUndefined();
+		expect(projection.getSnapshot().liveState).toBe("thinking");
+		expect(projection.getSnapshot().thinkingChars).toBe(2400);
 		expect(projection.getSnapshot().timeline).toHaveLength(0);
 	});
 

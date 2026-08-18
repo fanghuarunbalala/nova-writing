@@ -46,11 +46,17 @@ export interface AssistantMessageEvent extends ConversationEventBase {
 	text: string;
 }
 
-/** 助手流式增量（瞬态、流域专属：不落盘、无 seq） */
+/**
+ * 助手流式增量（瞬态、流域专属：不落盘、无 seq）。
+ * kind:"reasoning" 为思考心跳（gui-performance 一期的内容级 reasoning 流仍被丢弃）：
+ * text 恒空、不携内容，chars = 本轮思考累计字符数（UI「深度思考中 · 约 N 字」进度用）。
+ */
 export interface AssistantDeltaEvent extends ConversationEventBase {
 	type: "assistant.delta";
 	kind?: "text" | "reasoning";
 	text: string;
+	/** 思考心跳携带：本轮 reasoning 累计字符数（仅 kind:"reasoning"） */
+	chars?: number;
 }
 
 /** 上下文压缩边界事件 */

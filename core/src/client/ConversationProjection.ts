@@ -84,8 +84,13 @@ export interface ConversationProjectionSnapshot {
 	/** 最后应用的 journal 序列号（实时 delta 无 seq，取最近 persist 事件） */
 	lastAppliedSequence: number;
 	state: ConversationProjectionState;
-	/** 实时生成状态：text delta → generating、run 收口 → undefined（thinking 态随 loop 层丢弃 reasoning delta 移除） */
-	liveState?: "generating";
+	/**
+	 * 实时生成状态：run-start/思考心跳 → thinking、text delta → generating、run 收口 → undefined。
+	 * thinking 期 UI 显示「深度思考中」（thinkingChars 为 reasoning 心跳累计字符数）。
+	 */
+	liveState?: "thinking" | "generating";
+	/** 思考累计字符数（liveState="thinking" 期间存在；正文开始即清除） */
+	thinkingChars?: number;
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
@@ -138,8 +143,10 @@ export class ConversationProjection {
 	private textSinceLastTool = "";
 	/** canonical 修正全文（assistant.message 与已流式文本存在细微差异时暂存，收口优先采用） */
 	private pendingFullText: string | undefined;
-	/** 实时生成状态（generating；run 收口清除） */
-	private liveState: "generating" | undefined;
+	/** 实时生成状态（run-start/思考心跳 → thinking、text delta → generating；run 收口清除） */
+	private liveState: "thinking" | "generating" | undefined;
+	/** 思考累计字符数（reasoning 心跳更新；正文开始/收口清除） */
+	private thinkingChars?: number;
 	/** history 重放进行中（start() ② 段）：run-start 不据此置 generating——
 	 *  防中断 run 的 journal 重放后永久卡在「正在生成」；实时/缓冲冲刷路径不置位 */
 	private replayingHistory = false;
@@ -367,14 +374,24 @@ export class ConversationProjection {
 					}
 				}
 				this.liveState = undefined;
+				this.thinkingChars = undefined;
 				this.activeItemDirty = true;
 				this.publish();
 				break;
-			}
+		}
 			case "assistant.delta": {
-				// loop 层已丢弃 reasoning delta 不发送；防御旧端/异常来源：忽略不进正文
-				if (event.kind === "reasoning") break;
+				// 思考心跳（kind:"reasoning"，text 恒空无内容）：驱动 thinking 态 + 字符计数，
+				// 不进正文（gui-performance 一期的「思考内容不上链」决策不变）
+				if (event.kind === "reasoning") {
+					if (typeof event.chars === "number" && event.chars > 0) {
+						this.thinkingChars = event.chars;
+					}
+					this.liveState = "thinking";
+					this.publish();
+					break;
+				}
 				this.liveState = "generating";
+				this.thinkingChars = undefined;
 				this.ensureActiveAssistant(event);
 				this.appendAssistantText(event.text);
 				// 置脏 + 合并发布（gui-performance-2 功能点三）：单条 delta 成本 = 一次追加 + 置位，
@@ -430,11 +447,11 @@ export class ConversationProjection {
 				this.modePending = event.mode;
 				break;
 			case "run-start":
-				// run 开跑即生成中（不等首个 delta：上下文组装 + 模型 TTFT 期间
-				// 状态行就绪）；history 重放不置位（replayingHistory 守卫）。
+				// run 开跑即进入 thinking（上下文组装 + 模型 TTFT/推理期间状态行就绪）；
+				// 首个 text delta 切 generating。history 重放不置位（replayingHistory 守卫）。
 				// 清除：run-end / assistant.message 收口、error 态。
 				if (!this.replayingHistory) {
-					this.liveState = "generating";
+					this.liveState = "thinking";
 					this.publish();
 				}
 				break;
@@ -596,6 +613,7 @@ export class ConversationProjection {
 	 */
 	private finalizeAssistant(): void {
 		this.liveState = undefined;
+		this.thinkingChars = undefined;
 		if (this.activeAssistantSeq === undefined) return;
 		const idx = this.activeIndexResolved();
 		const item = this.timeline[idx];
@@ -643,8 +661,11 @@ export class ConversationProjection {
 
 	private transition(state: ConversationProjectionState): void {
 		this.state = state;
-		// 错误态清空 liveState，防失败后残留 generating
-		if (state === "error") this.liveState = undefined;
+		// 错误态清空 liveState，防失败后残留 generating/thinking
+		if (state === "error") {
+			this.liveState = undefined;
+			this.thinkingChars = undefined;
+		}
 		this.publish();
 	}
 
@@ -711,6 +732,7 @@ export class ConversationProjection {
 			lastAppliedSequence: this.lastAppliedSequence,
 			state: this.state,
 			...(this.liveState !== undefined ? { liveState: this.liveState } : {}),
+			...(this.thinkingChars !== undefined ? { thinkingChars: this.thinkingChars } : {}),
 			timeline: Object.freeze([...this.timeline]),
 			cards: this.cachedCards,
 			...(this.mode !== undefined ? { mode: this.mode } : {}),

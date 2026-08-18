@@ -1,8 +1,8 @@
 /**
- * RuntimeStatusIndicator 视觉：两态统一语言（图标动效 + 渐变流动文字 + 秒数）。
+ * RuntimeStatusIndicator 视觉：三态统一语言（图标动效 + 渐变流动文字 + 秒数）。
  * 紧凑尺寸（图标 18px / 文字 12.5px），颜色全部复用现有 token。
  * 文字渐变用 background-clip:text + 全局 grad-flow keyframe（shared/theme/animations.css）。
- * thinking 态已随 loop 层丢弃 reasoning delta 移除（呼吸动效一并减载）。
+ * thinking 态经 reasoning 心跳恢复（呼吸动效 + info 蓝渐变区分生成暖色）。
  */
 .row {
   display: inline-flex;
@@ -23,6 +23,15 @@
 .icon svg {
   width: 15px;
   height: 15px;
+}
+
+/* 思考：脑形 + info 蓝 + 呼吸（reasoning 心跳驱动，1s 级活性指示） */
+.thinking .icon {
+  color: var(--color-info);
+}
+
+.thinking .icon svg {
+  animation: var(--anim-status-breath) 2.2s ease-in-out infinite;
 }
 
 /* 生成：笔尖 + 品牌系 + 上下浮动 + 墨滴下落 */
@@ -71,7 +80,12 @@
   padding-bottom: 1px;
 }
 
-/* 文字渐变 + 下划线色：品牌 --grad-accent / warn 琥珀 */
+/* 文字渐变 + 下划线色：品牌 --grad-accent / info 蓝 / warn 琥珀 */
+.thinking .label {
+  background-image: var(--grad-info-text);
+  border-bottom-color: color-mix(in oklab, var(--color-info) 40%, transparent);
+}
+
 .generating .label {
   background-image: var(--grad-accent);
   border-bottom-color: color-mix(in oklab, var(--color-accent) 40%, transparent);
@@ -80,6 +94,13 @@
 .waiting .label {
   background-image: var(--grad-warn-text);
   border-bottom-color: var(--color-warn-40);
+}
+
+/* 思考附注（「约 N 字」）：弱于秒数的次级信息 */
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+  white-space: nowrap;
 }
 
 .seconds {

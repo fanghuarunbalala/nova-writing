@@ -118,6 +118,11 @@ const KNOWN_MODES = new Set(["review", "bypass", "compose"]);
 const PROVIDER_MAX_TOKENS_ENV = "NOVEL_PROVIDER_MAX_TOKENS" as const;
 const PROVIDER_THINKING_ENV = "NOVEL_PROVIDER_THINKING" as const;
 
+/** BookAnalyst 思考档位 env：解析是抽取型任务（照 manifest 读批 → 建 scene/leaf 实体），
+ * 高档思考只烧输出 token 与每轮延迟——缺省 low（1 万字实测：high 695s / low 174s，
+ * leaf 密度持平；off 292s 但 leaf 事件数掉到 1 条/场景且出现编造 paragraph id） */
+const ANALYST_THINKING_ENV = "NOVEL_ANALYST_THINKING" as const;
+
 /** Agent 运行参数 env（RuntimeSettings 解析产物 JSON；main 侧序列化，spawn 时继承。
  *  新对话生效：配置变更后 main 重写 env，已启动进程维持启动时快照） */
 const RUNTIME_SETTINGS_ENV = "NOVEL_RUNTIME_SETTINGS" as const;
@@ -264,10 +269,16 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 采样：runtime 优先，其次 NOVEL_PROVIDER_* env。默认 8192/high
 	// ——reasoning 模型的思考 token 计入 max_completion_tokens 预算，上限过低会被
 	// 思考独占导致空回复/截断（finish_reason=length）
+	// BookAnalyst 例外：不经 runtimeSettings（那是创作 agent 的配置面），独立 env +
+	// 缺省 low（抽取型任务；off 实测 leaf 变薄且会编造 id，high 只加延迟）
 	const sampling: AgentRunConfig["sampling"] = {
-		model: novelRuntime?.model ?? process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash",
+		model: isAnalyst
+			? (process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash")
+			: (novelRuntime?.model ?? process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash"),
 		maxTokens: novelRuntime?.maxTokens ?? readPositiveIntEnv(PROVIDER_MAX_TOKENS_ENV) ?? 8192,
-		thinking: novelRuntime?.thinking ?? readThinkingLevelEnv(PROVIDER_THINKING_ENV) ?? "high",
+		thinking: isAnalyst
+			? (readThinkingLevelEnv(ANALYST_THINKING_ENV) ?? "low")
+			: (novelRuntime?.thinking ?? readThinkingLevelEnv(PROVIDER_THINKING_ENV) ?? "high"),
 		...(novelRuntime?.temperature !== undefined ? { temperature: novelRuntime.temperature } : {}),
 	};
 
@@ -283,6 +294,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		novelHandle = {
 			query: (q: NovelQuery) => store.query(q),
 			mutate: (m: NovelMutation) => store.mutate(m),
+			mutateBatch: (ms: readonly NovelMutation[]) => store.mutateBatch(ms),
 		} as unknown as NovelHandle;
 	} else if (novelWsUrl !== undefined && novelWsUrl.trim() !== "") {
 		const wsToken = process.env.NOVEL_DB_WS_TOKEN;
@@ -297,6 +309,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		novelHandle = {
 			query: (q: NovelQuery) => store.query(q),
 			mutate: (m: NovelMutation) => store.mutate(m),
+			mutateBatch: (ms: readonly NovelMutation[]) => store.mutateBatch(ms),
 		} as unknown as NovelHandle;
 	}
 

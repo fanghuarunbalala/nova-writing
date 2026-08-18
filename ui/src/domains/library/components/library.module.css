@@ -1,0 +1,504 @@
+/**
+ * 书库域共享视觉（对齐 docs/design/app-redesign-demo.html v0.9 书库视图）：
+ * 双栏（左目录列 + 右详情列）、统计卡网格、状态时间线、分段批卡片、
+ * paragraph id chip、卷章目录行、实体档案。颜色/间距/字号全部走 token。
+ */
+
+/* ---------- 双栏（左目录 + 右详情；两列各自滚动；demo libSplit） ---------- */
+.split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: var(--space-14px);
+  padding: 0 var(--space-22px) var(--space-22px);
+}
+
+/* ---------- 主区资料位分段控件（demo libTabs：icon + 名称 + mono 计数胶囊） ---------- */
+.paneTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2px);
+  padding: var(--space-3px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  box-shadow: var(--shadow-xs);
+}
+
+.paneTab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6px);
+  padding: var(--space-5px) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.paneTab svg {
+  flex: none;
+}
+
+.paneTab:hover:not([disabled]) {
+  color: var(--color-accent-ink);
+}
+
+.paneTab[aria-selected="true"] {
+  background: var(--color-surface);
+  color: var(--color-accent-ink);
+  box-shadow: var(--shadow-xs);
+}
+
+.paneTab:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.paneTabCount {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+  padding: 0 var(--space-5px);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+}
+
+.paneTab[aria-selected="true"] .paneTabCount {
+  color: var(--color-accent-ink);
+}
+
+.dirCol {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2px);
+  padding: var(--space-8px) var(--space-8px) var(--space-10px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.detailCol {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2px) var(--space-2px) var(--space-10);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+/* ---------- 目录行（书库语境复用 .row 词汇） ---------- */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6px) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-fg);
+  font: inherit;
+  width: 100%;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-accent-8-transparent);
+}
+
+.row[data-active="true"] {
+  background: var(--color-accent-9);
+  border-color: var(--color-accent-18);
+}
+
+.row .text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row .title {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .subtitle {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .iconBox {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+}
+
+/* 解析中脉冲点（书行 / 时间线当前步） */
+.pulseDot {
+  position: relative;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-warn);
+  margin: 0 var(--space-6px);
+}
+
+.pulseDot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: var(--anim-lib-pulse) var(--duration-base) var(--ease-out) infinite;
+}
+
+/* 大纲树行叶短横线（demo .treeTick：7px 短横与引导线相连） */
+.tick {
+  flex: none;
+  width: var(--space-7px);
+  height: 1px;
+  background: var(--color-border-strong);
+  margin-right: var(--space-2px);
+}
+
+/* 卷章目录的卷组头（demo .dirGroup：icon + 卷名 + 章数 mono） */
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6px);
+  padding: var(--space-2px) var(--space-2px) var(--space-3px);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  color: var(--color-faint);
+}
+
+.groupHead .count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+/* 章行状态圆点（demo .statusDot 默认档） */
+.statusDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+/* ---------- 统计卡网格（demo .statGrid/.statCard） ---------- */
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.statCard .num {
+  font-family: var(--font-mono);
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+  color: var(--color-accent-ink);
+  line-height: 1.2;
+}
+
+.statCard .label {
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  margin-top: var(--space-2px);
+}
+
+.statCard .note {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+/* ---------- 状态时间线（demo .axisRow/.axisPill） ---------- */
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-2) 0;
+}
+
+.axisName {
+  flex: none;
+  width: var(--space-12);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6px);
+  padding: var(--space-4px) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+}
+
+.step[data-tone="success"] {
+  border-color: color-mix(in oklab, var(--color-success) 35%, transparent);
+  color: var(--color-success);
+}
+
+.step[data-tone="warn"] {
+  border-color: color-mix(in oklab, var(--color-warn) 35%, transparent);
+  color: var(--color-warn);
+}
+
+.step[data-tone="danger"] {
+  border-color: color-mix(in oklab, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
+}
+
+.stepArrow {
+  color: var(--color-faint);
+  display: inline-flex;
+}
+
+/* ---------- 分段批卡片（demo .paraCard） ---------- */
+.paraCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-9px) var(--space-3) var(--space-10px);
+  margin-bottom: var(--space-2);
+}
+
+.paraCard[data-flash="true"] {
+  animation: var(--anim-dir-flash) var(--duration-base) var(--ease-out);
+}
+
+.paraHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6px);
+  flex-wrap: wrap;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+.paraCard p {
+  margin: 0 0 0.6em;
+  font-size: var(--fs-13);
+  line-height: 1.9;
+}
+
+.paraCard p:last-child {
+  margin-bottom: 0;
+}
+
+/* paragraph id chip（写 id 契约：点击复制 / 引用点击跳正文） */
+.pid {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 1;
+  padding: var(--space-3px) var(--space-7px);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.pid:hover {
+  color: var(--color-accent-ink);
+  border-color: var(--color-accent);
+  background: var(--color-accent-8-transparent);
+}
+
+/* 分页 footer */
+.paraFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-10px);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+.paraFoot .grow {
+  flex: 1;
+}
+
+/* ---------- 章头（正文资料位右栏顶部；复用 .chapterTitle 词汇） ---------- */
+.chapterTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chapterTitle h3 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+}
+
+.chapterMeta {
+  margin-top: var(--space-2px);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+/* 引用 chip 组（关联幕 / 绑定实体） */
+.refChips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.refChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4px);
+  padding: var(--space-3px) var(--space-9px);
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.refChip:hover {
+  background: var(--color-accent-11);
+}
+
+/* ---------- 进度面板（解析中） ---------- */
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.progressNote {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  line-height: 1.7;
+}
+
+/* ---------- 分析产物 md 渲染（风格/摘录） ---------- */
+.analysis h4 {
+  margin: var(--space-3) 0 var(--space-2px);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+}
+
+.analysis h4:first-child {
+  margin-top: 0;
+}
+
+.analysis p {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-13);
+  line-height: 1.85;
+}
+
+/* ---------- 导入弹窗选项卡（单选） ---------- */
+.opt {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-9px) var(--space-11px);
+  margin-bottom: var(--space-2px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: none;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.opt:hover {
+  border-color: var(--color-accent);
+}
+
+.opt[data-on="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-8-transparent);
+}
+
+.opt .radio {
+  flex: none;
+  width: var(--space-14px);
+  height: var(--space-14px);
+  margin-top: var(--space-2px);
+  border-radius: 50%;
+  border: 1px solid var(--color-border-strong);
+  transition: border var(--duration-fast) var(--ease-out);
+}
+
+.opt[data-on="true"] .radio {
+  border-color: var(--color-accent);
+  border-width: var(--space-4px);
+}
+
+.opt .optTitle {
+  display: block;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  margin-bottom: 1px;
+}
+
+.opt .optDesc {
+  display: block;
+  font-size: var(--fs-11);
+  color: var(--color-muted);
+  line-height: 1.6;
+}

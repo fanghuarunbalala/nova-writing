@@ -1,0 +1,49 @@
+/**
+ * LibrarySurface 视觉（对齐 demo：paneBody 不整体滚——双栏资料位两列各自滚动
+ * 〔.split 自带水平 padding〕，单栏资料位走 .paneScroll > .paneInner 居中滚动；
+ * 空态/错误居中）。
+ */
+.surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
+}
+
+/* demo：分段控件在内容区顶部（strip margin-bottom 12px），水平对齐 paneInner 的 22px 内边距 */
+.tabsRow {
+  flex: none;
+  padding: var(--space-3) var(--space-22px);
+}
+
+.paneBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.paneScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.paneInner {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--space-22px) var(--space-22px) var(--space-10);
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
+}
+
+.paneCenter {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  place-items: center;
+  padding: var(--space-18px) var(--space-22px) var(--space-10);
+}

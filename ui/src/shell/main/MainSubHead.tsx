@@ -12,8 +12,8 @@ import styles from "./MainSubHead.module.css";
 export interface MainSubHeadProps {
   readonly title: string;
   readonly sub?: string;
-  /** 当前选中项名称（demo .subCtx，标题右侧） */
-  readonly context?: string;
+  /** 当前选中项名称/状态（demo .subCtx，标题右侧；string 或状态 chip 等节点） */
+  readonly context?: ReactNode;
   readonly onBack?: () => void;
   readonly actions?: ReactNode;
 }

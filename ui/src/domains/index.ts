@@ -4,6 +4,7 @@
 export * from "./approval/index.js";
 export * from "./asking/index.js";
 export * from "./conversation/index.js";
+export * from "./library/index.js";
 export * from "./notification/index.js";
 export * from "./novel/index.js";
 export * from "./schedule/index.js";

@@ -20,6 +20,7 @@ import {
 import {
   CharacterStore,
   ConversationCatalogStore,
+  LibraryStore,
   LocationStore,
   ManuscriptStructureStore,
   NovelOverviewStore,
@@ -198,6 +199,7 @@ export function createDomainStores(
   const manuscriptStructure = new ManuscriptStructureStore({ api, logger });
   const character = new CharacterStore({ api, logger });
   const location = new LocationStore({ api, logger });
+  const library = new LibraryStore({ api, logger });
   const schedule = new ScheduleStore({
     novelOverview,
     outlineTree: storyOutlineTree,
@@ -214,5 +216,6 @@ export function createDomainStores(
     schedule,
     scheduleTodo: new ScheduleTodoStore(),
     notifications: new NotificationStore(),
+    library,
   };
 }

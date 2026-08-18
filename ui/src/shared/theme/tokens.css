@@ -232,6 +232,7 @@
   --anim-pending-glow:    pending-glow;
   --anim-pending-out:     pending-out;
   --anim-dir-flash:       dir-flash;
+  --anim-lib-pulse:       lib-pulse;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);

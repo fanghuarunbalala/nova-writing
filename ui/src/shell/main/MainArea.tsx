@@ -1,7 +1,7 @@
 /**
  * MainArea
  *
- * 主区路由 host：按 MainViewRouter 状态渲染 chat/content/schedule。
+ * 主区路由 host：按 MainViewRouter 状态渲染 chat/content/schedule/library。
  * 精简版：去掉审批相关 props（延后）。
  */
 import { memo } from "react";
@@ -14,11 +14,13 @@ import type { CharacterStore } from "../../domains/novel/character/store/Charact
 import type { LocationStore } from "../../domains/novel/location/store/LocationStore.js";
 import type { ManuscriptStructureStore } from "../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
+import type { LibraryStore } from "../../domains/library/store/LibraryStore.js";
 import type { ScheduleStore } from "../../domains/schedule/store/ScheduleStore.js";
 import type { ScheduleTodoStore } from "../../domains/schedule/store/ScheduleTodoStore.js";
 import type { ConversationProjectionBinding } from "../../domains/conversation/binding/ConversationProjectionBinding.js";
 import { ChatSurface } from "./ChatSurface.js";
 import { ContentSurface } from "./ContentSurface.js";
+import { LibrarySurface } from "./LibrarySurface.js";
 import type { ContentTab } from "./contentTab.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
@@ -53,6 +55,7 @@ export interface MainAreaProps {
   readonly manuscript: ManuscriptStructureStore;
   readonly characters: CharacterStore;
   readonly locations: LocationStore;
+  readonly library: LibraryStore;
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
   readonly contentTab: ContentTab;
@@ -124,6 +127,12 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           onSelectContentPane={props.onSelectContentPane}
           onOpenCharacter={props.onOpenCharacter}
           onOpenLocation={props.onOpenLocation}
+          onNotify={props.onNotify}
+        />
+      ) : mainView.state === "library" ? (
+        <LibrarySurface
+          library={props.library}
+          onBack={() => props.mainViewRouter.transition("chat")}
           onNotify={props.onNotify}
         />
       ) : (

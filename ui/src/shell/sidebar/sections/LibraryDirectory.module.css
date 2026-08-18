@@ -1,0 +1,121 @@
+/**
+ * LibraryDirectory 视觉（对齐 demo 侧栏：容器 padding 10px 10px 8px、节间 gap 8px；
+ * 书行 = 图标位/解析中脉冲 + 书名 + 章·字数 + 状态 chip；legend 虚线分隔）。
+ */
+.section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8px);
+  padding: var(--space-10px) var(--space-10px) var(--space-2);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6px) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-fg);
+  font: inherit;
+  width: 100%;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-accent-8-transparent);
+}
+
+.row[data-active="true"] {
+  background: var(--color-accent-9);
+  border-color: var(--color-accent-18);
+}
+
+.row .iconBox {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+}
+
+.row .text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row .title {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .subtitle {
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pulseDot {
+  position: relative;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-warn);
+  margin: 0 var(--space-6px);
+}
+
+.pulseDot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: var(--anim-lib-pulse) var(--duration-base) var(--ease-out) infinite;
+}
+
+.empty {
+  padding: var(--space-6px) var(--space-10px) var(--space-10px);
+  color: var(--color-faint);
+  font-size: var(--fs-12);
+  text-align: center;
+  line-height: 1.8;
+}
+
+.legend {
+  padding: var(--space-10px) var(--space-8px) var(--space-4px);
+  border-top: 1px dashed var(--color-border);
+  margin-top: var(--space-2);
+  color: var(--color-faint);
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+}

@@ -35,6 +35,7 @@ import type { NovelOverviewStore } from "../domains/novel/overview/NovelOverview
 import type { StoryOutlineTreeStore } from "../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import type { ScheduleStore } from "../domains/schedule/store/ScheduleStore.js";
 import type { ScheduleTodoStore } from "../domains/schedule/store/ScheduleTodoStore.js";
+import type { LibraryStore } from "../domains/library/store/LibraryStore.js";
 import type {
   NotificationItem,
   NotificationStore,
@@ -70,6 +71,7 @@ export interface ApplicationShellDomainStores {
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
   readonly notifications: NotificationStore;
+  readonly library: LibraryStore;
 }
 
 export interface ApplicationShellProps {
@@ -366,6 +368,7 @@ export function ApplicationShell({
       manuscriptStructure,
       character,
       location,
+      library,
     } = domainStores;
     void conversationCatalog.loadWorkspace(workspaceId);
     void novelOverview.loadWorkspace(workspaceId);
@@ -373,6 +376,7 @@ export function ApplicationShell({
     void manuscriptStructure.loadWorkspace(workspaceId);
     void character.loadWorkspace(workspaceId);
     void location.loadWorkspace(workspaceId);
+    void library.loadWorkspace(workspaceId);
   }, [domainStores, workspaceId]);
 
   // 进入对话视图默认展开内容目录（首次挂载同样生效）；用户手动收起后
@@ -636,6 +640,7 @@ export function ApplicationShell({
           schedule={domainStores.schedule}
           scheduleTodo={domainStores.scheduleTodo}
           approvalStore={approvalStore}
+          library={domainStores.library}
           toastStore={toastStore}
           workspaceId={workspaceId}
           onCreateConversation={handleCreateConversation}
@@ -693,6 +698,7 @@ export function ApplicationShell({
           manuscript={domainStores.manuscriptStructure}
           characters={domainStores.character}
           locations={domainStores.location}
+          library={domainStores.library}
           schedule={domainStores.schedule}
           scheduleTodo={domainStores.scheduleTodo}
           contentTab={contentTab}

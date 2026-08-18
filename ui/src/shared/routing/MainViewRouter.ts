@@ -1,13 +1,13 @@
 /**
  * MainViewRouter
  *
- * 主区视图状态机。state ∈ {chat, content, schedule}。
+ * 主区视图状态机。state ∈ {chat, content, schedule, library}。
  * 维护双栈 history 支持 back/forward。不使用 URL。
  */
 import { ExternalStore } from "../state/ExternalStore.js";
 import { MainViewHistory } from "./MainViewHistory.js";
 
-export type MainViewState = "chat" | "content" | "schedule";
+export type MainViewState = "chat" | "content" | "schedule" | "library";
 
 export interface MainViewSnapshot {
   readonly state: MainViewState;

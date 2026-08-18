@@ -195,3 +195,9 @@
 .anim-view-in   { animation: view-in var(--duration-base) var(--ease-out); }
 .anim-msg-enter { animation: msg-enter var(--duration-base) var(--ease-out); }
 .anim-toast-in  { animation: toast-in var(--duration-fast) var(--ease-out); }
+
+/* 书库解析中脉冲点（demo lib-pulse：脉冲环外扩淡出；书行 / 时间线当前步） */
+@keyframes lib-pulse {
+  from { transform: scale(0.8); opacity: 0.55; }
+  to   { transform: scale(2.6); opacity: 0; }
+}

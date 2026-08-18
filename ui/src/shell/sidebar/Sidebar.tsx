@@ -5,7 +5,8 @@
  *   chat    = 新建对话 + 会话目录；
  *   content = 资料位四段 tab（大纲/正文/人物/地点）+ dirHead 标题行 + 对应目录
  *             （大纲树 / 卷章目录 / 人物档案 / 地点档案）；
- *   plan    = 「安排」待办目录（总览 + 按标签分组）。
+ *   plan    = 「安排」待办目录（总览 + 按标签分组）；
+ *   library = 书库书单目录（书行 + 状态 chip + 导入入口）。
  * 宽度固定档位随断点（决议 2：移除拖拽调宽），显隐由 mode 控制（负 margin 收起）。
  */
 import { memo, useMemo, type ReactNode } from "react";
@@ -20,6 +21,7 @@ import type { LocationStore } from "../../domains/novel/location/store/LocationS
 import type { ScheduleStore } from "../../domains/schedule/store/ScheduleStore.js";
 import type { ScheduleTodoStore } from "../../domains/schedule/store/ScheduleTodoStore.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
+import type { LibraryStore } from "../../domains/library/store/LibraryStore.js";
 import type { ToastStore } from "../../shared/state/ToastStore.js";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
@@ -31,6 +33,7 @@ import { DirectoryHead } from "./sections/DirectoryHead.js";
 import { EntityDirectory } from "./sections/EntityDirectory.js";
 import { ManuscriptDirectory } from "./sections/ManuscriptDirectory.js";
 import { PlanDirectory } from "./sections/PlanDirectory.js";
+import { LibraryDirectory } from "./sections/LibraryDirectory.js";
 import { ConversationListSection } from "./sections/ConversationListSection.js";
 import { NewConversationSection } from "./sections/NewConversationSection.js";
 import styles from "./Sidebar.module.css";
@@ -47,6 +50,7 @@ export interface SidebarProps {
   readonly schedule: ScheduleStore;
   readonly scheduleTodo: ScheduleTodoStore;
   readonly approvalStore: ApprovalStore;
+  readonly library: LibraryStore;
   readonly toastStore: ToastStore;
   readonly workspaceId?: string;
   readonly onCreateConversation: () => void;
@@ -89,6 +93,7 @@ export const Sidebar = memo(function Sidebar({
   schedule,
   scheduleTodo,
   approvalStore,
+  library,
   toastStore,
   workspaceId,
   onCreateConversation,
@@ -220,7 +225,7 @@ export const Sidebar = memo(function Sidebar({
         )}
       </>
     );
-  } else {
+  } else if (view === "schedule") {
     content = (
       <PlanDirectory
         schedule={schedule}
@@ -230,6 +235,8 @@ export const Sidebar = memo(function Sidebar({
         onSelect={onSelectPlanTodo}
       />
     );
+  } else {
+    content = <LibraryDirectory store={library} />;
   }
 
   return (

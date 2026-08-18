@@ -16,6 +16,7 @@ import { LocationStore } from "../../src/domains/novel/location/store/LocationSt
 import { ScheduleStore } from "../../src/domains/schedule/store/ScheduleStore.js";
 import { ScheduleTodoStore } from "../../src/domains/schedule/store/ScheduleTodoStore.js";
 import { NotificationStore } from "../../src/domains/notification/store/NotificationStore.js";
+import { LibraryStore } from "../../src/domains/library/store/LibraryStore.js";
 import { type WorkspaceControllerPort } from "../../src/domains/workspace/store/WorkspaceControllerAdapter.js";
 import { ApplicationShell } from "../../src/shell/ApplicationShell.js";
 import { emitNovelChanged } from "../../src/domains/novel/novelChangeBus.js";
@@ -132,6 +133,7 @@ async function renderShell() {
         schedule,
         scheduleTodo: new ScheduleTodoStore(),
         notifications: new NotificationStore(),
+        library: new LibraryStore({ api }),
       }}
       toastStore={new ToastStore()}
     />,
@@ -199,7 +201,8 @@ describe("ApplicationShell smoke", () => {
           location,
           schedule,
           scheduleTodo: new ScheduleTodoStore(),
-        notifications: new NotificationStore(),
+          notifications: new NotificationStore(),
+          library: new LibraryStore({ api }),
         }}
         toastStore={new ToastStore()}
       />,
@@ -252,6 +255,7 @@ describe("ApplicationShell smoke", () => {
           schedule,
           scheduleTodo: new ScheduleTodoStore(),
           notifications: new NotificationStore(),
+          library: new LibraryStore({ api }),
         }}
         toastStore={new ToastStore()}
       />,

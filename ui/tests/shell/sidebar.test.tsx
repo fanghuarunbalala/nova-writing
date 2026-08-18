@@ -16,6 +16,7 @@ import { ScheduleStore } from "../../src/domains/schedule/store/ScheduleStore.js
 import { ScheduleTodoStore } from "../../src/domains/schedule/store/ScheduleTodoStore.js";
 import { NotificationStore } from "../../src/domains/notification/store/NotificationStore.js";
 import { ApprovalStore } from "../../src/domains/approval/ApprovalStore.js";
+import { LibraryStore } from "../../src/domains/library/store/LibraryStore.js";
 import { ToastStore } from "../../src/shared/state/ToastStore.js";
 
 function makeStores() {
@@ -64,6 +65,7 @@ function makeStores() {
       scheduleTodo: new ScheduleTodoStore(),
       notifications: new NotificationStore(),
       approvalStore: new ApprovalStore({ api }),
+      library: new LibraryStore({ api }),
     },
   };
 }
@@ -96,6 +98,7 @@ function renderSidebar(
       schedule={stores.schedule}
       scheduleTodo={stores.scheduleTodo}
       approvalStore={stores.approvalStore}
+      library={stores.library}
       {...props}
     />,
   );
@@ -134,7 +137,7 @@ describe("Sidebar (context directory)", () => {
 
   it("plan view: overview row + 安排 directory（审批组常驻 + 自动化占位）", () => {
     const { stores } = makeStores();
-    renderSidebar(stores, { view: "plan" });
+    renderSidebar(stores, { view: "schedule" });
     expect(screen.getByText("总览")).toBeInTheDocument();
     expect(screen.getByText("统计 · 双状态轴 · 大纲进度")).toBeInTheDocument();
     // 审批组常驻（无待办时轻提示）+ 自动化占位组（路线图，UI 骨架）

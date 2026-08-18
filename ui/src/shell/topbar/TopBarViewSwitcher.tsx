@@ -1,10 +1,10 @@
 /**
  * TopBarViewSwitcher
  *
- * 主区视图三段切换：对话 / 内容 / 计划（lucide 图标 + 文字）。
- * 激活态为滑块（.thumb）——translateX 按列索引位移，等宽三列 grid 保证槽位精确。
+ * 主区视图四段切换：对话 / 内容 / 计划 / 书库（lucide 图标 + 文字）。
+ * 激活态为滑块（.thumb）——translateX 按列索引位移，等宽四列 grid 保证槽位精确。
  */
-import { BookOpen, CalendarDays, MessageSquare, type LucideIcon } from "lucide-react";
+import { BookOpen, CalendarDays, Library, MessageSquare, type LucideIcon } from "lucide-react";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import { Icon } from "../../shared/primitives/Icon.js";
 import styles from "./TopBarViewSwitcher.module.css";
@@ -22,6 +22,7 @@ const VIEWS: ReadonlyArray<{
   { value: "chat", label: "对话", icon: MessageSquare },
   { value: "content", label: "内容", icon: BookOpen },
   { value: "schedule", label: "计划", icon: CalendarDays },
+  { value: "library", label: "书库", icon: Library },
 ];
 
 export function TopBarViewSwitcher({ state, onChange }: TopBarViewSwitcherProps) {

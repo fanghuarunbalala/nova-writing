@@ -24,10 +24,14 @@ import {
   ConfigServer,
   createNovelApiServer,
   createProcessSpawner,
+  BookImportService,
+  createLibraryFace,
+  LibraryService,
   electronIpcTransport,
   startConversationManagerWsServer,
   startNovelDbWsServer,
   type AgentLoop,
+  type AnalystConversationSpawner,
   type ConversationApprovalDecision,
   type ConversationApprovalRequest,
   type ConversationJournalService,
@@ -404,8 +408,51 @@ async function main(): Promise<void> {
   manager.onWaitChange(() => {
     uiNotifyHolder.notify?.();
   });
+  // ── 书库（完本解构，PRD library-完本解构）：全局书库根 + 工作区书单热重绑 ──
+  // libraryRoot 跨工作区唯一（env 可覆盖；设置界面后续迭代）；BookAnalyst 解析会话经
+  // CMS spawnConversation 派生（task/extraEnv 契约直接适配），analyst journal 需已开工作区。
+  const libraryRoot = process.env.NOVEL_LIBRARY_ROOT ?? join(app.getPath("userData"), "library");
+  mkdirSync(libraryRoot, { recursive: true });
+  let libraryService = new LibraryService({ libraryRoot });
+  const analysisSpawner: AnalystConversationSpawner = {
+    spawn: (opts) =>
+      manager.spawnConversation(opts).then((ref) => ({ conversationId: ref.conversationId })),
+  };
+  /** 解析会话可用：provider env 已就绪（applyDefaultProviderEnv）且已打开工作区 */
+  const canSpawnAnalysis = (): boolean =>
+    (process.env.NOVEL_PROVIDER_API_KEY ?? "").trim() !== "" && currentWorkspaceRoot !== undefined;
+  /** 书库服务随 workspace 热重绑：open 带 workspaceRoot 走书单过滤；close 回管理侧全集 */
+  const rebindLibraryService = (): void => {
+    libraryService = new LibraryService({
+      libraryRoot,
+      ...(currentWorkspaceRoot !== undefined ? { workspaceRoot: currentWorkspaceRoot } : {}),
+    });
+  };
+  // 导入源白名单（pickBookFile 登记；importBook 仅接受白名单路径——同 workspace 引用白名单模式）
+  const allowedBookSources = new Set<string>();
+  const libraryFace = createLibraryFace({
+    service: () => libraryService,
+    workspaceRoot: () => currentWorkspaceRoot,
+    importer: () =>
+      canSpawnAnalysis()
+        ? new BookImportService({ service: libraryService, spawner: analysisSpawner, libraryRoot })
+        : undefined,
+    pickFile: async () => {
+      const result = await dialog.showOpenDialog({
+        title: "选择完本文本",
+        properties: ["openFile"],
+        filters: [{ name: "文本文档", extensions: ["txt"] }],
+      });
+      const path = result.canceled ? undefined : result.filePaths[0];
+      if (path === undefined) return null;
+      allowedBookSources.add(path);
+      return path;
+    },
+    allowedSources: () => allowedBookSources,
+  });
+  infoLog(`[main] library root: ${libraryRoot}`);
   // journalDir 传函数形态：history 代读随 workspace 重绑现取当前会话根
-  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: () => currentJournalDir });
+  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: () => currentJournalDir, library: libraryFace });
 
   // 主窗口引用（IPC sender 校验 + 定向发送；窗口创建晚于端点注册）
   let mainWindow: BrowserWindow | undefined;
@@ -633,6 +680,7 @@ async function main(): Promise<void> {
       adoptLegacyData(location.storeDir);
       await rebindWorkspace(location.storeDir);
       currentWorkspaceRoot = location.workspaceRoot;
+      rebindLibraryService();
       const lastOpenedAt = new Date().toISOString();
       const existing = registryEntries.find((e) => e.workspaceId === location.workspaceId);
       if (existing !== undefined) {
@@ -651,6 +699,7 @@ async function main(): Promise<void> {
     },
     close: async () => {
       currentWorkspaceRoot = undefined;
+      rebindLibraryService();
       await rebindWorkspace(undefined);
     },
   };

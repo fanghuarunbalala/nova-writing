@@ -113,6 +113,8 @@ export interface NovelToolGroupResolverOptions {
   ask?: { channel: AskUserChannel; conversationId: string };
   /** 书库服务（library.read 组 LibraryRead；workspace 同上作为书单访问控制根。缺省组装配报错） */
   library?: { deps: LibraryReadDeps };
+  /** novel.entities 写工具审批覆盖（缺省 true=需审批；BookAnalyst 后台无人审批会话传 false，对齐 analyst.files 免审批先例） */
+  entityApproval?: boolean;
 }
 
 /**
@@ -148,7 +150,14 @@ export function createNovelToolGroupResolver(
         return createComposeTools(options.compose.service, options.compose.conversationId);
       },
     ],
-    ["novel.entities", () => createNovelEntityTools(options.handle)],
+    [
+      "novel.entities",
+      () =>
+        createNovelEntityTools(
+          options.handle,
+          options.entityApproval !== undefined ? { requireApproval: options.entityApproval } : undefined,
+        ),
+    ],
   ]);
   return (manifest) => {
     const factory = factories.get(manifest.id);

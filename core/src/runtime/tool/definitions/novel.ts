@@ -594,10 +594,16 @@ function validateEditArgs(
 /**
  * 创建 novel 实体通用工具（kind 分发；组 novel.entities 的全部 4 件）
  * @param handle novel 客户端（query/mutate/mutateBatch）
+ * @param options requireApproval 覆盖（缺省写工具需审批；后台无人审批会话——
+ *   BookAnalyst——传 false，对齐 analyst.files 免审批先例）
  * @returns [NovelRead, NovelWrite, NovelEdit, NovelDelete]
  */
-export function createNovelEntityTools(handle: NovelHandle): ToolDef[] {
-  return [novelRead(handle), novelWrite(handle), novelEdit(handle), novelDelete(handle)];
+export function createNovelEntityTools(
+	handle: NovelHandle,
+	options?: { requireApproval?: boolean },
+): ToolDef[] {
+	const approval = options?.requireApproval ?? true;
+	return [novelRead(handle), novelWrite(handle, approval), novelEdit(handle, approval), novelDelete(handle, approval)];
 }
 
 // ── NovelRead ──
@@ -832,11 +838,11 @@ async function precheckWrite(handle: NovelHandle, toolName: string, kind: NovelK
   }
 }
 
-function novelWrite(handle: NovelHandle): ToolDef {
+function novelWrite(handle: NovelHandle, requireApproval: boolean): ToolDef {
   return {
     name: "NovelWrite",
     version: "1.0.0",
-    requireApproval: true,
+    requireApproval,
     preview: novelWritePreview,
     description: [
       "批量创建实体、直接写入正式稿。kind 必填（无 overview——只读）；values 每项新建一个实体，整批原子（任一项失败整批回滚）；需作者审批；传不适用字段直接报错。",
@@ -1082,12 +1088,12 @@ async function precheckEdit(
   }
 }
 
-function novelEdit(handle: NovelHandle): ToolDef {
+function novelEdit(handle: NovelHandle, requireApproval: boolean): ToolDef {
   return {
     name: "NovelEdit",
     version: "1.0.0",
     preview: novelEditPreview,
-    requireApproval: true,
+    requireApproval,
     description: [
       "批量局部更新（PATCH）已有实体。kind 必填（无 overview）；每项 = { id, baseRevision, value }，整批原子；需作者审批。",
       "数据模型见 NovelRead 的「小说数据模型」。",
@@ -1245,12 +1251,12 @@ function novelEdit(handle: NovelHandle): ToolDef {
 
 // ── NovelDelete ──
 
-function novelDelete(handle: NovelHandle): ToolDef {
+function novelDelete(handle: NovelHandle, requireApproval: boolean): ToolDef {
   return {
     name: "NovelDelete",
     version: "1.0.0",
     preview: novelDeletePreview,
-    requireApproval: true,
+    requireApproval,
     description: [
       "批量删除小说实体（高风险，不可恢复；整批原子）。",
       "",

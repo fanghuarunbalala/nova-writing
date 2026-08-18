@@ -63,6 +63,7 @@ export function buildBookAnalystAgent(opts: BookAnalystAgentOptions): AgentLoop 
   const handle: NovelHandle = {
     query: (q) => opts.store.query(q),
     mutate: (m) => opts.store.mutate(m),
+    mutateBatch: (ms) => opts.store.mutateBatch(ms),
   } as NovelHandle;
   const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map([
     ["todo_idle", () => new TodoIdleNudgePolicy()],
@@ -76,6 +77,9 @@ export function buildBookAnalystAgent(opts: BookAnalystAgentOptions): AgentLoop 
       handle,
       todoStore,
       todoConversationId: opts.conversationId,
+      // 后台无人审批会话：novel.entities 写工具免审批（否则 NovelWrite/Edit/Delete
+      // 被「审批通道未装配」拒绝，大纲/人物/地点写不进 book.db，只能退化为 md 落盘）
+      entityApproval: false,
     }),
     nudgeCatalog,
   });

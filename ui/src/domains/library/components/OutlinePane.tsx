@@ -33,6 +33,14 @@ const SCOPE_LABEL: Record<string, string> = {
 	custom: "自定义",
 };
 
+/** leaf 节奏拍类型标签（rhythm 枚举 → 中文） */
+const RHYTHM_LABEL: Record<string, string> = {
+	setup: "铺垫",
+	climax: "高潮",
+	resolution: "收束",
+	transition: "过渡",
+};
+
 interface UnitNode {
 	readonly unit: StoryUnitWithLeaf;
 	readonly depth: number;
@@ -112,6 +120,15 @@ export function OutlinePane({ bookId, snapshot, store, onOpenCharacter, onOpenLo
 		list.find((e) => e.id === id)?.name;
 	const leafCharIds = selected.unit.leaf?.characters?.map((c) => c.characterId) ?? [];
 	const leafLocIds = selected.unit.leaf?.locations?.map((l) => l.locationId) ?? [];
+	const leaf = selected.unit.leaf;
+	const leafTime = typeof leaf?.time === "string" ? leaf.time : leaf?.time?.description;
+	const leafEvents = [...(leaf?.events ?? [])].sort((a, b) =>
+		(a.orderKey ?? "").localeCompare(b.orderKey ?? ""),
+	);
+	const leafBeats = [...(leaf?.rhythmBeats ?? [])].sort((a, b) =>
+		(a.orderKey ?? "").localeCompare(b.orderKey ?? ""),
+	);
+	const leafChanges = leaf?.entityChanges ?? [];
 	const kids = selected.children;
 	const parent = selected.unit.parentId !== undefined ? byIdOf(flat, selected.unit.parentId) : undefined;
 
@@ -165,8 +182,49 @@ export function OutlinePane({ bookId, snapshot, store, onOpenCharacter, onOpenLo
 				</div>
 				<div className={styles.paraCard}>
 					<div className={styles.paraHead}>
-						<span className={styles.mono}>关联 · leaf 绑定</span>
+						<span className={styles.mono}>场景计划 · leaf</span>
 					</div>
+					{leafTime !== undefined && leafTime !== "" ? (
+						<div className={styles.chapterMeta} style={{ marginBottom: "var(--space-6px)" }}>
+							时间：{leafTime}
+						</div>
+					) : null}
+					{leafEvents.length > 0 ? (
+						<>
+							<p className={styles.progressNote} style={{ margin: "0 0 var(--space-6px)" }}>事件序列</p>
+							<ol style={{ margin: 0, paddingLeft: "var(--space-5)", fontSize: "var(--fs-13)", lineHeight: 1.85 }}>
+								{leafEvents.map((e) => (
+									<li key={e.id} style={{ marginBottom: "var(--space-2px)" }}>{e.description}</li>
+								))}
+							</ol>
+						</>
+					) : null}
+					{leafBeats.length > 0 ? (
+						<>
+							<p className={styles.progressNote} style={{ margin: "var(--space-2) 0 var(--space-6px)" }}>
+								节奏拍（读者情绪）
+							</p>
+							<ul style={{ margin: 0, paddingLeft: "var(--space-5)", fontSize: "var(--fs-13)", lineHeight: 1.85, listStyle: "none" }}>
+								{leafBeats.map((b) => (
+									<li key={b.id} style={{ marginBottom: "var(--space-2px)" }}>
+										<StatusChip variant="accent" compact>{RHYTHM_LABEL[b.rhythm] ?? b.rhythm}</StatusChip>{" "}
+										{b.description}
+										{b.readerEmotion !== undefined ? `（读者：${b.readerEmotion}）` : ""}
+									</li>
+								))}
+							</ul>
+						</>
+					) : null}
+					{leafChanges.length > 0 ? (
+						<>
+							<p className={styles.progressNote} style={{ margin: "var(--space-2) 0 var(--space-6px)" }}>状态变更</p>
+							<ul style={{ margin: 0, paddingLeft: "var(--space-5)", fontSize: "var(--fs-13)", lineHeight: 1.85, listStyle: "none" }}>
+								{leafChanges.map((c) => (
+									<li key={c.id} style={{ marginBottom: "var(--space-2px)" }}>· {c.summary}</li>
+								))}
+							</ul>
+						</>
+					) : null}
 					{leafCharIds.length > 0 ? (
 						<div className={styles.refChips} style={{ marginBottom: "var(--space-2)" }}>
 							{leafCharIds.map((id) => (
@@ -205,9 +263,16 @@ export function OutlinePane({ bookId, snapshot, store, onOpenCharacter, onOpenLo
 							</button>
 						</div>
 					) : null}
-					{leafCharIds.length === 0 && leafLocIds.length === 0 && kids.length === 0 && parent === undefined ? (
+					{leaf === undefined &&
+					leafCharIds.length === 0 &&
+					leafLocIds.length === 0 &&
+					leafEvents.length === 0 &&
+					leafBeats.length === 0 &&
+					leafChanges.length === 0 &&
+					kids.length === 0 &&
+					parent === undefined ? (
 						<p className={styles.progressNote} style={{ margin: 0 }}>
-							该单元无 leaf 绑定记录。
+							该单元无 leaf 计划（saga/卷弧通常无；场景级应由解析产出）。
 						</p>
 					) : null}
 				</div>

@@ -38,6 +38,7 @@ declare global {
       onMaximizedChange(callback: (maximized: boolean) => void): () => void;
     };
     __NOVEL_DEBUG__?: boolean;
+    __NOVEL_LIBRARY_ENABLED__?: boolean;
   }
 }
 
@@ -80,8 +81,8 @@ const platform: FrontendPlatform = {
     clipboardRead: false,
     clipboardWrite: false,
     notifications: false,
-    // 试验功能门控：书库视图仅 debug 构建（NOVEL_DEBUG=1）开启
-    library: window.__NOVEL_DEBUG__ === true,
+    // 试验功能门控：书库视图仅显式开关（NOVEL_LIBRARY=1）开启——release/debug 默认均隐藏
+    library: window.__NOVEL_LIBRARY_ENABLED__ === true,
   },
   files: { selectFiles: async () => Object.freeze([]) },
   clipboard: { readText: async () => "", writeText: async () => {} },

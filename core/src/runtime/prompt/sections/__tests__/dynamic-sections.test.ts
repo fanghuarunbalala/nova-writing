@@ -3,6 +3,7 @@ import { coreEnvironmentSection } from "../agent.js";
 import {
   novelCommunicationSection,
   novelGlobalConstraintsSection,
+  novelComposeGuideSection,
 } from "../novel.js";
 import type { DynamicPromptSectionInput } from "../../PromptSection.js";
 
@@ -88,5 +89,31 @@ describe("novel.communication 静态段", () => {
     expect(text).toContain("不使用 emoji");
     expect(text).toContain("不做负面假设");
     expect(text).toContain("不适用于正文输出本身");
+  });
+});
+
+describe("novel.compose.guide 动态段（PRD compose-案例引导）", () => {
+  it("快照输入：背书 + 派生索引 + 自读指引（不渲染正文——正文走 msg 通道）", () => {
+    const text = novelComposeGuideSection.renderDynamic(
+      {
+        composeGuide: {
+          index: "- .novel/cases/outline-refine.md ｜ task=outline-refine ｜ 大纲细化",
+          casesDir: ".novel/cases",
+        },
+      },
+      {} as never,
+    );
+    expect(text).toContain("# 任务案例引导");
+    expect(text).toContain("`<novel-guide>` 消息注入");
+    expect(text).toContain("**起草前必须对照**");
+    expect(text).toContain(".novel/cases/outline-refine.md");
+    expect(text).toContain("Read 自读");
+    expect(text).not.toContain("<Novel-Constraints-Content>");
+  });
+
+  it("缺输入 → 标题 + 占位一行（不省略段，对齐 global_constraints 降级语义）", () => {
+    const text = novelComposeGuideSection.renderDynamic({}, {} as never);
+    expect(text).toContain("# 任务案例引导");
+    expect(text).toContain("未就绪");
   });
 });

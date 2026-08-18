@@ -194,6 +194,48 @@ describe("LoopContext", () => {
     expect(bareCall.system).not.toContain("约束:");
   });
 
+  it("composeGuideProvider 每调用注入：索引进 dynamic 段；未注入省略（PRD compose-案例引导）", async () => {
+    const guideCapability: AgentCapability = {
+      systemSections: [
+        {
+          kind: "dynamic",
+          id: "g.guide",
+          version: "1.0.0",
+          label: "G",
+          renderDynamic: (input) =>
+            input.composeGuide === undefined ? "" : `引导:${input.composeGuide.index}`,
+        },
+      ],
+      toolDefs: [],
+      compactPolicies: [],
+      nudgePolicies: [],
+    };
+    let reads = 0;
+    const ctx = new LoopContext({
+      agentCapability: guideCapability,
+      workspace: "/ws",
+      composeGuideProvider: async () => ({ index: `v${++reads}`, casesDir: ".novel/cases" }),
+    });
+    const call1 = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(call1.system).toContain("引导:v1");
+    // 每 provider call 重新读取（.novel/cases 变更即时生效）
+    const call2 = await ctx.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(call2.system).toContain("引导:v2");
+    // 未注入 provider：dynamic 段省略
+    const bare = new LoopContext({ agentCapability: guideCapability, workspace: "/ws" });
+    const bareCall = await bare.toProviderCall(
+      { sampling: { model: "gpt-5" } },
+      { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
+    );
+    expect(bareCall.system).not.toContain("引导:");
+  });
+
   it("systemPrompt getter：返回最近一次渲染值；未渲染时以空输入渲染", async () => {
     const ctx = new LoopContext({
       agentCapability: multiSectionCapability,

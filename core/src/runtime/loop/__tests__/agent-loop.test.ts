@@ -415,3 +415,88 @@ describe("AgentLoop 排队 run 边界事件延迟发射", () => {
     expect(events[userB - 1]).toBe("run-start");
   });
 });
+
+describe("AgentLoop spawnSeedMessages（novel-guide 注入，PRD compose-案例引导）", () => {
+  function makeSeededLoop(
+    seed: (input: string) => Promise<Array<{ role: "system"; content: string }> | undefined>,
+    provider: Provider,
+  ): AgentLoop {
+    return new AgentLoop({
+      workspace: "/ws",
+      provider,
+      agentCapability: capability,
+      toolDispatcher: dispatcher,
+      spawnSeedMessages: seed,
+    });
+  }
+
+  it("首 run 注入：消息序 user → system，紧随委派 prompt（persistent append）", async () => {
+    const calls: ProviderCall[] = [];
+    const provider: Provider = {
+      call: async (call: ProviderCall) => {
+        calls.push(call);
+        return result("stop", "ok");
+      },
+    };
+    const loop = makeSeededLoop(async (input) => [
+      { role: "system", content: `<novel-guide>案例 for ${input}</novel-guide>` },
+    ], provider);
+    await loop.run("委派任务", { sampling: { model: "gpt-5" } });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].messages.map((m) => m.role)).toEqual(["user", "system"]);
+    expect(calls[0].messages[1].content).toContain("<novel-guide>案例 for 委派任务</novel-guide>");
+  });
+
+  it("仅首 run 一次：第二次 run 不再调用钩子、不再注入", async () => {
+    let invoked = 0;
+    const calls: ProviderCall[] = [];
+    const provider: Provider = {
+      call: async (call: ProviderCall) => {
+        calls.push(call);
+        return result("stop", "ok");
+      },
+    };
+    const loop = makeSeededLoop(async () => {
+      invoked += 1;
+      return [{ role: "system", content: "guide" }];
+    }, provider);
+    await loop.run("一", { sampling: { model: "m" } });
+    await loop.run("二", { sampling: { model: "m" } });
+    expect(invoked).toBe(1);
+    // 第二次 run 的请求里只有第一次注入的一条 system，且以 user("二") 收尾开新 run
+    const second = calls[1].messages;
+    expect(second.filter((m) => m.role === "system")).toHaveLength(1);
+    expect(second.at(-1)).toMatchObject({ role: "user", content: "二" });
+  });
+
+  it("钩子抛错 → 吞掉不阻断任务", async () => {
+    const loop = makeSeededLoop(async () => {
+      throw new Error("classifier down");
+    }, makeProvider([result("stop", "照常完成")]));
+    const r = await loop.run("hi", { sampling: { model: "gpt-5" } });
+    expect(r.final.content).toBe("照常完成");
+  });
+
+  it("返回 undefined / 空数组 → 不追加消息（弃权降级）", async () => {
+    const calls: ProviderCall[] = [];
+    const provider: Provider = {
+      call: async (call: ProviderCall) => {
+        calls.push(call);
+        return result("stop", "ok");
+      },
+    };
+    const loop = makeSeededLoop(async () => undefined, provider);
+    await loop.run("hi", { sampling: { model: "gpt-5" } });
+    expect(calls[0].messages).toHaveLength(1);
+    const loopEmpty = makeSeededLoop(async () => [], provider);
+    await loopEmpty.run("hi", { sampling: { model: "gpt-5" } });
+    expect(calls[1].messages).toHaveLength(1);
+  });
+
+  it("未配置钩子：行为与既有 loop 一致（无注入路径）", async () => {
+    const loop = makeLoop(makeProvider([result("stop", "ok")]));
+    const r = await loop.run("hi", { sampling: { model: "gpt-5" } });
+    expect(r.final.content).toBe("ok");
+    expect(loop["context"].messages.every((m) => m.role !== "system")).toBe(true);
+  });
+});

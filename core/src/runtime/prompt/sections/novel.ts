@@ -174,7 +174,7 @@ export const novelComposeSystemSection: PromptSection = {
 export const novelComposeProcessSection: PromptSection = {
   kind: "static",
   id: "novel.compose.process",
-  version: "1.0.0",
+  version: "1.1.0",
   label: "Novel Compose Process",
   render: () =>
     [
@@ -187,6 +187,7 @@ export const novelComposeProcessSection: PromptSection = {
       "   - 用只读工具查找既有模式与设定：TodoWrite 维护多步探索计划；NovelRead 按 kind 分别查询（story_unit=大纲、character=人物、location=地点、paragraph=段落、volume=卷、chapter=章，overview=全书总览）。",
       "   - 理解当前故事结构与既有设定，找出相似内容作为参考。",
       "   - 梳理相关档案之间的依赖与引用，确认不臆造设定。",
+      "   - 起草前对照消息中 `<novel-guide>` 块的本任务案例；「任务案例引导」索引中未注入的案例按需 Read 自读（`.novel/cases/`）。",
       "",
       "3. **创作草案**：基于探索结果构建大纲与行文设计；权衡取舍与结构决策（节奏、伏笔、视角、章节划分）；适当沿用既有风格与模式。",
       "",
@@ -198,7 +199,7 @@ export const novelComposeProcessSection: PromptSection = {
 export const novelComposeReportingSection: PromptSection = {
   kind: "static",
   id: "novel.compose.reporting",
-  version: "1.0.0",
+  version: "1.1.0",
   label: "Novel Compose Reporting",
   render: () =>
     [
@@ -211,9 +212,37 @@ export const novelComposeReportingSection: PromptSection = {
       "- 草案的关键决策与取舍（结构、节奏、人物弧光等）。",
       "- 本草案涉及的关键档案（用实体引用标签）：",
       "  <outline id=\"...\">名字</outline>、<character id=\"...\">名字</character>、<location id=\"...\">名字</location>、<chapter id=\"...\">章节名</chapter>、<paragraph id=\"...\">段落名</paragraph>",
+      "- 参考案例：本草案对照的案例名称/路径（`<novel-guide>` 注入或按索引自读的）。",
       "",
       "记住：你**只能探索与创作草案**，不能也不得写入、编辑或修改任何档案；草案由主创作代理审阅后应用。",
     ].join("\n"),
+};
+
+/**
+ * compose 案例引导动态段（novel.compose.guide）：索引 + 一句背书常驻 system，
+ * 选中案例正文以 `<novel-guide>` 消息注入首 run（PRD compose-案例引导 通道分离——
+ * 本段不渲染正文；索引由 node 层扫描 workspace `.novel/cases` 派生注入，
+ * 未注入的案例可 Read 自读）。缺输入渲染占位（对齐 global_constraints 降级语义）。
+ */
+export const novelComposeGuideSection: PromptSection = {
+  kind: "dynamic",
+  id: "novel.compose.guide",
+  version: "1.0.0",
+  label: "Novel Compose Guide",
+  renderDynamic: (input) => {
+    const snapshot = input.composeGuide;
+    if (snapshot === undefined) {
+      return ["# 任务案例引导", "", "（案例库暂不可用：workspace `.novel/cases/` 未就绪。）"].join("\n");
+    }
+    return [
+      "# 任务案例引导",
+      "",
+      "- 本任务匹配的案例已以 `<novel-guide>` 消息注入（紧随委派需求），**起草前必须对照**。",
+      "- 未注入的案例按需用 Read 自读（workspace 相对路径，位于 `.novel/cases/`）：",
+      "",
+      snapshot.index,
+    ].join("\n");
+  },
 };
 
 /**

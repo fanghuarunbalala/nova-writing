@@ -34,6 +34,16 @@ import {
   NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
 } from "../workspace/readNovelGlobalConstraints.js";
 import {
+	AGENT_CASES_DIR,
+	readAgentCaseContent,
+	renderAgentCasesIndex,
+	scanAgentCases,
+	seedAgentCasesIfNeeded,
+} from "../workspace/agentCases.js";
+import { LlmIntentClassifier } from "../../runtime/agent/composeGuide/LlmIntentClassifier.js";
+import { selectGuideCases } from "../../runtime/agent/composeGuide/selectGuideCases.js";
+import { wrapNovelGuideMessage } from "../../runtime/agent/composeGuide/novelGuideMessage.js";
+import {
   ComposeModeService,
   ComposeModeStateProvider,
 } from "../../conversation/compose/index.js";
@@ -418,6 +428,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 					...(rt.temperature !== undefined ? { temperature: rt.temperature } : {}),
 				};
 
+	/** compose 案例分类器采样：Fast 档语义（Explore 档优先，回落主采样——缺省模型
+	 * 即 flash 档）；maxTokens 收紧 + 关思考（分类是抽取型任务，PRD compose-案例引导 F5） */
+	const composeClassifierSampling = (): SamplingConfig => {
+		const base = toAgentSampling(runtimeSettings?.agents.Explore);
+		return { ...base, maxTokens: Math.min(base.maxTokens ?? 1024, 1024), thinking: "off" };
+	};
+
 	// explorer 专用 todo 存储（与 main 计划分离：TodoWrite 整体替换语义，
 	// 扫描进度草稿不覆盖 main 的执行计划；两者同为进程内内存级）
 	const todoStore = new InMemoryConversationTodoStore();
@@ -467,19 +484,59 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 							agentId,
 							debugger: createCallDebugger?.(agentId),
 						}),
-					Compose: (agentId) =>
-						buildNovelComposeAgent({
-							workspace,
-							provider: createProvider(
-								{ id: "compose", ...runtimeProviderConfig(runtimeSettings?.agents.Compose) },
-								modelInfoRegistry,
-							),
-							handle: novelHandle,
-							todoStore,
-							conversationId,
-							agentId,
-							debugger: createCallDebugger?.(agentId),
-						}),
+				Compose: (agentId) => {
+					// compose 案例引导装配（PRD compose-案例引导）：seed 钩子在 run 内对委派
+					// prompt 分类一次（Compose 连接 + Fast 档），选中案例以 <novel-guide>
+					// 消息注入；索引动态段每 call 扫描 .novel/cases（ensureSeeded 先行）
+					const classifier = new LlmIntentClassifier({
+						provider: createProvider(
+							{
+								id: "compose-classifier",
+								...runtimeProviderConfig(runtimeSettings?.agents.Compose),
+								timeoutMs: 15_000,
+							},
+							modelInfoRegistry,
+						),
+						sampling: composeClassifierSampling(),
+					});
+					let seededOnce: Promise<boolean> | undefined;
+					const ensureSeeded = () =>
+						(seededOnce ??= seedAgentCasesIfNeeded(workspace, logger));
+					let guideOnce: Promise<LLMessage[] | undefined> | undefined;
+					return buildNovelComposeAgent({
+						workspace,
+						provider: createProvider(
+							{ id: "compose", ...runtimeProviderConfig(runtimeSettings?.agents.Compose) },
+							modelInfoRegistry,
+						),
+						handle: novelHandle,
+						todoStore,
+						conversationId,
+						agentId,
+						debugger: createCallDebugger?.(agentId),
+						composeGuideProvider: async () => {
+							await ensureSeeded();
+							const entries = await scanAgentCases(workspace, logger);
+							if (entries === undefined || entries.length === 0) return undefined;
+							return { index: renderAgentCasesIndex(entries), casesDir: AGENT_CASES_DIR };
+						},
+						composeGuideSeed: (input) =>
+							(guideOnce ??= (async () => {
+								await ensureSeeded();
+								const entries = await scanAgentCases(workspace, logger);
+								if (entries === undefined || entries.length === 0) return undefined;
+								const tags = await classifier.classify(input, entries);
+								const selected = selectGuideCases(entries, tags);
+								const items: { entry: (typeof selected)[number]; content: string }[] = [];
+								for (const entry of selected) {
+									const content = await readAgentCaseContent(workspace, entry.file);
+									if (content !== undefined) items.push({ entry, content });
+								}
+								const message = wrapNovelGuideMessage(items);
+								return message !== undefined ? [message] : undefined;
+							})()),
+					});
+				},
 				},
 			});
 

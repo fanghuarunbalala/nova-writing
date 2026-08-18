@@ -8,7 +8,10 @@ import type {
 } from "../provider/types.js";
 import type { ComposeModeStateProvider } from "../../conversation/compose/index.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
-import type { NovelConstraintsProvider } from "../prompt/PromptSection.js";
+import type {
+  ComposeGuideProvider,
+  NovelConstraintsProvider,
+} from "../prompt/PromptSection.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { Logger } from "../../log/Logger.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
@@ -59,6 +62,18 @@ export interface AgentLoopConfig {
    * LoopContext 以 workspace / run.sampling.model 自行组装。
    */
   novelConstraintsProvider?: NovelConstraintsProvider;
+  /**
+   * compose 案例引导提供者：每 provider call 前调用（node 层扫描 .novel/cases
+   * 派生索引）。返回 undefined → novel.compose.guide 动态段渲染占位。
+   */
+  composeGuideProvider?: ComposeGuideProvider;
+  /**
+   * spawn seed 消息：首 run 开启后、首个 provider call 前调用一次，带 run 输入
+   * 文本（builder 同步执行拿不到委派 prompt，意图分类在 run 内做）；结果以
+   * persistent append 注入首 run（novel-guide 案例正文，紧随 user 消息）。
+   * 钩子异常由 loop 吞掉不阻断任务。子代理单 run 场景专用。
+   */
+  spawnSeedMessages?: (input: string) => Promise<LLMessage[] | undefined>;
   /**
    * 审批通道：requireApproval 工具执行前征询（子进程内闭包，不跨 RPC）。
    * 未注入时 requireApproval 工具按拒绝处理（返回「已拒绝（审批通道未装配）」），

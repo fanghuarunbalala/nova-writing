@@ -13,6 +13,22 @@ export interface NovelGlobalConstraintsSnapshot {
 }
 
 /**
+ * compose 案例引导快照：node 层扫描 workspace `.novel/cases` 派生（PRD
+ * compose-案例引导）。索引文本与正文消息通道分离——本快照只承载索引，
+ * 选中正文以 `<novel-guide>` 消息注入（不走动态段）。
+ * Compose guide snapshot: derived by the node layer from scanning the
+ * workspace `.novel/cases` directory. Index and selected-case content travel
+ * on separate channels — this snapshot carries the index only; selected case
+ * bodies are injected as a `<novel-guide>` message instead.
+ */
+export interface ComposeGuideSnapshot {
+  /** 索引文本（每案一行，已按 order/文件名序） */
+  readonly index: string;
+  /** 案例目录（workspace 相对路径，恒 ".novel/cases"） */
+  readonly casesDir: string;
+}
+
+/**
  * 动态段渲染输入：LoopContext 每 provider call 组装（workdir/platform/modelId
  * 来自 LoopContext 自身状态与 run 配置），仅 novelGlobalConstraints 由宿主注入。
  * Dynamic section render input: assembled per provider call by LoopContext
@@ -31,6 +47,8 @@ export interface DynamicPromptSectionInput {
   };
   /** 小说全局约束快照（宿主每调用注入；缺失时动态段渲染占位） */
   readonly novelGlobalConstraints?: NovelGlobalConstraintsSnapshot;
+  /** compose 案例引导快照（宿主每调用注入；缺失时 novel.compose.guide 段渲染占位） */
+  readonly composeGuide?: ComposeGuideSnapshot;
 }
 
 /**
@@ -39,6 +57,15 @@ export interface DynamicPromptSectionInput {
  * LoopContext 自身已持有 workdir（workspace）与 modelId（run.sampling.model）。
  */
 export type NovelConstraintsProvider = () => Promise<NovelGlobalConstraintsSnapshot | undefined>;
+
+/**
+ * compose 案例引导提供者：每 provider call 前调用（node 层扫描 .novel/cases 派生）。
+ * 读取失败返回 undefined → novel.compose.guide 动态段渲染占位。
+ * Compose guide provider: invoked before each provider call (the node layer
+ * derives the snapshot by scanning .novel/cases). Failures return undefined and
+ * the dynamic section renders its placeholder.
+ */
+export type ComposeGuideProvider = () => Promise<ComposeGuideSnapshot | undefined>;
 
 /**
  * 静态分段：base 缓存一次渲染，跨 provider call 复用（内容恒定）。

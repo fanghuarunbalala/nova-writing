@@ -83,6 +83,8 @@ export class AgentLoop {
   private readonly outputListeners = new Set<(e: LoopEvent) => void>();
   /** 压缩发生待发射标记（LoopContext.onCompacted 置位，flushCompacted 冲刷） */
   private pendingCompacted = false;
+  /** spawn seed 消息已应用（仅首 run 一次：novel-guide 案例注入） */
+  private seedApplied = false;
 
   /**
    * 构造 AgentLoop
@@ -98,6 +100,7 @@ export class AgentLoop {
       startSeq: config.startSeq,
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
+      composeGuideProvider: config.composeGuideProvider,
       beforeProviderCall: config.beforeProviderCall,
     });
     // 压缩边界事件桥接：onCompacted 置标记，runTurnLoop / 保险丝路径冲刷为 compacted 事件
@@ -271,6 +274,22 @@ export class AgentLoop {
       queuedMs: Date.now() - Date.parse(run.ts),
     });
     this.emitRunOpen(run, input, onEvent);
+
+    // ⓪ spawn seed 消息：仅首 run 一次、首个 provider call 前（novel-guide 案例
+    // 正文注入——persistent append，紧随 user 消息；钩子异常吞掉不阻断任务）
+    if (this.config.spawnSeedMessages !== undefined && !this.seedApplied) {
+      this.seedApplied = true;
+      try {
+        const seeded = await this.config.spawnSeedMessages(input);
+        if (seeded !== undefined && seeded.length > 0) {
+          this.context.appendMessagesTo(run, seeded);
+        }
+      } catch (error) {
+        this.config.logger?.debug("agent.loop.seed_failed", {
+          failure: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    }
 
     // ① 由 runConfig 初始化运行进度
     const runProgress: RunProgress = {

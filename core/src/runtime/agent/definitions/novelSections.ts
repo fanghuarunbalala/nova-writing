@@ -26,6 +26,7 @@ import {
   novelComposeSystemSection,
   novelComposeProcessSection,
   novelComposeReportingSection,
+  novelComposeGuideSection,
   novelBookAnalystIdentitySection,
   novelBookAnalystProcessSection,
   novelBookAnalystArtifactsSection,
@@ -37,7 +38,7 @@ import {
   novelPublicationStandardSection,
 } from "../../prompt/sections/novelStandards.js";
 
-/** novel 域段注册表（id@version；24 段：main 9 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3） */
+/** novel 域段注册表（id@version；25 段：main 9 + 共享 3 + 标准 4 + explorer 1 + compose 5 + book-analyst 3） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -61,11 +62,12 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   novelPublicationStandardSection,
   // explorer 专属段
   novelExplorerSection,
-  // compose 专属段（legacy 迁移）
+  // compose 专属段（legacy 迁移 + guide 动态段：PRD compose-案例引导）
   novelComposeIdentitySection,
   novelComposeSystemSection,
   novelComposeProcessSection,
   novelComposeReportingSection,
+  novelComposeGuideSection,
   // BookAnalyst 专属段（书库完本解构，PRD library-完本解构 F4）
   novelBookAnalystIdentitySection,
   novelBookAnalystProcessSection,

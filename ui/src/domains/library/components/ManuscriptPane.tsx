@@ -119,6 +119,7 @@ export function ManuscriptPane({ book, snapshot, store, onNotify, flashParagraph
 				))}
 			</div>
 			<div className={styles.detailCol}>
+				<div className={styles.readerColumn}>
 				<div className={styles.chapterTitle}>
 					<h3>{manifest.find((e) => e.chapterNo === chapterNo)?.chapterTitle ?? `第 ${chapterNo} 章`}</h3>
 					<StatusChip variant="accent" compact>
@@ -179,6 +180,7 @@ export function ManuscriptPane({ book, snapshot, store, onNotify, flashParagraph
 						</div>
 					))
 				)}
+				</div>
 			</div>
 		</div>
 	);

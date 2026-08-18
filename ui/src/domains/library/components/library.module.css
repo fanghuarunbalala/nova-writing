@@ -327,6 +327,45 @@
   line-height: 1.9;
 }
 
+/* ---------- 正文阅读排版（对齐内容 tab ManuscriptBlock 基线） ---------- */
+/* 阅读列：限宽居中（同内容 tab .column 880px）；章头/批头/正文/翻页全部入列 */
+.readerColumn {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+/* 批卡片在阅读列内弱化为阅读流：去边框卡片化，保留批头功能行（pid 复制/定位） */
+.readerColumn .paraCard {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin-bottom: var(--space-3);
+}
+
+.readerColumn .paraHead {
+  margin-bottom: var(--space-6px);
+}
+
+/* 正文段落：衬线 16.5px / 1.95 行高 / 首行缩进 / 两端对齐（同 ManuscriptBlock.text） */
+.readerColumn .paraCard p {
+  margin: 0 0 0.9em;
+  font-family: var(--font-body);
+  font-size: var(--fs-16-5);
+  line-height: 1.95;
+  text-indent: 2em;
+  text-align: justify;
+}
+
+.readerColumn .paraCard p:last-child {
+  margin-bottom: 0;
+}
+
+/* 章头对齐内容 tab：18px 加粗（--fs-18 章名快照 token） */
+.readerColumn .chapterTitle h3 {
+  font-size: var(--fs-18);
+  font-weight: var(--fw-bold);
+}
+
 .paraCard p:last-child {
   margin-bottom: 0;
 }

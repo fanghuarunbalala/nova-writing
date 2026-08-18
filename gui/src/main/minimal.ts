@@ -414,9 +414,22 @@ async function main(): Promise<void> {
   const libraryRoot = process.env.NOVEL_LIBRARY_ROOT ?? join(app.getPath("userData"), "library");
   mkdirSync(libraryRoot, { recursive: true });
   let libraryService = new LibraryService({ libraryRoot });
+  // 解析进度 journal 信号：spawn 时记录 bookId → conversationId（storedir = storedirRoot/<cid>）
+  const analystConversationOf = new Map<string, string>();
   const analysisSpawner: AnalystConversationSpawner = {
-    spawn: (opts) =>
-      manager.spawnConversation(opts).then((ref) => ({ conversationId: ref.conversationId })),
+    spawn: (opts) => {
+      const bookId = (opts.task as { bookId?: string } | undefined)?.bookId;
+      return manager.spawnConversation(opts).then((ref) => {
+        if (bookId !== undefined) analystConversationOf.set(bookId, ref.conversationId);
+        return { conversationId: ref.conversationId };
+      });
+    },
+  };
+  /** 解析会话 journal 路径（Read 分段调用 = 确定性进度信号；未知/未落盘返回 undefined 静默降级） */
+  const analysisJournalPathOf = (bookId: string): string | undefined => {
+    const cid = analystConversationOf.get(bookId);
+    const root = conversationsRoot();
+    return cid === undefined || root === undefined ? undefined : join(root, cid, "journal.jsonl");
   };
   /** 解析会话可用：provider env 已就绪（applyDefaultProviderEnv）且已打开工作区 */
   const canSpawnAnalysis = (): boolean =>
@@ -449,6 +462,7 @@ async function main(): Promise<void> {
       return path;
     },
     allowedSources: () => allowedBookSources,
+    analysisJournalPath: analysisJournalPathOf,
   });
   infoLog(`[main] library root: ${libraryRoot}`);
   // journalDir 传函数形态：history 代读随 workspace 重绑现取当前会话根

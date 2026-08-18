@@ -254,6 +254,24 @@ describe("LibraryService", () => {
 			expect(progress.coveredBatches).toBe(5);
 			expect(progress.unitCount).toBe(3);
 			expect(progress.percent).toBe(Math.round((5 / progress.totalBatches) * 100));
+			// journal 信号：outline 无 id 时从解析会话 journal 的 Read 调用取最大序（读取游标领先写入）
+			const journalPath = join(root, "journal-fake.jsonl");
+			writeFileSync(
+				journalPath,
+				[
+					'{"seq":1,"kind":"append","messages":[{"role":"assistant","toolCalls":[{"id":"c1","name":"Read","args":"{\\"file_path\\": \\"bk_test07/paragraphs/bk_test07-p000006.md\\"}"}]}]}',
+					'{"seq":2,"kind":"append","messages":[{"role":"assistant","toolCalls":[{"id":"c2","name":"Read","args":"{\\"file_path\\": \\"bk_test07/paragraphs/bk_test07-p000010.md\\"}"}]}]}',
+				].join("\n"),
+				"utf8",
+			);
+			const viaJournal = await service.analysisProgress("bk_test07", journalPath);
+			expect(viaJournal.indeterminate).toBe(false);
+			// journal 读取游标（10）领先 outline 写入信号（5），取最大
+			expect(viaJournal.coveredBatches).toBe(10);
+			expect(viaJournal.percent).toBe(Math.round((10 / viaJournal.totalBatches) * 100));
+			// 不存在的 journal 路径：静默降级回 outline 信号
+			const degraded = await service.analysisProgress("bk_test07", join(root, "nope.jsonl"));
+			expect(degraded.coveredBatches).toBe(5);
 			// 书单外（带 workspaceRoot 的服务）：未授权统一拒绝
 			const gated = new LibraryService({ libraryRoot: root, workspaceRoot: root });
 			await expect(gated.analysisProgress("bk_test07")).rejects.toMatchObject({

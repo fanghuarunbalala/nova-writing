@@ -531,13 +531,15 @@ export class LibraryService {
 	}
 
 	/**
-	 * 解析进度（GUI 3s 轮询读面）：outline 覆盖推导——全部 scene synopsis/intent
-	 * 中出现的分段 id 取最大序号（顺序解析的读取游标）/ manifest 总数。
-	 * synopsis 是自由文本，只认完整 id 形式（`<bookId>-p<6位序>`），不依赖固定句式。
+	 * 解析进度（GUI 3s 轮询读面）：双信号取最大——
+	 * ① outline 覆盖（scene synopsis/intent 中的分段 id 最大序号；自由文本，模型契约不稳定）；
+	 * ② 解析会话 journal（Read 工具调用参数里的 `paragraphs/<bookId>-pXXXXXX`——工具调用是
+	 *    确定性事实，不依赖模型写作风格；journalPath 由宿主注入，读不到静默忽略）。
 	 * @param bookId 书 id
-	 * @returns 进度（无任何 scene 引用时 indeterminate）
+	 * @param journalPath 解析会话 journal.jsonl 路径（可选；GUI 注入）
+	 * @returns 进度（两信号皆空时 indeterminate）
 	 */
-	async analysisProgress(bookId: string): Promise<AnalysisProgress> {
+	async analysisProgress(bookId: string, journalPath?: string): Promise<AnalysisProgress> {
 		await this.assertReadableBook(bookId);
 		const meta = await this.readMeta(bookId);
 		const manifest = await this.readManifest(bookId);
@@ -555,6 +557,19 @@ export class LibraryService {
 				if (seq > maxSeq) maxSeq = seq;
 			}
 		}
+		const unitCount = outline.units.length;
+		// journal 信号：解析会话 Read 过的分段（读取游标领先于实体写入）
+		if (journalPath !== undefined && (await existsFile(journalPath))) {
+			try {
+				const journal = await readFile(journalPath, "utf8");
+				for (const m of journal.matchAll(new RegExp(`paragraphs/${bookId}-p(\\d{6})`, "g"))) {
+					const seq = Number(m[1]);
+					if (seq > maxSeq) maxSeq = seq;
+				}
+			} catch {
+				// journal 读取失败（写入中竞态等）：退回 outline 信号
+			}
+		}
 		const coveredBatches = Math.min(maxSeq, totalBatches);
 		return {
 			status: meta.status,
@@ -562,7 +577,7 @@ export class LibraryService {
 			coveredBatches,
 			percent: totalBatches === 0 || maxSeq === 0 ? 0 : Math.round((coveredBatches / totalBatches) * 100),
 			indeterminate: maxSeq === 0,
-			unitCount: outline.units.length,
+			unitCount,
 		};
 	}
 

@@ -23,6 +23,9 @@ export interface LibraryFaceDeps {
 	pickFile?: () => Promise<string | null>;
 	/** 导入源路径白名单（pickFile 登记）；缺省 = 空（一切 sourcePath 拒绝导入） */
 	allowedSources?: () => Set<string>;
+	/** 解析会话 journal 路径（bookId → journal.jsonl；缺省 = 无 journal 进度信号）。
+	 *   宿主（GUI）在 spawn 时记录 bookId→conversationId 后据此定位 storedir */
+	analysisJournalPath?: (bookId: string) => string | undefined;
 }
 
 /** 解析会话不可用的统一降级原因 */
@@ -58,7 +61,8 @@ export function createLibraryFace(deps: LibraryFaceDeps): LibraryApi {
 			return deps.service().readAnalysis(bookId, which, maxChars);
 		},
 		async analysisProgress(bookId) {
-			return deps.service().analysisProgress(bookId);
+			const journalPath = deps.analysisJournalPath?.(bookId);
+			return deps.service().analysisProgress(bookId, journalPath);
 		},
 		async bookOutline(bookId) {
 			return queryBook<LibraryOutlineSnapshot>(bookId, { op: "outline.get", includePlans: true });

@@ -314,7 +314,7 @@ export const novelBookAnalystProcessSection: PromptSection = {
       "1. **开局**：Read `<bookId>/book.meta.json` 与 `<bookId>/paragraphs/manifest.jsonl`，掌握卷/章/分段全貌（章号 ↔ 分段 id）。用 TodoWrite 建全书推进计划（按章或按卷分批）。",
       "2. **分大轮读正文**：按 manifest 顺序推进，**每轮一次并行 Read 本轮全部批**（5–10 批/轮，一轮读到位，不一批一轮地磨）；读完**立即**写本轮实体（不囤积到全书读完），再进下一大轮。小书（≤10 批）一轮读完。",
       "3. **边读边产出（增量落库，勿囤积到最后）**：",
-      "   - **大纲**（核心产物，story unit 全部由你生成——宿主只建了卷/章发布骨架）：saga → arc（幕）→ scene 层级（按体量可加 sequence 中间层）。**scene 是不可分割的故事单元**：一个完整独立的事件节拍（如「苏醒」「摸清处境」「发现异常」各是一个 scene）——边界由叙事节拍决定，**与章节无关**：一章可含多个 scene、一个 scene 可跨多章、章边界也可停在 scene 中间。不得用一个大 scene 概括多个节拍，也不得把一个节拍切碎。每个 scene 必须带完整 leaf 计划（人物在场/事件序列/节奏拍含读者情绪/状态变更）并写明覆盖的 paragraph id 区间；arc 写明**时间、地点、人物、事件**（title + intent + synopsis）。幕与章**无结构对应**，可用章实体的 storyUnitId 指向主幕（来源提示语义）。",
+      "   - **大纲**（核心产物，story unit 全部由你生成——宿主只建了卷/章发布骨架）：saga → arc（幕）→ scene 层级（按体量可加 sequence 中间层）。**scene 是不可分割的故事单元**：一个完整独立的事件节拍（如「苏醒」「摸清处境」「发现异常」各是一个 scene）——边界由叙事节拍决定，**与章节无关**：一章可含多个 scene、一个 scene 可跨多章、章边界也可停在 scene 中间。不得用一个大 scene 概括多个节拍，也不得把一个节拍切碎。每个 scene 必须带完整 leaf 计划（人物在场/事件序列/节奏拍含读者情绪/状态变更），**synopsis 末尾必须附覆盖区间**「（覆盖 <bookId>-pXXXXXX–pYYYYYY）」——这是 GUI 进度条的信号来源；arc 写明**时间、地点、人物、事件**（title + intent + synopsis）。幕与章**无结构对应**，可用章实体的 storyUnitId 指向主幕（来源提示语义）。",
       "   - **人物卡 / 地点卡**：NovelWrite kind=character / location；人物关系不在档案本体，记在场景层。",
       "   - **合批写入（省轮次）**：NovelWrite 一次尽量带本轮全部同类 values（该轮全部 scene 一批、全部人物一批），**一实体一调是浪费**；注意 parentId 只能引用已存在单元——先建 arc，再一批建其下全部 scene；新写实体前不必 NovelRead 复核（预检自动做），只有 NovelEdit 改已有实体前才需要读。",
       "   - **卷章完善**：宿主未识别卷标记时补建卷、调整章归卷（NovelWrite/NovelEdit kind=volume / chapter）。",

@@ -536,18 +536,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		};
 	}
 
-	// 书库只读服务（novel 主 Agent 的 library.read 组）：NOVEL_LIBRARY_ROOT 注入时
-	// 以会话工作区为书单访问控制根构造；BookAnalyst 会话不需要
-	const libraryRootEnv = process.env.NOVEL_LIBRARY_ROOT;
-	const libraryDeps =
-		!isAnalyst && libraryRootEnv !== undefined && libraryRootEnv.trim() !== ""
-			? {
-					deps: new LibraryService({
-						libraryRoot: libraryRootEnv,
-						workspaceRoot: process.env.NOVEL_CONVERSATION_WORKSPACE,
-					}),
-				}
-			: undefined;
+	// 书库只读服务（novel 主 Agent 的 library.read 组）：main 分支暂不接入（避免污染主
+	// agent 工具面）；开发在 book-analyst 分支恢复该装配（NOVEL_LIBRARY_ROOT 注入时构造）
 
 	// agentType 分发：BookAnalyst = 书库完本解构后台装配（书库根沙盒 + 该书 book.db
 	// 读写 + bypass + journal 恢复；无 compose/ask/subagent）；否则 novel 主 Agent。
@@ -598,8 +588,6 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		composeService,
 		beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
 		todoStore: new InMemoryConversationTodoStore(),
-		// 书库只读引用（NOVEL_LIBRARY_ROOT 注入时装配；缺省=未装配降级，工具回不可用文本）
-		...(libraryDeps !== undefined ? { library: libraryDeps } : {}),
 	});
 
 	const managerWait: ManagerWaitChannel | undefined =

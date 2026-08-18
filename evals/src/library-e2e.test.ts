@@ -91,7 +91,9 @@ afterAll(async () => {
 });
 
 describe("Runner 书库注入闭环", () => {
-	it("library：overview → paragraph 调用被采集；cited/valid 信息边界成立", async () => {
+	// library.read 暂不接入 main（主 agent 工具面撤除）——LibraryRead 闭环用例随
+	// book-analyst 分支恢复；此处 skip 保留用例代码（恢复 = 去 .skip）
+	it.skip("library：overview → paragraph 调用被采集；cited/valid 信息边界成立", async () => {
 		const provider = scriptedProvider([
 			libraryCall("t1", "overview", {}),
 			libraryCall("t2", "paragraph", { bookId: ALIAS, chapterNo: 5 }),
@@ -110,7 +112,7 @@ describe("Runner 书库注入闭环", () => {
 		expect(returnedParagraphIds(m).has(`${ALIAS}-p000005`)).toBe(true);
 	});
 
-	it("mock 脚本：listBooks 首次返回脚本内容（toolResponse 可断言）", async () => {
+	it.skip("mock 脚本：listBooks 首次返回脚本内容（toolResponse 可断言）", async () => {
 		const provider = scriptedProvider([
 			libraryCall("t1", "overview", {}),
 			finalMsg("完成"),

@@ -54,7 +54,7 @@ export const novelAgentDefinition = new AgentDefinition({
       "runtime.ask",
       "novel.compose",
       "novel.entities",
-      "library.read",
+      // library.read 暂不接入 main（避免污染主 agent 工具面）；开发在 book-analyst 分支
     ],
   }),
   delegation: new AgentDelegationPolicy({

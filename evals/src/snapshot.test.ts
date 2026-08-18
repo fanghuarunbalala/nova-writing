@@ -86,8 +86,8 @@ describe("Tier 0 快照：toolDefs（desc / schema / promptDetail）", () => {
 		expect(capability().toolDefs.map(toolProjection)).toMatchSnapshot();
 	});
 
-	it("工具数量锁（13；误增删组/工具即暴露——novel.entities 合并 5 组 12 件 + library.read 1 件）", () => {
-		expect(capability().toolDefs).toHaveLength(13);
+	it("工具数量锁（12；误增删组/工具即暴露——novel.entities 合并 5 组 12 件；library.read 暂不接入 main）", () => {
+		expect(capability().toolDefs).toHaveLength(12);
 	});
 });
 

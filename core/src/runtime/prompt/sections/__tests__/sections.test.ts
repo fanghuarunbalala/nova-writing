@@ -45,12 +45,13 @@ describe("prompt 分节文案（迁移完整性）", () => {
     expect(text).toContain("自动压缩");
   });
 
-  it("novel.craft 含创作规范（不超范围/不预埋/不堆砌）", () => {
+  it("novel.craft 含创作规范（不超范围/不预埋/引用规范段）", () => {
     const text = novelCraftSection.render({} as never);
     expect(text).toContain("不超范围");
     expect(text).toContain("不预埋");
-    expect(text).toContain("不堆砌");
-    expect(text).toContain("设定一致");
+    expect(text).toContain("正文规范");
+    expect(text).toContain("大纲规范");
+    expect(text).toContain("验证再报完成");
   });
 
   it("novel.execution 含谨慎行动（可逆性/高风险清单）", () => {

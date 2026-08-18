@@ -12,6 +12,8 @@ import styles from "./TopBarViewSwitcher.module.css";
 export interface TopBarViewSwitcherProps {
   readonly state: MainViewState;
   readonly onChange: (state: MainViewState) => void;
+  /** 书库视图（试验功能）开关：false 时隐藏第四视图（缺省隐藏） */
+  readonly libraryEnabled?: boolean;
 }
 
 const VIEWS: ReadonlyArray<{
@@ -25,10 +27,11 @@ const VIEWS: ReadonlyArray<{
   { value: "library", label: "书库", icon: Library },
 ];
 
-export function TopBarViewSwitcher({ state, onChange }: TopBarViewSwitcherProps) {
+export function TopBarViewSwitcher({ state, onChange, libraryEnabled = false }: TopBarViewSwitcherProps) {
+  const views = VIEWS.filter((view) => view.value !== "library" || libraryEnabled);
   const activeIndex = Math.max(
     0,
-    VIEWS.findIndex((view) => view.value === state),
+    views.findIndex((view) => view.value === state),
   );
   return (
     <div className={styles.switcher} role="tablist" aria-label="主视图">
@@ -37,7 +40,7 @@ export function TopBarViewSwitcher({ state, onChange }: TopBarViewSwitcherProps)
         style={{ transform: `translateX(calc(${activeIndex} * 100%))` }}
         aria-hidden="true"
       />
-      {VIEWS.map((view) => (
+      {views.map((view) => (
         <button
           key={view.value}
           type="button"

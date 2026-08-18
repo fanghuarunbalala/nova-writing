@@ -590,10 +590,19 @@ export function ApplicationShell({
     () => setSidebarMode((mode) => (mode === "expanded" ? "collapsed" : "expanded")),
     [],
   );
+  /** 书库视图（试验功能）：仅 debug 平台能力开启；禁用时视图切换与恢复均回落 chat */
+  const libraryEnabled = platform?.capabilities.library === true;
   const handleViewChange = useCallback(
-    (next: MainViewState) => mainViewRouter.transition(next),
-    [mainViewRouter],
+    (next: MainViewState) => {
+      if (next === "library" && !libraryEnabled) return;
+      mainViewRouter.transition(next);
+    },
+    [mainViewRouter, libraryEnabled],
   );
+  // 兜底：持久化恢复/通知 goto 跳转到被禁用的书库视图时回落对话
+  useEffect(() => {
+    if (mainView.state === "library" && !libraryEnabled) mainViewRouter.transition("chat");
+  }, [mainView.state, libraryEnabled, mainViewRouter]);
   const handleShellOpenWorkspace = useCallback(() => onOpenWorkspace?.(), [onOpenWorkspace]);
   const handleShellOpenSettings = useCallback(() => onOpenSettings?.(), [onOpenSettings]);
   // 通知条目激活：goto.view 切主视图；审批类额外唤起审批弹窗
@@ -629,6 +638,7 @@ export function ApplicationShell({
         onToggleSidebar={handleToggleSidebar}
         view={mainView.state}
         onViewChange={handleViewChange}
+        libraryEnabled={libraryEnabled}
         onOpenWorkspace={handleShellOpenWorkspace}
         onOpenSettings={handleShellOpenSettings}
         notifications={domainStores.notifications}

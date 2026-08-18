@@ -24,6 +24,8 @@ try {
   });
   // renderer 侧 debugLog 开关（浏览器无 process.env）
   contextBridge.exposeInMainWorld("__NOVEL_LOG_LEVEL__", process.env.NOVEL_LOG_LEVEL ?? "info");
+  // debug 标志（gui:debug 注入 NOVEL_DEBUG=1）：试验功能门控（书库视图等）
+  contextBridge.exposeInMainWorld("__NOVEL_DEBUG__", process.env.NOVEL_DEBUG === "1");
   // 窗口控制端口（PRD WC；main 侧 window-controls:* 按 sender.id 授权）：
   // platform 判定 + 最小化/最大化切换/关闭 + 最大化状态订阅
   contextBridge.exposeInMainWorld("novelWindow", {

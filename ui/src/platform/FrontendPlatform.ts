@@ -6,6 +6,8 @@ export interface PlatformCapabilities {
   readonly clipboardRead: boolean;
   readonly clipboardWrite: boolean;
   readonly notifications: boolean;
+  /** 书库视图（试验功能）：仅 debug 构建开启；缺省 false 隐藏第四视图 */
+  readonly library?: boolean;
 }
 
 export interface FrontendFileReference {

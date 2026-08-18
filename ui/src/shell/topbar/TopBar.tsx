@@ -30,6 +30,8 @@ export interface TopBarProps {
   /** 当前主视图（驱动中央分段切换器） */
   readonly view: MainViewState;
   readonly onViewChange: (state: MainViewState) => void;
+  /** 书库视图（试验功能）开关：透传分段切换器（缺省隐藏） */
+  readonly libraryEnabled?: boolean;
   readonly onOpenWorkspace: () => void;
   readonly onOpenSettings: () => void;
   /** 通知中心（demo 铃铛）：传入即在「打开工作区」与「设置」之间渲染 */
@@ -48,6 +50,7 @@ export const TopBar = memo(function TopBar({
   onToggleSidebar,
   view,
   onViewChange,
+  libraryEnabled,
   onOpenWorkspace,
   onOpenSettings,
   notifications,
@@ -85,7 +88,7 @@ export const TopBar = memo(function TopBar({
         </TopBarMenuSlot>
       ) : null}
       <span className={styles.spacer} />
-      <TopBarViewSwitcher state={view} onChange={onViewChange} />
+      <TopBarViewSwitcher state={view} onChange={onViewChange} libraryEnabled={libraryEnabled} />
       <span className={styles.spacer} />
       <div
         className={styles.tbRight}

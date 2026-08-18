@@ -133,10 +133,16 @@ export function OutlinePane({ bookId, snapshot, store, onOpenCharacter, onOpenLo
 		</button>
 	);
 
+	/** 递归渲染单元树行（saga → arc/sequence → scene 全层级展开） */
+	const rows = (node: UnitNode): ReactNode[] => [
+		row(node),
+		...node.children.flatMap((child) => rows(child)),
+	];
+
 	return (
 		<div className={styles.split}>
 			<div className={styles.dirCol}>
-				{tree.map(row)}
+				{tree.flatMap(rows)}
 			</div>
 			<div className={styles.detailCol}>
 				<div className={styles.paraCard}>

@@ -66,7 +66,7 @@ export function renderComposeModeFullText(designFilePath?: string): string {
 		"建议派 **Explore** 子代理并行查设定、时间线、伏笔、矛盾点；复杂任务必派，琐碎任务可直接用只读工具自行探索。",
 		"",
 		"### Phase 3: 创作草案",
-		"建议派 **Compose** 子代理设计大纲或正文草案；复杂草稿必派，琐碎草稿可自行创作。",
+		"默认派 **Compose** 子代理设计大纲或正文草案（委派 prompt 写明目标、范围与要点）；琐碎草稿可自行创作。",
 		"",
 		"### Phase 4: 综合写入草稿",
 		"评审子代理产出，用 Write/Edit 增量完善 design 文件（唯一可写文件）。",

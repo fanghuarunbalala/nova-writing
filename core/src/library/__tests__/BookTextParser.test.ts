@@ -49,6 +49,52 @@ describe("BookTextParser", () => {
 		expect(nos).toEqual([1, 2, 3]);
 	});
 
+	it("第N部/第N集标记开新卷（网文常见卷级标记），章序全书连续", () => {
+		const text = [
+			"第一部 小丑",
+			"第一章 绯红",
+			prose(2),
+			"第二章 情况",
+			prose(2),
+			"第二部 无面人",
+			"第三章 归来",
+			prose(2),
+			"第一集 序",
+			"第四章 开场",
+			prose(2),
+		].join("\n");
+		const parsed = parseBookText(text);
+		expect(parsed.volumes.map((v) => v.title)).toEqual(["第一部 小丑", "第二部 无面人", "第一集 序"]);
+		const nos = parsed.volumes.flatMap((v) => v.chapters.map((c) => c.no));
+		expect(nos).toEqual([1, 2, 3, 4]);
+	});
+
+	it("总结/后记行（如 第一部总结）不误判为卷标记", () => {
+		const text = [
+			"第一部 小丑",
+			"第一章 绯红",
+			prose(3),
+			"第一部总结",
+			prose(3),
+			"第二章 情况",
+			prose(2),
+		].join("\n");
+		const parsed = parseBookText(text);
+		expect(parsed.volumes).toHaveLength(1);
+		expect(parsed.volumes[0].title).toBe("第一部 小丑");
+		// 「第一部总结」作为第一章正文段落，而非新卷
+		expect(parsed.volumes[0].chapters).toHaveLength(2);
+		expect(parsed.volumes[0].chapters[0].batches.join("\n")).toContain("第一部总结");
+	});
+
+	it("卷标记与正文之间的空行不产生空「开篇」章", () => {
+		const text = ["书名", "作者", "", "第一部 小丑", "", "", "第一章 绯红", prose(2)].join("\n");
+		const parsed = parseBookText(text);
+		// 开篇（书名/作者）留在无标题卷；「第一部 小丑」开新卷；空行不再造出空开篇章
+		expect(parsed.volumes.map((v) => v.title)).toEqual([null, "第一部 小丑"]);
+		expect(parsed.volumes.flatMap((v) => v.chapters.map((c) => c.title))).toEqual(["开篇", "第一章 绯红"]);
+	});
+
 	it("无任何章标记 → 按字数虚拟切章", () => {
 		const parsed = parseBookText(prose(600));
 		expect(parsed.volumes).toHaveLength(1);

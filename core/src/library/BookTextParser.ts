@@ -43,9 +43,9 @@ const BATCH_MAX_CHARS = 6000;
 /** 无章标记时的虚拟切章目标字数 */
 const VIRTUAL_CHAPTER_CHARS = 8000;
 
-/** 卷标记行（第N卷 / Volume N） */
+/** 卷标记行（第N卷/部/集、Volume N、卷N/部N/集N；标记后需空白或行尾——防 总结/完 等后记行误判为卷） */
 const VOLUME_LINE_RE =
-	/^\s*(第[0-9零一二三四五六七八九十百千万两]+卷|Volume\s+\d+|卷[0-9零一二三四五六七八九十百千万两]+)\s*(.*)$/;
+	/^\s*(第[0-9零一二三四五六七八九十百千万两]+[卷部集]|Volume\s+\d+|[卷部集][0-9零一二三四五六七八九十百千万两]+)(?:\s+|$)(.*)$/;
 
 /** 章标记行（第N章/回/节、Chapter N、序章/楔子/尾声/终章/番外） */
 const CHAPTER_LINE_RE =
@@ -84,6 +84,8 @@ export function parseBookText(text: string): ParsedBook {
 	};
 
 	for (const line of lines) {
+		// 空行不触发任何标记判断，也不开新章（防卷/章标记间空行造出空「开篇」章）
+		if (line.trim().length === 0) continue;
 		const vol = VOLUME_LINE_RE.exec(line);
 		if (vol !== null) {
 			const title = vol[0].trim();

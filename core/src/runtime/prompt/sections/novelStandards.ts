@@ -1,8 +1,9 @@
 /**
- * 小说质量规范段（novel.story_appeal / novel.outline_standard / novel.prose_standard）。
+ * 小说质量规范段（novel.story_appeal / novel.outline_standard / novel.prose_standard /
+ * novel.publication_standard）。
  * 两层引导体系的规范层：static 常驻 system prompt，novel 主 agent 与 Compose 子代理
  * 共享（Explore 不引用）；工作流层（project_stage nudge）按阶段拼接并按名引用本层
- * 标准（「吸引人的故事」「大纲规范」「正文规范」即各段标题）。
+ * 标准（「吸引人的故事」「大纲规范」「正文规范」「章卷发布结构规范」即各段标题）。
  */
 import type { PromptSection } from "../PromptSection.js";
 
@@ -96,6 +97,9 @@ export const novelOutlineStandardSection: PromptSection = {
       "",
       "## 落地到工具",
       "场景单元（scope=scene）的 5 要素由 leaf 计划承载：characters＝人物、locations＝地点、events＝事件、rhythmBeats＝转折与情绪（拍点 turn 即转折，readerEmotion 即情绪标注）；场景串联体现在 orderKey 顺序与事件因果中。卷/章是发布组装层（chapter 选段 + volume 归卷），不是大纲的组织单位。",
+      "",
+      "## 概念边界（务必遵守）",
+      "大纲（story unit）是叙事单位、卷/章是发布单位，两者无结构对应（数据模型见 NovelRead 的「小说数据模型」；章卷组装的合格判据见「章卷发布结构规范」）——禁止按「一章一幕」机械对齐。正文里的「场景」即大纲 scene 单元。作者说「第X卷/第X章」多为口语指代位置：按 story_unit 树定位对应内容，不要为此新建卷/章；展示大纲一律用故事单元层级（saga/arc/sequence/scene）表述，不用「第X章」组织。",
     ].join("\n"),
 };
 
@@ -136,5 +140,33 @@ export const novelProseStandardSection: PromptSection = {
       "- **形容词和副词堆砌**：用大量修饰语替代具体描写。（例：“他非常极其无比愤怒地看着她，眼神中充满了难以置信的震惊和不可思议的失望。”——一个具体动作胜过十个形容词。）",
       "- **被动叙事**：主角不主动做任何事，只是“看到”“听到”“感受到”，事件自动发生在他身上。（例：“突然一道光落在他身上，他发现自己变强了。”——主角做了什么才触发了这个结果？）",
       "- **钩子缺失**：场景结束时情绪已经完全落地，没有任何悬念或期待残留。读者读完觉得“哦，结束了”，没有翻页动力。",
+    ].join("\n"),
+};
+
+/** 章卷发布结构规范段（novel.publication_standard）：章/卷组装的合格判据（好/坏对称，对齐「大纲规范」） */
+export const novelPublicationStandardSection: PromptSection = {
+  kind: "static",
+  id: "novel.publication_standard",
+  version: "1.0.0",
+  label: "Novel Publication Standard",
+  render: () =>
+    [
+      "# 章卷发布结构规范",
+      "",
+      "## 章卷与大纲的关系",
+      "章（chapter）与卷（volume）是发布单位：章按 paragraphIds 选段组装正文、卷归章；与大纲（story unit）无结构对应（见「大纲规范·概念边界」）。",
+      "",
+      "## 什么是好的章卷结构",
+      "- **按情绪节点切章**：一章承载一个完整的情绪单元或节奏拍（起承转合或单一情绪走向），情绪落地处即章尾；",
+      "- **章尾有钩子**：每章结尾读者有未满足的期待（悬念/冲突将至/情感悬而未决），有翻页动力；",
+      "- **卷按大弧线归卷**：一卷容纳一个完整叙事弧（起承转合）或一个大的情绪阶段，卷内情绪曲线有起伏；",
+      "- **结构与叙事解耦**：一章可含多个 scene、一个 scene、或半个 scene（钩子可停在 scene 中），由阅读节奏决定，不按「一章一幕」机械对齐。",
+      "",
+      "## 什么不是好的章卷结构",
+      "- **一章一幕对齐**：按大纲单元机械切章，无视情绪节奏；",
+      "- **字数机械切章**：按固定字数截断，无视情绪节点；",
+      "- **章尾无钩子**：情绪完全落地、没有悬念残留，读者无翻页动力；",
+      "- **章内情绪混杂**：一章塞多个无关联的情绪节点，节奏散乱；",
+      "- **随意归卷**：卷内无主题无弧线，卷与卷之间无情绪层次。",
     ].join("\n"),
 };

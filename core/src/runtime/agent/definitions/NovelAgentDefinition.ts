@@ -10,8 +10,8 @@
  * recipe 序（static 全前、dynamic 后）：
  * novel.identity → novel.system → novel.doing-tasks → novel.actions →
  * novel.communication → novel.story_appeal → novel.outline_standard →
- * novel.prose_standard → core.runtime.protocol → tool.policy(dynamic) →
- * tool.guidance(dynamic) → core.environment(dynamic) →
+ * novel.prose_standard → novel.publication_standard → core.runtime.protocol →
+ * tool.policy(dynamic) → tool.guidance(dynamic) → core.environment(dynamic) →
  * novel.global_constraints(dynamic)
  */
 import {
@@ -40,6 +40,7 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.story_appeal"),
     new PromptSectionItem("novel.outline_standard"),
     new PromptSectionItem("novel.prose_standard"),
+    new PromptSectionItem("novel.publication_standard"),
     new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),

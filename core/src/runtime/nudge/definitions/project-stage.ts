@@ -163,7 +163,7 @@ export function nextActionOf(units: readonly StoryUnitWithLeaf[]): ProjectStageA
   return { workflow: "complete" };
 }
 
-// ── 工作流全文（作者定稿 spec；规范层三段常驻 system prompt，按名引用） ──
+// ── 工作流全文（作者定稿 spec；规范层四段常驻 system prompt，按名引用） ──
 
 const COLLECT_FULL_TEXT = [
   "## 开书推荐工作流：从一句话到吸引人的故事",
@@ -181,7 +181,7 @@ const OUTLINE_FULL_TEXT = [
   "2. 取一个候选（最靠前或作者指定）给出拆分建议：每个子故事一句话核心事件＋情绪走向；检查四种串联（因果/情绪对比/悬念牵引/目标递进）。方向性分歧或跨卷大结构才用 AskUserQuestion 确认，能自行决断的拆分直接做。",
   "3. 子故事可再拆 → 标记待拆下轮处理；不可再拆 → 补全 5 要素。",
   "4. 每轮检查：相邻串联成立、局部情绪曲线无连续 3 个同强度、无「什么不是好的大纲」任一特征（对照「大纲规范」）。",
-  "5. 向作者展示当前大纲，说明本轮成果；可给出下一步建议（如下一个待细化对象），**不主动要求继续细化**——是否继续、细化哪里由作者提出。",
+  "5. 向作者展示当前大纲，说明本轮成果；展示用故事单元层级（saga/arc/sequence/scene）表述，不要用「第X章」组织大纲（见「大纲规范·概念边界」）；可给出下一步建议（如下一个待细化对象），**不主动要求继续细化**——是否继续、细化哪里由作者提出。",
   "可重复执行：每次一个或一批故事，不要求一次细化完；作者可指定细化范围（如先细化第一卷），其余后续再说。",
   "完成标准（单个故事）：不可再分 ＋ 5 要素全 ＋ 前后串联验证；完成标准（整体）：全部如此、整体情绪曲线有波动、无坏特征。",
   "种子生长：细化中发现故事核需补充（如加配角承载冲突线）直接补进 NOVEL.md 并告知，不视为回退。",
@@ -202,7 +202,7 @@ const PROSE_FULL_TEXT = [
 const COMPLETE_FULL_TEXT = [
   "## 收尾推荐工作流：发布与打磨",
   "入口：全部故事正文完成。",
-  "1. 发布组装：chapter 选段成章 + volume 归卷（NovelRead/NovelWrite kind=chapter/volume）。",
+  "1. 发布组装：chapter 选段成章 + volume 归卷（NovelRead/NovelWrite kind=chapter/volume），判据对照「章卷发布结构规范」。",
   "2. 通读一致性检查：伏笔回收、人物弧光、设定冲突。",
   "3. 可开新卷/新篇：用 NovelWrite(kind=story_unit) 扩展大纲后继续。",
 ].join("\n");

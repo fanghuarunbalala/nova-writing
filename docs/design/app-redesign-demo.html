@@ -6,7 +6,7 @@
 <title>布局重设计 demo · Novel 创作台</title>
 <style>
   /* ============================================================
-     前端整体布局重设计 demo（单文件，交互式）· v0.9.0
+     前端整体布局重设计 demo（单文件，交互式）· v0.10.0
      基于 theme-candidates-demo-2.html 的四主题 token 体系 + 现有功能结构：
        · 顶栏：侧栏开关 / 品牌 / 工作区 / 中央四视图 tab / 工作区·设置 / 窗口控制（Win·Mac）
        · 对话视图：左侧会话目录 · 中部对话流（正文/草稿/工具行/输入区/模式/发送·暂停
@@ -604,8 +604,6 @@
     background: none; color: var(--color-muted); cursor: pointer;
   }
   .paraTool:hover { border-color: var(--color-border-strong); background: var(--color-accent-9); color: var(--color-accent-ink); }
-  /* 右栏大纲 leaf 简略卡（对齐树行缩进） */
-  .dirDetail.treeBrief { margin: 2px 6px 6px 20px; }
   .draftBlock {
     position: relative; padding: 10px 14px; margin: 4px 0 14px;
     border-left: 3px solid var(--color-warn);
@@ -1009,6 +1007,31 @@
   }
   .composerBox:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-8-t), var(--shadow-1); }
 
+  /* ============ 实体拖入输入框作引用 ============
+     右栏内容目录的实体行（data-drag）拖到 composerBox：drop 后进入引用栏，
+     chip 随消息发送并在用户气泡顶部回显，点击联动右栏定位。 */
+  .dirRow[draggable="true"] { cursor: grab; }
+  .dirRow[draggable="true"]:active { cursor: grabbing; }
+  .composerBox.dragOver {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-accent-8-t), var(--shadow-1);
+  }
+  .refTray { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 2px 6px; }
+  .refTray:empty { display: none; }
+  .refTrayChip { padding: 2px 4px 2px 9px; gap: 4px; }
+  .refTrayChip .refX {
+    display: inline-grid; place-items: center;
+    width: 16px; height: 16px; padding: 0;
+    border: 0; border-radius: 50%; background: transparent;
+    color: inherit; opacity: 0.6; cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .refTrayChip .refX:hover { opacity: 1; background: color-mix(in oklab, var(--color-accent) 18%, transparent); }
+  .refTrayChip .refX svg { width: 10px; height: 10px; }
+  .dragGhost { position: fixed; left: -999px; top: -999px; pointer-events: none; opacity: 0.95; z-index: 999; }
+  .msgRefs { display: flex; flex-wrap: wrap; gap: 4px; margin: -1px 0 5px; }
+  .msgRefs .refChip { padding: 1px 8px; font-size: var(--fs-10-5); gap: 4px; }
+
   .statusWrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s var(--ease-out); }
   .statusWrap[data-open="true"] { grid-template-rows: 1fr; }
   .statusInner { overflow: hidden; }
@@ -1354,6 +1377,59 @@
     cursor: pointer;
   }
   .ddGo:hover { text-decoration: underline; }
+
+  /* ============ 右栏 · 下钻详情页（v0.10：点击最细粒度行整栏展示 + 返回） ============ */
+  .dirDetailHead {
+    display: flex; align-items: center; gap: 6px; flex: none;
+    padding: 10px 10px 8px;
+  }
+  .dirBack {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 9px 3px 5px; border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill); background: none;
+    color: var(--color-muted); font-size: var(--fs-11-5); font-weight: var(--fw-medium);
+    cursor: pointer; transition: all var(--duration-fast) var(--ease-out);
+  }
+  .dirBack:hover { color: var(--color-accent-ink); border-color: var(--color-accent); background: var(--color-accent-8-t); }
+  .dirDetailTitle {
+    display: flex; align-items: center; gap: 7px; flex: none;
+    padding: 0 12px 10px; border-bottom: 1px solid var(--color-border);
+    color: var(--color-accent-ink); border-radius: var(--radius-sm);
+  }
+  .dirDetailTitle b { font-size: var(--fs-13); font-weight: var(--fw-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dirDetailTitle .kicker { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  .dirDetailTitle.flash { animation: row-flash 1.8s var(--ease-out); }
+  .dirDetailScroll { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 8px 14px; }
+  .dirDetailScroll .dirDetail { display: block; margin: 0 2px 10px; }
+  /* 详情页内的 cardBlock（场景 leaf 等，复用内容视图卡片）紧凑化适配窄栏 */
+  .dirDetailScroll .cardBlock { padding: 10px 12px 11px; margin: 0 2px 10px; }
+  .dirDetailScroll .apParam { margin: 4px 0 0; }
+  .ddEmpty {
+    padding: 12px 10px; border-radius: var(--radius-sm);
+    background: var(--color-surface-2); color: var(--color-faint);
+    font-size: var(--fs-11-5); line-height: 1.7;
+  }
+  /* 段落行（章/场景详情共用）：序号徽标 + 截断文本，可拖入输入框作引用，点击跳正文 */
+  .paraDirRow {
+    display: flex; align-items: flex-start; gap: 7px;
+    margin: 0 2px 5px; padding: 7px 8px;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    cursor: grab; transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+  }
+  .paraDirRow:hover { background: color-mix(in oklab, var(--color-fg) 5%, transparent); }
+  .paraDirRow:active { cursor: grabbing; }
+  .paraDirRow.flash { animation: row-flash 1.8s var(--ease-out); border-radius: var(--radius-sm); }
+  .paraDirRow .pIdx {
+    flex: none; margin-top: 1px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-semibold);
+    color: var(--color-faint); letter-spacing: 0.04em;
+  }
+  .paraDirRow .pTxt {
+    flex: 1; min-width: 0;
+    font-size: var(--fs-11-5); line-height: 1.7; color: var(--color-muted);
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  }
+  .paraDirRow .pTxt .entTag { cursor: pointer; }
   @keyframes row-flash {
     0% { background: var(--color-accent-11); box-shadow: 0 0 0 0 var(--color-accent-45); }
     60% { background: var(--color-accent-8-t); }
@@ -2401,6 +2477,8 @@ const MANUSCRIPT = [
   { id: "v3", title: "第三卷 · 灯塔", open: false, chapters: [] },
 ];
 const chapById = {}; MANUSCRIPT.forEach(v => v.chapters.forEach(c => { c.volume = v.title; chapById[c.id] = c; }));
+/* 章 → 关联场景（场景单元自带 chapter 字段；右栏详情页互跳用） */
+const unitByChapter = {}; Object.values(unitById).forEach(u => { if (u.chapter && !unitByChapter[u.chapter]) unitByChapter[u.chapter] = u; });
 
 const CHARS = [
   { id: "ch1", name: "林晚", role: "主角 · 佩符人",
@@ -2454,6 +2532,50 @@ const entTag = (type, id) => {
   const name = e ? e.name : id;
   return `<button class="entTag" data-act="entLocate" data-type="${type}" data-id="${id}" title="在右栏目录定位：${meta.label} › ${name}">${ic(meta.icon, 10.5)}&lt;${type === "char" ? "character" : "location"}_${esc(name)}&gt;</button>`;
 };
+
+/* 输入框引用：右栏内容目录四类实体（对齐现网 ContentDirectoryPanel 四 tab）可拖入 composer。
+   载荷 { kind, id, label } 走 dataTransfer 自定义 MIME；chip 点击在右栏定位（refLocate）。 */
+const REF_KIND_META = {
+  char: { label: "人物", icon: "userRound", tab: "characters" },
+  loc: { label: "地点", icon: "mapPin", tab: "locations" },
+  outline: { label: "大纲", icon: "listTree", tab: "outline" },
+  chapter: { label: "正文", icon: "scrollText", tab: "manuscript" },
+  paragraph: { label: "段落", icon: "quote", tab: "manuscript" },
+};
+function parseDragRef(key) {
+  const i = String(key || "").indexOf(":");
+  if (i < 0) return null;
+  const kind = key.slice(0, i), id = key.slice(i + 1);
+  const src = { char: CHARS, loc: LOCS }[kind];
+  if (src) {
+    const e = src.find(x => x.id === id);
+    return e ? { kind, id, label: e.name } : null;
+  }
+  if (kind === "outline") {
+    const u = unitById[id];
+    return u ? { kind, id, label: u.title } : null;
+  }
+  if (kind === "chapter") {
+    const c = chapById[id];
+    return c ? { kind, id, label: c.title } : null;
+  }
+  if (kind === "paragraph") {
+    /* id 形如 "c2:3"（章 id + 段序）；label 取章题首个 · 前缀，保 chip 短 */
+    const ci = String(id).indexOf(":");
+    if (ci < 0) return null;
+    const c = chapById[id.slice(0, ci)], idx = Number(id.slice(ci + 1));
+    if (!c || !c.blocks || !c.blocks[idx]) return null;
+    return { kind, id, label: `${c.title.split(" · ")[0]} · 段 ${idx + 1}` };
+  }
+  return null;
+}
+/* 引用 chip（输入框引用栏 removable / 用户气泡回显只读 共用） */
+function refChipsHTML(refs, { removable = false } = {}) {
+  return (refs || []).map(r => {
+    const meta = REF_KIND_META[r.kind];
+    return `<span class="refChip refTrayChip" data-act="refLocate" data-kind="${r.kind}" data-id="${r.id}" title="点击在右栏目录定位：${meta.label} › ${esc(r.label)}">${ic(meta.icon, 11)}<span>${esc(r.label)}</span>${removable ? `<button class="refX" data-act="refRemove" data-kind="${r.kind}" data-id="${r.id}" title="移除引用">${ic("x", 10)}</button>` : ""}</span>`;
+  }).join("");
+}
 
 
 const STATS = [
@@ -2854,7 +2976,9 @@ const state = {
   selUnit: "u2", selChapter: "c2", selChar: "ch1", selLoc: "l1",
   planSel: "overview", mode: "compose", pendingMode: null, modeMenuOpen: false, genState: "generating",
   sidebarCollapsed: false, maximized: false, ws: "北河旧事", pinned: false,
-  dirOpen: true, dirTab: "outline", expandedDir: null, insW: null, unitBrief: null,
+  dirOpen: true, dirTab: "outline", dirDetail: null, insW: null,
+  /* 输入框引用（拖入右栏实体）：{ kind, id, label }，随消息发送后清空 */
+  composerRefs: [],
   modalOpen: false, apSel: 0, apShownOnce: false,
   settingsTab: "appearance", booted: false,
   vpMid: false, vpNarrow: false,
@@ -3047,14 +3171,14 @@ function convRow({ title, meta, icon, dot, active, pin }) {
 /* 大纲树：任意层级嵌套 + 引导线（saga/arc/sequence/… 可省中间层，叶为 scene）；
    act 参数：内容视图左栏用 unitSel（就地选中），右栏内容目录用 unitSelJump（跳到内容视图）；
    leafAct（右栏）：leaf 行改为就地展开简略卡（意图/梗概 + 查看单元详情），不直接跳转 */
-function treeNodeHTML(n, act = "unitSel", leafAct) {
+function treeNodeHTML(n, act = "unitSel", leafAct, opts = {}) {
   const isParent = !!n.children;
   const open = !!n.open;
   const active = state.selUnit === n.id;
   const real = realState(n);
-  const briefOpen = !isParent && leafAct && state.unitBrief === n.id;
   const rowAct = !isParent && leafAct ? leafAct : act;
-  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${(isParent && open) || briefOpen ? " open" : ""}" data-act="${rowAct}" data-id="${n.id}" title="${esc(n.title)} · ${n.scope}">
+  const dragAttr = opts.drag ? ` draggable="true" data-drag="outline:${n.id}"` : "";
+  const row = `<div class="dirRow treeRow${isParent ? " parent" : " leaf"}${active ? " active" : ""}${isParent && open ? " open" : ""}"${dragAttr} data-act="${rowAct}" data-id="${n.id}" title="${esc(n.title)} · ${n.scope}${opts.drag ? " · 可拖入输入框引用" : ""}">
     ${isParent
       ? `<span class="chev" data-act="treeChev" data-id="${n.id}">${ic("chevRight", 12, 2.2)}</span>`
       : `<span class="treeTick"></span>`}
@@ -3063,13 +3187,7 @@ function treeNodeHTML(n, act = "unitSel", leafAct) {
     ${real === "blocked" || real === "abandoned" ? "" : (n.progress ? `<span class="miniNum">${n.progress.c}/${n.progress.t}</span>` : "")}
     ${chip(REAL_MAP[real])}
   </div>`;
-  const brief = briefOpen ? `
-    <div class="dirDetail show treeBrief">
-      <div class="ddSec"><span>意图</span>${esc(n.intent || "（尚未填写——这个单元要达成什么）")}</div>
-      <div class="ddSec"><span>梗概</span>${esc(n.synopsis || "（尚未填写情节梗概）")}</div>
-      <button class="ddGo" data-act="${act}" data-id="${n.id}">查看单元详情 ${ic("arrowRight", 11)}</button>
-    </div>` : "";
-  return `<div class="treeNode">${row}${brief}${isParent && open ? `<div class="treeChildren">${n.children.map(c => treeNodeHTML(c, act, leafAct)).join("")}</div>` : ""}</div>`;
+  return `<div class="treeNode">${row}${isParent && open ? `<div class="treeChildren">${n.children.map(c => treeNodeHTML(c, act, leafAct, opts)).join("")}</div>` : ""}</div>`;
 }
 
 function contentSidebarHTML() {
@@ -3554,36 +3672,38 @@ function chatMainHTML() {
       <div class="composerInner">
         <div class="composerBox">
           <div class="statusWrap" data-open="${state.genState !== "idle"}"><div class="statusInner">${genStatusHTML()}</div></div>
+          <div class="refTray" id="refTray">${refChipsHTML(state.composerRefs, { removable: true })}</div>
           <div class="composerRow">
-            <textarea id="chatInput" rows="1" placeholder="输入创作指令… （Tab 引用 角色 / 大纲 / 正文）"></textarea>
+            <textarea id="chatInput" rows="1" placeholder="输入创作指令… 拖入右侧目录实体可作引用"></textarea>
           </div>
           <div class="modeRow" id="modeRow">${modeRowInner()}</div>
         </div>
-        <div class="composerHint"><span><b>Enter</b> 发送</span><span><b>Shift+Enter</b> 换行</span><span>执行模式对整个会话生效</span></div>
+        <div class="composerHint"><span><b>Enter</b> 发送</span><span><b>Shift+Enter</b> 换行</span><span><b>拖入</b> 右栏实体作引用</span><span>执行模式对整个会话生效</span></div>
       </div>
     </div>`;
 }
 
 /* --- 内容视图 --- */
 /* leaf 绑定 → 可点击 chip（引用角色 / 地点档案；involvement 见 model LeafCharacterBinding / LeafLocationBinding） */
-function leafCharChips(u) {
+function leafCharChips(u, act = "charSel") {
   return (((u.leaf && u.leaf.characters) || [])).map(b => {
     const c = CHARS.find(x => x.id === b.id);
     const inv = b.involvement;
     const tag = inv ? [inv.roles.map(r => LEAF_ROLE[r]).join("/"), LEAF_PRESENCE[inv.presence]].filter(Boolean).join(" · ") : "";
-    return `<button class="refChip" data-act="charSel" data-id="${b.id}">${ic("userRound", 11)}${esc(c ? c.name : b.id)}${tag ? `<small style="font-size:var(--fs-10-5);color:var(--color-faint);font-weight:var(--fw-regular);">${tag}</small>` : ""}</button>`;
+    return `<button class="refChip" data-act="${act}" data-kind="char" data-id="${b.id}">${ic("userRound", 11)}${esc(c ? c.name : b.id)}${tag ? `<small style="font-size:var(--fs-10-5);color:var(--color-faint);font-weight:var(--fw-regular);">${tag}</small>` : ""}</button>`;
   }).join("");
 }
-function leafLocChips(u) {
+function leafLocChips(u, act = "locSel") {
   return (((u.leaf && u.leaf.locations) || [])).map(b => {
     const l = LOCS.find(x => x.id === b.id);
     const inv = b.involvement;
     const tag = inv ? [LEAF_LOC_ROLE[inv.role], inv.affected ? "受影响" : ""].filter(Boolean).join(" · ") : "";
-    return `<button class="refChip" data-act="locSel" data-id="${b.id}">${ic("mapPin", 11)}${esc(l ? l.name : b.id)}${tag ? `<small style="font-size:var(--fs-10-5);color:var(--color-faint);font-weight:var(--fw-regular);">${tag}</small>` : ""}</button>`;
+    return `<button class="refChip" data-act="${act}" data-kind="loc" data-id="${b.id}">${ic("mapPin", 11)}${esc(l ? l.name : b.id)}${tag ? `<small style="font-size:var(--fs-10-5);color:var(--color-faint);font-weight:var(--fw-regular);">${tag}</small>` : ""}</button>`;
   }).join("");
 }
-/* 场景计划 leaf：仅 scene 叶单元（人物/地点绑定、事件序列、节奏拍、实体状态变更） */
-function leafHTML(u) {
+/* 场景计划 leaf：仅 scene 叶单元（人物/地点绑定、事件序列、节奏拍、实体状态变更）。
+   chipAct：绑定 chip 的点击行为（内容视图默认 charSel/locSel；右栏详情页传 entOpen 面板内跳转） */
+function leafHTML(u, { chipAct } = {}) {
   if (u.scope !== "scene") return "";
   if (!u.leaf) return `
     <div class="cardBlock">
@@ -3591,7 +3711,7 @@ function leafHTML(u) {
       <div class="banner faint">${ic("feather", 13)}<span>leaf 未编写——写场景前先补场景设计：人物 / 地点绑定、事件序列、节奏拍、实体变更。</span></div>
     </div>`;
   const L = u.leaf;
-  const chars = leafCharChips(u), locs = leafLocChips(u);
+  const chars = leafCharChips(u, chipAct), locs = leafLocChips(u, chipAct);
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";
   return `
     <div class="cardBlock">
@@ -4386,22 +4506,94 @@ function updateAlertBar() {
 /* ================= 右栏 · 内容目录 =================
    对话视图常驻：大纲树（点击跳内容视图单元详情）/ 人物 / 地点（行点击展开详情卡，
    「打开完整档案」跳内容视图完整档案）；对话流实体标签点击在此定位。 */
-function dirDetailCardHTML(type, id) {
+/* 人物/地点详情体（右栏下钻详情页）：简介 / 初始状态 / 关联单元（面板内互跳）/ 打开完整档案 */
+function entDetailHTML(type, id) {
   const meta = ENT[type];
   const e = meta.list.find(x => x.id === id);
   if (!e) return "";
   const rel = e.related || [];
   const jumpAct = type === "char" ? "charSelJump" : "locSelJump";
-  return `<div class="dirDetail${state.expandedDir === type + ":" + id ? " show" : ""}" data-sum="${type}:${id}">
+  return `
     <div class="ddHead">
       ${type === "char" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="convIcon" style="width:24px;height:24px;">${ic("mapPin", 12)}</span>`}
-      <div><b>${esc(e.name)}</b><small>${meta.label} · ${esc(e.role || e.locState || "")}</small></div>
+      <div><b>${esc(e.name)}</b><small>${meta.label}档案 · ${esc(e.role || e.locState || "")}</small></div>
     </div>
     <div class="ddSec"><span>简介</span>${esc(e.summary)}</div>
     ${type === "char" && e.initialState ? `<div class="ddSec"><span>初始状态</span>${esc(e.initialState)}</div>` : ""}
-    ${rel.length ? `<div class="ddSec"><span>关联单元</span><span class="ddChips">${rel.map(uid => unitById[uid] ? `<span class="chip faint" style="padding:0 5px;font-size:10px;">${esc(unitById[uid].title)}</span>` : "").join("")}</span></div>` : ""}
-    <button class="ddGo" data-act="${jumpAct}" data-id="${id}">打开完整档案 ${ic("arrowRight", 11)}</button>
-  </div>`;
+    ${rel.length ? `<div class="ddSec"><span>关联单元</span><span class="ddChips">${rel.map(uid => unitById[uid] ? `<button class="chip faint" data-act="dirOpenUnit" data-id="${uid}" style="padding:0 5px;font-size:10px;cursor:pointer;">${esc(unitById[uid].title)}</button>` : "").join("")}</span></div>` : ""}
+    <button class="ddGo" data-act="${jumpAct}" data-id="${id}">打开完整档案（内容视图）${ic("arrowRight", 11)}</button>`;
+}
+/* 段落行（章/场景详情共用）：P 序号 + 截断文本（段内实体 chip 保留）；可拖入输入框作引用，点击跳正文 */
+function paraDirRows(c) {
+  if (c.blocked) return `<div class="banner warn" style="margin:0 2px 8px;">${ic("alertTri", 13)}<span>本章受阻：${esc(c.blocked)}</span></div>`;
+  if (c.abandoned) return `<div class="banner faint" style="margin:0 2px 8px;">${ic("x", 13)}<span>本单元已弃置：${esc(c.abandoned)}</span></div>`;
+  if (!c.blocks || !c.blocks.length) return `<div class="ddEmpty">此章尚未落笔——拖入关联场景或直接下指令，让 AI 起草。</div>`;
+  return c.blocks.map((b, i) => `
+    <div class="paraDirRow" draggable="true" data-drag="paragraph:${c.id}:${i}" data-act="jumpChapter" data-id="${c.id}" data-ref="paragraph:${c.id}:${i}" title="拖入输入框作引用 · 点击去正文阅读">
+      <span class="pIdx">P${i + 1}</span>
+      <span class="pTxt">${paraHTML(b.text)}</span>
+      ${b.draft ? `<span class="chip warn" style="padding:0 6px;flex:none;">草</span>` : ""}
+    </div>`).join("");
+}
+/* 右栏下钻详情页：state.dirDetail = { kind: unit|chapter|char|loc, id }；dirBack 返回目录列表 */
+function dirDetailPageHTML() {
+  const d = state.dirDetail;
+  let icon = "listTree", title = "", kicker = "", body = "";
+  if (d.kind === "unit") {
+    const u = unitById[d.id];
+    if (!u) { state.dirDetail = null; return ""; }
+    const real = realState(u);
+    const chap = u.chapter ? chapById[u.chapter] : null;
+    title = u.title;
+    kicker = `大纲 · ${SCOPE_MAP[u.scope][0]} · storyUnit ${u.id}`;
+    body = `
+      <div class="statRowChips" style="margin-bottom:8px;">${chip(PLAN_MAP[u.planningStatus])}${chip(REAL_MAP[real])}</div>
+      ${u.blockState ? `<div class="banner warn" style="margin-bottom:8px;">${ic("alertTri", 13)}<span>受阻 · ${esc(u.blockState.note || "")}</span></div>` : ""}
+      ${u.abandonment ? `<div class="banner faint" style="margin-bottom:8px;">${ic("x", 13)}<span>已废弃 · ${esc(u.abandonment.note || "")}</span></div>` : ""}
+      <div class="ddSec"><span>意图 · intent</span>${esc(u.intent || "（尚未填写——这个单元要达成什么）")}</div>
+      <div class="ddSec"><span>梗概 · synopsis</span>${esc(u.synopsis || "（尚未填写情节梗概）")}</div>
+      ${u.scope === "scene" ? leafHTML(u, { chipAct: "entOpen" }) : ""}
+      <div class="apSectionHead" style="margin:8px 2px 5px;">正文段落${chap ? " · " + esc(chap.title) : ""}（可拖入输入框）</div>
+      ${chap ? paraDirRows(chap) : `<div class="ddEmpty">该场景尚未关联发布章。</div>`}
+      <div class="apActions" style="justify-content:flex-start;gap:12px;flex-wrap:wrap;margin-top:10px;">
+        <button class="ddGo" data-act="unitSelJump" data-id="${u.id}">查看单元详情（内容视图）${ic("arrowRight", 11)}</button>
+        ${chap ? `<button class="ddGo" data-act="jumpChapter" data-id="${chap.id}">在正文中查看 ${ic("arrowRight", 11)}</button>` : ""}
+      </div>`;
+  } else if (d.kind === "chapter") {
+    const c = chapById[d.id];
+    if (!c) { state.dirDetail = null; return ""; }
+    const u = unitByChapter[c.id];
+    icon = "scrollText";
+    title = c.title;
+    kicker = `正文 · ${esc(c.volume)}${c.words ? " · " + c.words + " 字" : ""}`;
+    body = `
+      <div class="statRowChips" style="margin-bottom:8px;">${chip(REAL_MAP[c.state] || REAL_MAP.pending)}${c.draft ? `<span class="chip warn" style="padding:0 6px;">含草稿</span>` : ""}</div>
+      ${c.blocked ? `<div class="banner warn" style="margin-bottom:8px;">${ic("alertTri", 13)}<span>本章受阻：${esc(c.blocked)}</span></div>` : ""}
+      ${c.abandoned ? `<div class="banner faint" style="margin-bottom:8px;">${ic("x", 13)}<span>本单元已弃置：${esc(c.abandoned)}</span></div>` : ""}
+      <div class="ddSec"><span>关联场景</span>${u ? `<span class="ddChips"><button class="refChip" data-act="dirOpenUnit" data-id="${u.id}">${ic("listTree", 11)}${esc(u.title)}</button></span>` : "（未关联——自由章）"}</div>
+      <div class="apSectionHead" style="margin:8px 2px 5px;">段落（可拖入输入框）</div>
+      ${paraDirRows(c)}
+      <div class="apActions" style="justify-content:flex-start;margin-top:10px;">
+        <button class="ddGo" data-act="jumpChapter" data-id="${c.id}">在正文中查看（阅读区）${ic("arrowRight", 11)}</button>
+      </div>`;
+  } else {
+    const meta = ENT[d.kind];
+    const e = meta.list.find(x => x.id === d.id);
+    if (!e) { state.dirDetail = null; return ""; }
+    icon = meta.icon;
+    title = e.name;
+    kicker = `${meta.label}档案 · ${esc(e.role || e.locState || "")}`;
+    body = entDetailHTML(d.kind, d.id);
+  }
+  return `
+    <div class="insGrip" id="insGrip" title="拖拽调宽 · 双击复位"><span class="gripTip" id="gripTip"></span></div>
+    <div class="dirDetailHead">
+      <button class="dirBack" data-act="dirBack" title="返回目录列表">${ic("chevLeft", 13)}目录</button>
+      <span style="flex:1"></span>
+      <button class="iconBtn" data-act="insClose" title="收起面板">${ic("x", 13)}</button>
+    </div>
+    <div class="dirDetailTitle">${ic(icon, 13)}<b>${esc(title)}</b><span class="kicker" style="font-size:var(--fs-10-5);color:var(--color-faint);">${kicker}</span></div>
+    <div class="dirDetailScroll">${body}</div>`;
 }
 /* 对话顶条「内容目录」开关按钮状态原地同步（不重渲染对话流，避免滚动跳动） */
 function syncDirToggleBtn() {
@@ -4409,6 +4601,14 @@ function syncDirToggleBtn() {
   if (!btn) return;
   btn.classList.toggle("on", state.dirOpen && state.view === "chat");
   btn.title = state.dirOpen ? "收起内容目录" : "展开内容目录";
+}
+/* 下钻详情页定位闪烁（详情标题 / 段落行） */
+function flashInspector(sel) {
+  const row = inspectorEl.querySelector(sel);
+  if (row) {
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
+  }
 }
 function renderInspector() {
   /* 内容目录与对话视图绑定：切到内容 / 计划视图自动隐藏（内容视图左栏已有完整资料位），回到对话恢复 */
@@ -4418,33 +4618,44 @@ function renderInspector() {
   updateScrims();
   if (!open) { inspectorEl.setAttribute("aria-hidden", "true"); return; }
   inspectorEl.removeAttribute("aria-hidden");
+  /* 下钻详情页：点击最细粒度行整栏展示（场景 leaf/段落、章·段落、人物/地点档案），左上「目录」返回 */
+  if (state.dirDetail) { inspectorEl.innerHTML = dirDetailPageHTML(); return; }
   const tabs = [
     { id: "outline", name: "大纲", icon: "listTree", n: Object.keys(unitById).length },
+    { id: "manuscript", name: "正文", icon: "scrollText", n: Object.keys(chapById).length },
     { id: "characters", name: "人物", icon: "userRound", n: CHARS.length },
     { id: "locations", name: "地点", icon: "mapPin", n: LOCS.length },
   ];
   let body = "";
   if (state.dirTab === "outline") {
-    /* leaf 行点击 → 就地展开简略卡（意图/梗概 + 查看单元详情）；父节点点击仍跳内容视图 */
-    body = OUTLINE.map(n => treeNodeHTML(n, "unitSelJump", "unitBrief")).join("");
+    /* 父级行点击=展开/收起下一层（dirTreeToggle）；场景叶行点击=进场景详情（unitOpen，完整 leaf + 段落）；
+       整树行可拖入输入框作引用（opts.drag → data-drag） */
+    body = OUTLINE.map(n => treeNodeHTML(n, "dirTreeToggle", "unitOpen", { drag: true })).join("");
+  } else if (state.dirTab === "manuscript") {
+    /* 正文卷·章：章行点击 → 章详情页（全部段落，段落可拖）；章行本身仍可拖作章级引用 */
+    const dotColor = { completed: "var(--color-success)", "in-progress": "var(--color-warn)", pending: "var(--color-border-strong)", blocked: "var(--color-danger)", abandoned: "var(--color-faint)" };
+    body = MANUSCRIPT.map(v => `
+      <div class="dirGroup" style="display:flex;align-items:center;gap:5px;">${esc(v.title)}<span style="margin-left:auto;font-family:var(--font-mono);font-size:10px;">${v.chapters.length}</span></div>
+      ${v.chapters.map(c => `<div class="dirRow${c.state === "abandoned" ? " abandoned" : ""}" draggable="true" data-drag="chapter:${c.id}" data-act="chapOpen" data-id="${c.id}" title="${esc(c.title)} · ${esc(c.volume)} · 点击看段落 · 可拖入输入框引用">
+        <span class="statusDot" style="background:${dotColor[c.state] || "var(--color-border-strong)"}"></span>
+        <span class="dirLabel">${esc(c.title)}</span>
+        ${c.draft ? `<span class="chip warn" style="padding:0 6px;">草</span>` : ""}
+        <span class="rowChev">${ic("chevRight", 12, 2.2)}</span>
+      </div>`).join("")}`).join("");
   } else {
     const type = state.dirTab === "characters" ? "char" : "loc";
     const meta = ENT[type];
-    body = meta.list.map(e => {
-      const key = type + ":" + e.id;
-      return `<div class="dirRow${state.expandedDir === key ? " open" : ""}" data-act="dirToggle" data-id="${key}" data-ent="${key}">
+    body = meta.list.map(e => `<div class="dirRow" draggable="true" data-drag="${type}:${e.id}" data-act="entOpen" data-type="${type}" data-id="${e.id}" title="${esc(e.name)} · 点击看档案 · 可拖入输入框引用">
         ${type === "char" ? `<span class="avatar">${esc(e.name[0])}</span>` : `<span class="convIcon" style="width:24px;height:24px;">${ic("mapPin", 12)}</span>`}
         <span class="dirLabel"><b>${esc(e.name)}</b><small>${esc(e.role || e.locState || "")}</small></span>
         <span class="rowChev">${ic("chevRight", 12, 2.2)}</span>
-      </div>
-      ${dirDetailCardHTML(type, e.id)}`;
-    }).join("");
+      </div>`).join("");
   }
   inspectorEl.innerHTML = `
     <div class="insGrip" id="insGrip" title="拖拽调宽 · 双击复位"><span class="gripTip" id="gripTip"></span></div>
     <div class="insHead">
       <b>内容目录</b>
-      <span class="kicker" style="font-size:var(--fs-10-5);color:var(--color-faint);">对话随手查 · 实体标签可定位</span>
+      <span class="kicker" style="font-size:var(--fs-10-5);color:var(--color-faint);">对话随手查 · 点击行看详情 · 可拖入输入框引用</span>
       <span style="flex:1"></span>
       <button class="iconBtn" data-act="insClose" title="收起面板">${ic("x", 13)}</button>
     </div>
@@ -4453,7 +4664,7 @@ function renderInspector() {
     </div>
     <div class="sideScroll">${body}
       <div style="padding:12px 10px 0;border-top:1px dashed var(--color-border);margin:10px 6px 0;font-size:var(--fs-10-5);color:var(--color-faint);line-height:1.7;">
-        对话流中的 <span class="entTag" style="cursor:default;">&lt;character_沈砚&gt;</span> 等实体标签可点击：本栏切到对应目录并高亮定位。面板左缘可拖拽调宽（双击复位）。
+        点击行进入详情（场景完整 leaf 与段落、章·段落、人物/地点档案），左上「目录」返回；行与段落均可拖入输入框作引用，随消息发送。对话流中的 <span class="entTag" style="cursor:default;">&lt;character_沈砚&gt;</span> 实体标签同样点击定位。面板左缘可拖拽调宽（双击复位）。
       </div>
     </div>`;
 }
@@ -4689,7 +4900,7 @@ function renderSettings() {
   } else {
     html = `<div style="text-align:center;padding:26px 0;">
       <div class="brand" style="justify-content:center;margin-bottom:8px;"><span class="brandDot"></span><span class="brandName" style="font-size:16px;">Novel</span></div>
-      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.9.0<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>设置（模型服务 + 能力覆盖 + Normal·Fast 档位 + Agent 参数与压缩阈值） · 审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（详情卡 / 跳完整档案 / 拖宽 / leaf 简略卡） · 实体标签定位 · 正文段落实体 chip + hover 编辑 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画<br>书库视图（v0.9 · 完本解构 · 示例数据）：书单 + 导入弹窗 + 解析进度 + 幕级大纲 / 卷章 / 正文分段（paragraph id 契约）/ 风格摘录</div>
+      <div style="color:var(--color-faint);font-size:var(--fs-12);line-height:2;">布局重设计 demo v0.10.0<br>主题 token 对齐 tokens.css · 断点 1280 / 1080 · 最小窗口 1080<br>设置（模型服务 + 能力覆盖 + Normal·Fast 档位 + Agent 参数与压缩阈值） · 审批整体弹窗（稍后处理 + 挂起提示条） · 右栏内容目录（四 tab：大纲/正文/人物/地点 · 点击行下钻整栏详情页 · 场景完整 leaf + 段落 / 章·段落 / 档案 · 返回导航 · 拖宽） · 实体拖入输入框作引用（五类：人物/地点/大纲/章/段落 · chip 随消息发送 / 气泡回显点击定位 / 退格移除） · 实体标签定位 · 正文段落实体 chip + hover 编辑 · markdown 全格式样例 · 排队回显（幽灵项） · 大纲对齐 StoryUnit 模型 · 通知中心 · 启动页与入场动画<br>书库视图（v0.9 · 完本解构 · 示例数据）：书单 + 导入弹窗 + 解析进度 + 幕级大纲 / 卷章 / 正文分段（paragraph id 契约）/ 风格摘录</div>
     </div>`;
   }
   $("settingsContent").innerHTML = html;
@@ -4924,11 +5135,6 @@ document.addEventListener("click", (e) => {
       state.contentTab = "outline"; state.selUnit = id; state.view = "content";
       renderTitlebar(); renderSidebar(); renderMain();
       break;
-    case "unitBrief": {
-      /* 右栏大纲 leaf：就地展开/收起简略卡（单开；卡内「查看单元详情」才跳转） */
-      state.unitBrief = state.unitBrief === id ? null : id;
-      renderInspector(); break;
-    }
     case "paraEditHint": toast("行内编辑段落（应用内为 textarea + 乐观锁保存）"); break;
     case "paraDelHint": toast("删除段落（应用内需二次确认）"); break;
     case "treeChev": {
@@ -5001,41 +5207,72 @@ document.addEventListener("click", (e) => {
       toast("已重放：审批到达，弹窗已打开");
       break;
     }
-    /* ---- 右栏内容目录 ---- */
-    case "dirTab": state.dirTab = id; renderInspector(); break;
-    case "dirToggle": {
-      const key = el.dataset.ent || null;
-      const willOpen = state.expandedDir !== key;
-      /* 展开新行时收起上一张详情卡（手风琴单开） */
-      if (willOpen && state.expandedDir && state.expandedDir !== key) {
-        const prevDetail = document.querySelector(`.dirDetail[data-sum="${state.expandedDir}"]`);
-        if (prevDetail) prevDetail.classList.remove("show");
-        const prevRow = document.querySelector(`.dirRow[data-ent="${state.expandedDir}"]`);
-        if (prevRow) prevRow.classList.remove("open");
-      }
-      state.expandedDir = willOpen ? key : null;
-      const detail = el.nextElementSibling;
-      if (detail && detail.classList.contains("dirDetail")) {
-        detail.classList.toggle("show", willOpen);
-      }
-      el.classList.toggle("open", willOpen);
+    /* ---- 右栏内容目录（列表 ⇄ 下钻详情页） ---- */
+    case "dirTab": state.dirTab = id; state.dirDetail = null; renderInspector(); break;
+    case "dirBack": state.dirDetail = null; renderInspector(); break;
+    case "unitOpen": state.dirDetail = { kind: "unit", id }; renderInspector(); break;
+    case "chapOpen": state.dirDetail = { kind: "chapter", id }; renderInspector(); break;
+    case "entOpen": state.dirDetail = { kind: el.dataset.type, id: el.dataset.id }; renderInspector(); break;
+    case "dirOpenUnit": state.dirDetail = { kind: "unit", id }; renderInspector(); break;
+    case "dirTreeToggle": {
+      /* 大纲父级行点击=展开/收起下一层（无子级不动作；场景叶行走 unitOpen 进详情） */
+      const u = unitById[id];
+      if (u && u.children) { u.open = !u.open; renderInspector(); }
       break;
     }
     case "entLocate": {
-      /* 对话流实体标签 → 右栏目录切 tab + 定位高亮 + 展开详情卡 */
+      /* 对话流实体标签 → 右栏切 tab + 打开档案详情页 + 标题闪烁 */
       const meta = ENT[el.dataset.type];
       const e = meta.list.find(x => x.id === el.dataset.id);
       if (!e) break;
       state.dirTab = meta.tab;
-      state.expandedDir = el.dataset.type + ":" + el.dataset.id;
+      state.dirDetail = { kind: el.dataset.type, id: el.dataset.id };
       state.dirOpen = true;
       renderInspector();
-      const row = inspectorEl.querySelector(`.dirRow[data-ent="${el.dataset.type}:${el.dataset.id}"]`);
-      if (row) {
-        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
+      flashInspector(".dirDetailTitle");
+      toast(`已在内容目录打开档案：${meta.label} › ${e.name}`);
+      break;
+    }
+    case "refRemove": {
+      /* 引用栏 ×：按 kind+id 移除（委托命中内层按钮，不再触发 chip 本体的 refLocate） */
+      state.composerRefs = state.composerRefs.filter(r => !(r.kind === el.dataset.kind && r.id === el.dataset.id));
+      refreshRefTray();
+      break;
+    }
+    case "refLocate": {
+      /* 引用 chip（输入框引用栏 / 用户气泡回显）→ 打开对应下钻详情页并闪烁：
+         char/loc 档案页；outline 场景详情（完整 leaf + 段落）；chapter 章详情；paragraph 章详情 + 闪烁段落行 */
+      const kind = el.dataset.kind, rid = el.dataset.id;
+      const meta = REF_KIND_META[kind];
+      if (!meta) break;
+      state.dirOpen = true;
+      let flashSel = ".dirDetailTitle", name = el.textContent.trim();
+      if (kind === "char" || kind === "loc") {
+        const e2 = ENT[kind].list.find(x => x.id === rid);
+        if (!e2) break;
+        state.dirTab = ENT[kind].tab;
+        state.dirDetail = { kind, id: rid };
+      } else if (kind === "outline") {
+        const u = unitById[rid];
+        if (!u) break;
+        state.dirTab = "outline";
+        state.dirDetail = { kind: "unit", id: rid };
+      } else if (kind === "chapter") {
+        const c = chapById[rid];
+        if (!c) break;
+        state.dirTab = "manuscript";
+        state.dirDetail = { kind: "chapter", id: rid };
+      } else {
+        const cid = String(rid).split(":")[0];
+        const c = chapById[cid];
+        if (!c) break;
+        state.dirTab = "manuscript";
+        state.dirDetail = { kind: "chapter", id: cid };
+        flashSel = `.paraDirRow[data-ref="paragraph:${rid}"]`;
       }
-      toast(`已在内容目录定位：${meta.label} › ${e.name}（展开详情卡，可跳完整档案）`);
+      renderInspector();
+      flashInspector(flashSel);
+      toast(`已在内容目录定位：${meta.label} › ${name}`);
       break;
     }
     case "mdLink": toast("演示链接：真实实现打开目标地址"); break;
@@ -5455,6 +5692,25 @@ inspectorEl.addEventListener("dblclick", (e) => {
   toast("已复位右栏宽度 " + INSP_DEFAULT + "px");
 });
 
+/* 目录实体拖拽源（dragstart 冒泡委托）：行上 data-drag="kind:id" → 自定义 MIME + 迷你 chip 拖拽预览。
+   只写自定义 MIME 不写 text/plain——避免原生 textarea drop 再插入一遍文字造成重复。 */
+inspectorEl.addEventListener("dragstart", (e) => {
+  const row = e.target.closest("[data-drag]");
+  if (!row || !e.dataTransfer) return;
+  const ref = parseDragRef(row.dataset.drag);
+  if (!ref) return;
+  e.dataTransfer.setData("application/x-novel-ref", JSON.stringify(ref));
+  e.dataTransfer.effectAllowed = "copy";
+  try {
+    const ghost = document.createElement("div");
+    ghost.className = "refChip dragGhost";
+    ghost.innerHTML = ic(REF_KIND_META[ref.kind].icon, 11) + esc(ref.label);
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 8, 10);
+    setTimeout(() => ghost.remove(), 0);
+  } catch { /* 无 setDragImage 环境（jsdom）降级为默认拖影 */ }
+});
+
 /* 审批意见输入（按组定位） */
 document.addEventListener("input", (e) => {
   const ta = e.target;
@@ -5516,11 +5772,54 @@ function bindChatInput() {
   if (!ta) return;
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); }
+    /* 输入为空时退格 → 移除最后一个引用（对齐常见 mention 习惯） */
+    if (e.key === "Backspace" && ta.value === "" && state.composerRefs.length) {
+      e.preventDefault();
+      const gone = state.composerRefs.pop();
+      refreshRefTray();
+      toast(`已移除引用：${REF_KIND_META[gone.kind].label} · ${gone.label}`);
+    }
   });
   ta.addEventListener("input", () => {
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
   });
+  /* 拖入引用：右栏目录实体行（data-drag → dragstart 委托写入自定义 MIME）落到输入框 */
+  const box = ta.closest(".composerBox");
+  if (!box) return;
+  box.addEventListener("dragover", (e) => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes("application/x-novel-ref")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    box.classList.add("dragOver");
+  });
+  box.addEventListener("dragleave", (e) => {
+    if (!box.contains(e.relatedTarget)) box.classList.remove("dragOver");
+  });
+  box.addEventListener("drop", (e) => {
+    e.preventDefault();
+    box.classList.remove("dragOver");
+    const raw = e.dataTransfer ? e.dataTransfer.getData("application/x-novel-ref") : "";
+    if (!raw) return;
+    let ref = null;
+    try { ref = JSON.parse(raw); } catch { /* 非 demo 载荷，忽略 */ }
+    if (!ref || !ref.kind || !ref.id) return;
+    if (state.composerRefs.some(r => r.kind === ref.kind && r.id === ref.id)) {
+      toast(`已在引用列表：${REF_KIND_META[ref.kind].label} · ${ref.label}`);
+      ta.focus();
+      return;
+    }
+    state.composerRefs.push(ref);
+    refreshRefTray();
+    ta.focus();
+    toast(`已添加引用：${REF_KIND_META[ref.kind].label} · ${ref.label}（随消息一并发送）`);
+  });
+}
+/* 引用栏就地刷新（不动 textarea 未提交文本，避免全量重渲染吃掉输入） */
+function refreshRefTray() {
+  const tray = $("refTray");
+  if (!tray) return;
+  tray.innerHTML = refChipsHTML(state.composerRefs, { removable: true });
 }
 function scrollChat(instant) {
   const sc = $("chatScroll");
@@ -5557,11 +5856,11 @@ function refreshGenStatus() {
    静态项不重播，内联动画会盖过抑制导致整列重播） */
 function ghostHTML(q, { live = false } = {}) {
   const anim = live ? ' style="animation: ghost-in var(--duration-base) var(--ease-out)"' : "";
-  return `<div class="msgUser ghost" data-at="${q.at}"${anim}><span class="ghostBadge">${ic("clock", 10)}排队中 <span class="qSec">0s</span></span>${esc(q.text)}</div>`;
+  return `<div class="msgUser ghost" data-at="${q.at}"${anim}><span class="ghostBadge">${ic("clock", 10)}排队中 <span class="qSec">0s</span></span>${q.refs && q.refs.length ? `<div class="msgRefs">${refChipsHTML(q.refs)}</div>` : ""}${esc(q.text)}</div>`;
 }
 /* 生成/审批中发送 → 入队：幽灵项即时回显（时间线末尾）+ 状态行计数 */
-function enqueueMsg(text) {
-  const q = { text, at: Date.now(), liveIdx: liveMsgs.length };
+function enqueueMsg(text, refs = []) {
+  const q = { text, refs, at: Date.now(), liveIdx: liveMsgs.length };
   queuedMsgs.push(q);
   liveMsgs.push(ghostHTML(q));
   const live = $("liveMsgs");
@@ -5582,10 +5881,10 @@ function flushQueue() {
     ghostEl.style.animation = "ghost-promote var(--duration-base) var(--ease-out)";
     ghostEl.querySelector(".ghostBadge")?.remove();
   }
-  if (q.liveIdx !== undefined) liveMsgs[q.liveIdx] = `<div class="msgUser">${esc(q.text)}</div>`;
+  if (q.liveIdx !== undefined) liveMsgs[q.liveIdx] = msgUserHTML(q.text, q.refs);
   refreshGenStatus();
   renderDemoBar();
-  demoReply();
+  demoReply(q.refs || []);
 }
 /* 排队示例（控制条）：清空后压入 n 条示例（空闲态自动先进入生成，幽灵项才有语境） */
 function queueSet(n) {
@@ -5603,29 +5902,35 @@ function clearQueue() {
   refreshGenStatus();
   renderDemoBar();
 }
+/* 用户气泡：引用 chips 顶部行（点击定位右栏）+ 文本；纯引用发送时省略文本 */
+function msgUserHTML(text, refs = [], { anim = false } = {}) {
+  return `<div class="msgUser"${anim ? ' style="animation: msg-enter var(--duration-base) var(--ease-out)"' : ""}>${refs && refs.length ? `<div class="msgRefs">${refChipsHTML(refs)}</div>` : ""}${text ? esc(text) : ""}</div>`;
+}
 function sendMsg() {
   const ta = $("chatInput");
   const text = (ta ? ta.value : "").trim();
-  if (!text) { toast("先写点什么吧（演示）"); return; }
+  const refs = state.composerRefs.slice();
+  if (!text && !refs.length) { toast("先写点什么，或从右栏拖入实体作引用（演示）"); return; }
   if (ta) { ta.value = ""; ta.style.height = "auto"; }
+  state.composerRefs = [];
+  refreshRefTray();
   // 生成/审批中发送 → 排队（幽灵项即时回显，不再吞掉输入）
   if (state.genState === "generating" || state.genState === "waiting") {
-    enqueueMsg(text);
+    enqueueMsg(text, refs);
     toast(`已排队（第 ${queuedMsgs.length} 条），当前回复完成后执行`);
     return;
   }
   if (state.pendingMode && state.pendingMode !== state.mode) {
     state.mode = state.pendingMode; state.pendingMode = null; updateModeUI();
   }
-  const html = `<div class="msgUser">${esc(text)}</div>`;
-  liveMsgs.push(html);
+  liveMsgs.push(msgUserHTML(text, refs));
   const live = $("liveMsgs");
   /* 插入项带内联入场（盖过 .chatInner.fresh 抑制；缓存不带，重渲染不重播） */
-  if (live) live.insertAdjacentHTML("beforeend", `<div class="msgUser" style="animation: msg-enter var(--duration-base) var(--ease-out)">${esc(text)}</div>`);
-  demoReply();
+  if (live) live.insertAdjacentHTML("beforeend", msgUserHTML(text, refs, { anim: true }));
+  demoReply(refs);
 }
 /* 发送后的演示回复（450ms 后收口；收口 → setGen("idle") → flushQueue 接续排队） */
-function demoReply() {
+function demoReply(refs = []) {
   setGen("generating");
   scrollChat();
   const seq = ++sendSeq;
@@ -5639,9 +5944,9 @@ function demoReply() {
           <span class="chip faint">设计</span>
         </div>
         <div class="toolGroup">
-          <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}上下文读取 · 大纲与档案</span></div>
+          <div class="toolLine"><span class="toolDone">${ic("check", 12, 2.2)}上下文读取 · 大纲与档案${refs.length ? ` + 引用 ${refs.length} 项` : ""}</span></div>
         </div>
-        <div class="mdBody"><p>收到（演示回复 ${seq}）。我会先核对大纲与既有设定，再给出修订建议与草稿；正式环境里这里会流式输出正文。</p></div>
+        <div class="mdBody"><p>收到（演示回复 ${seq}）。我会先核对大纲与既有设定${refs.length ? `，并优先读透你拖入的 ${refs.length} 项引用` : ""}，再给出修订建议与草稿；正式环境里这里会流式输出正文。</p></div>
       </div>`;
     liveMsgs.push(reply);
     const live2 = $("liveMsgs");

@@ -226,6 +226,7 @@ type ConversationSystemControl =
 ```
 
 - **两个接口有区分**：`ConversationManagerServer.send*RequestTo` 是**转发接口**（经 cms 转发调目标 conversation）；`WaitingInteractionRequest` 是**会话侧接收接口**。
+- **用户消息实体引用**（PRD `conversation-目录下钻与实体引用`）：`ConversationUserMessage.references`（五类 `{kind,id,label}`，UI 右栏目录拖入）在会话侧 `sendUserMessage` 序列化为 `novel.system` 实体标签追加正文后入队（`core/src/conversation/server/serializeUserMessage.ts`）——journal 持久化/回放/UI 气泡 chips（`parseMessageText`）零额外改动；模型经标签 + `NovelRead` 自取档案。
 - **wait 是延迟 RPC（阻塞）**：`await sendApprovalRequest(req)` 挂起直到决策；决策/回答 = RPC 返回值，requestId = RPC 关联 id。
 - **mode 时序**：`mode.set` 不立即生效——记 `pendingMode`，**下一次 turn 开始时**才切到 `activeMode`（避免影响进行中的 turn）。
 - **AgentLoop 输入队列**：`followup`（turn lane，FIFO 排队）/ `steer`（control lane，高优先级注入 system reminder）/ `stop`（取消 + 清队列）。

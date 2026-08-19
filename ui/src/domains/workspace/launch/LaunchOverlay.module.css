@@ -1,0 +1,87 @@
+/**
+ * LaunchOverlay 视觉（demo loadingMask 对齐）：全屏 backdrop-blur + 居中卡片，
+ * 渐变光球浮动 + 步骤清单（mono，逐个点亮，✓ 缩放弹入）。
+ * 进入 booting 淡出（复用 dialog-fade-out，与工作台 boot-in 叠化）。
+ */
+.mask {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-launch);
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--color-bg) 86%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: var(--anim-view-in) 0.2s var(--ease-out);
+}
+
+.leaving {
+  animation: var(--anim-dialog-fade-out) 0.25s var(--ease-in) forwards;
+  pointer-events: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.orb {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--grad-accent);
+  background-size: 160% 160%;
+  animation:
+    var(--anim-grad-flow) 6s var(--ease-in-out) infinite,
+    var(--anim-loading-bob) 1.3s var(--ease-in-out) infinite;
+}
+
+.title {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-5px);
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-7px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--color-faint);
+  opacity: 0.35;
+  transition: opacity 0.25s var(--ease-out);
+}
+
+.tick {
+  display: inline-grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  color: var(--color-success);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 0.25s var(--ease-out),
+    transform 0.25s var(--ease-out);
+}
+
+.on {
+  opacity: 1;
+  color: var(--color-muted);
+}
+
+.on .tick {
+  opacity: 1;
+  transform: scale(1);
+}

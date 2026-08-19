@@ -1,89 +1,80 @@
 /**
- * ProjectSelectionPage 视觉：全屏居中 + 紧凑卡片。
- *
- * 页面继承 body 的背景渐变；卡片宽度小于 Dialog（约 400px），
- * 选择按钮走 Button 原语（primary/lg/fullWidth + 图标），最近列表行紧凑。
+ * ProjectSelectionPage 视觉（demo「启动 · 项目选择页」对齐）：
+ * 全屏不透明底 + 居中单列（min(560px, 100%)）；品牌区 → 节标题 → 书封卡片
+ * 纵列 → 双按钮，view-in 0.5s 级联浮入（0.05/0.12/0.18/0.24s）。
+ * 进入 opening 阶段整页 welcome-leave（缩放 + 模糊淡出）。
  */
 .page {
   height: 100%;
   min-height: 0;
   display: grid;
   place-items: center;
-  padding: var(--space-8);
-  overflow: auto;
+  background: var(--color-bg);
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-4);
 }
 
-.card {
-  width: min(400px, 100%);
+.leave {
+  animation: var(--anim-welcome-leave) 0.45s var(--ease-out) both;
+  pointer-events: none;
+}
+
+.inner {
+  width: min(560px, 100%);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-26px) var(--space-6) var(--space-22px);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: color-mix(in oklab, var(--color-surface) 88%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-1);
-  animation: var(--anim-view-in) var(--duration-slow) var(--ease-out);
 }
 
-.kicker {
-  font-family: var(--font-mono);
-  font-size: var(--fs-mono);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-faint);
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-26px);
+  animation: var(--anim-view-in) 0.5s 0.05s var(--ease-out) both;
 }
 
-.title {
-  margin: 0;
-  font-size: var(--fs-22);
-  font-weight: var(--fw-heavy);
-  letter-spacing: -0.02em;
+.brandDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--grad-accent);
+  background-size: 160% 160%;
+  animation: var(--anim-grad-flow) 6s var(--ease-in-out) infinite;
+}
+
+.brandName {
+  font-size: var(--fs-24);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  font-family: var(--font-kai);
   color: var(--color-fg);
 }
 
-.description {
-  margin: 0;
+.brandTag {
+  font-family: var(--font-kai);
+  color: var(--color-muted);
   font-size: var(--fs-13);
-  color: var(--color-muted);
-  line-height: 1.6;
 }
 
-.error {
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--color-danger-10);
-  color: var(--color-danger);
-  font-size: var(--fs-meta);
-}
-
-.recent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
-}
-
-.recentTitle {
-  margin: 0;
-  font-size: var(--fs-meta);
-  font-weight: var(--fw-heavy);
-  color: var(--color-muted);
+.secTitle {
+  margin: 0 var(--space-2) var(--space-9px);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: var(--color-faint);
+  animation: var(--anim-view-in) 0.5s 0.12s var(--ease-out) both;
 }
 
-.recentEmpty {
+.empty {
   margin: 0;
   padding: var(--space-14px) var(--space-4);
   text-align: center;
   color: var(--color-faint);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-12);
   border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-sm);
+  animation: var(--anim-view-in) 0.5s 0.18s var(--ease-out) both;
 }
 
 .recentList {
@@ -92,63 +83,108 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-9px);
+  animation: var(--anim-view-in) 0.5s 0.18s var(--ease-out) both;
 }
 
-.recentItem {
+.projCard {
   display: flex;
   align-items: center;
-  gap: var(--space-10px);
+  gap: var(--space-13px);
   width: 100%;
-  padding: var(--space-2) var(--space-10px);
+  padding: var(--space-13px) var(--space-15px);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
-  text-align: left;
+  box-shadow: var(--shadow-1);
   cursor: pointer;
+  text-align: left;
   font: inherit;
-  transition: background var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out);
 }
 
-.recentItem:hover:not(:disabled) {
-  background: var(--color-surface-2);
-  border-color: var(--color-border-strong);
+.projCard:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+  border-color: color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
 }
 
-.recentItem:disabled {
+.projCard:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.recentIcon {
+.projCover {
+  width: 46px;
+  height: 60px;
+  flex: none;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-9);
-  color: var(--color-accent-ink);
+  font-family: var(--font-kai);
+  font-size: var(--fs-21);
+  color: var(--color-cover-fg);
+  background: linear-gradient(150deg, var(--cover-1), var(--cover-2));
+  box-shadow: var(--shadow-xs), inset 0 0 0 1px var(--color-cover-hairline);
 }
 
-.recentText {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
+.projText {
+  flex: 1;
   min-width: 0;
 }
 
-.recentLabel {
-  font-size: var(--fs-body);
-  font-weight: var(--fw-heavy);
+.projName {
+  display: block;
+  font-size: var(--fs-15);
+  font-weight: var(--fw-semibold);
   color: var(--color-fg);
 }
 
-.recentId {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+.projSub {
+  display: block;
+  margin-top: var(--space-3px);
+  font-size: var(--fs-12);
   color: var(--color-faint);
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projOpen {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5px);
+  color: var(--color-faint);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  transition:
+    gap var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.projCard:hover:not(:disabled) .projOpen {
+  color: var(--color-accent-ink);
+  gap: var(--space-9px);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-9px);
+  margin-top: var(--space-18px);
+  animation: var(--anim-view-in) 0.5s 0.24s var(--ease-out) both;
+}
+
+.error {
+  margin: 0;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-10);
+  color: var(--color-danger);
+  font-size: var(--fs-meta);
+  animation: var(--anim-view-in) 0.3s var(--ease-out);
 }

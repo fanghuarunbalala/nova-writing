@@ -66,10 +66,19 @@ const configurationClient = {
   mutate: (m: ConfigMutation) => configApi.mutate(m),
 };
 
+interface WorkspaceSessionDto {
+  id: string;
+  label: string;
+  /** registry 透传：最后打开时间（ISO）与工作区根目录（旧数据缺省） */
+  lastOpenedAt?: string;
+  rootPath?: string;
+}
 interface WorkspaceApi {
   pickWorkspace(): Promise<{ referenceId: string; label: string } | undefined>;
-  listRecent(): Promise<readonly { id: string; label: string }[]>;
-  open(reference: { referenceId: string; label: string }): Promise<{ id: string; label: string }>;
+  /** 新建项目：save 型对话框命名 → 主进程建目录 → 返回引用 */
+  createWorkspace(): Promise<{ referenceId: string; label: string } | undefined>;
+  listRecent(): Promise<readonly WorkspaceSessionDto[]>;
+  open(reference: { referenceId: string; label: string }): Promise<WorkspaceSessionDto>;
   close(): Promise<void>;
 }
 const workspaceTransport = electronIpcTransport({ endpoint: bridge as never, channel: "workspace-rpc" });
@@ -120,6 +129,7 @@ const workspaceController = new WorkspaceController({
   },
   picker: {
     pickWorkspace: () => workspaceApi.pickWorkspace(),
+    createWorkspace: () => workspaceApi.createWorkspace(),
   },
 });
 

@@ -428,7 +428,7 @@ async function main(): Promise<void> {
   /** 解析会话 journal 路径（Read 分段调用 = 确定性进度信号；未知/未落盘返回 undefined 静默降级） */
   const analysisJournalPathOf = (bookId: string): string | undefined => {
     const cid = analystConversationOf.get(bookId);
-    const root = conversationsRoot();
+    const root = currentJournalDir;
     return cid === undefined || root === undefined ? undefined : join(root, cid, "journal.jsonl");
   };
   /** 解析会话可用：provider env 已就绪（applyDefaultProviderEnv）且已打开工作区 */
@@ -673,12 +673,42 @@ async function main(): Promise<void> {
       allowedWorkspaceReferences.add(root);
       return { referenceId: root, label: basename(root) };
     },
+    // 新建项目直达「输入名字建目录」：save 型对话框选位置+命名 → 建目录 → 打开。
+    // 已存在同名目录时 mkdir recursive 幂等（等价直接打开该项目）；同名文件会抛错。
+    createWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
+      const lastRoot = [...registryEntries].sort((a, b) =>
+        b.lastOpenedAt.localeCompare(a.lastOpenedAt),
+      )[0]?.workspaceRoot;
+      const result = await dialog.showSaveDialog({
+        title: "新建项目文件夹",
+        buttonLabel: "新建",
+        defaultPath: lastRoot !== undefined ? join(dirname(lastRoot), "新建项目") : undefined,
+        properties: ["createDirectory", "showHiddenFiles"],
+      });
+      if (result.canceled || result.filePath === undefined || result.filePath === "") {
+        return undefined;
+      }
+      const root = result.filePath;
+      try {
+        mkdirSync(root, { recursive: true });
+      } catch (e) {
+        console.warn("[main] create workspace directory failed:", root, e);
+        throw new Error(`无法在所选位置创建文件夹：${root}`);
+      }
+      allowedWorkspaceReferences.add(root);
+      return { referenceId: root, label: basename(root) };
+    },
     listRecent: async () =>
       Object.freeze(
         [...registryEntries]
           .sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt))
           .slice(0, 8)
-          .map((e) => ({ id: e.workspaceId, label: e.label })),
+          .map((e) => ({
+            id: e.workspaceId,
+            label: e.label,
+            lastOpenedAt: e.lastOpenedAt,
+            rootPath: e.workspaceRoot,
+          })),
       ),
     open: async (reference: { referenceId: string; label: string }) => {
       // referenceId 两种来源：最近列表传 workspaceId（哈希，注册表反查 root）；
@@ -709,7 +739,12 @@ async function main(): Promise<void> {
         });
       }
       saveRegistry();
-      return { id: location.workspaceId, label };
+      return {
+        id: location.workspaceId,
+        label,
+        lastOpenedAt,
+        rootPath: location.workspaceRoot,
+      };
     },
     close: async () => {
       currentWorkspaceRoot = undefined;

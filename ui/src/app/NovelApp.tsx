@@ -26,6 +26,8 @@ import {
   NovelOverviewStore,
   NotificationStore,
   ProjectSelectionPage,
+  LaunchOverlay,
+  LaunchProgressStore,
   ScheduleStore,
   ScheduleTodoStore,
   StoryOutlineTreeStore,
@@ -115,6 +117,14 @@ function NovelAppReady({
   const mainViewRouter = useMemo(() => new MainViewRouter(), []);
   const inspectorRouter = useMemo(() => new InspectorRouter(), []);
   const settingsStore = useMemo(() => new ApplicationSettingsStore(), []);
+  // 启动编排（demo bootIntoApp 真实进度版）：opening → 分步加载遮罩 → 工作台
+  // boot-in；应用内切换项目（WorkspaceSelectionDialog）复用同一编排重放。
+  const launchStore = useMemo(
+    () => new LaunchProgressStore({ controller: workspaceController, domainStores }),
+    [workspaceController, domainStores],
+  );
+  useEffect(() => launchStore.attach(), [launchStore]);
+  const launchSnapshot = useExternalStore(launchStore);
   // NovelApp 自身需要 workspace 快照以驱动 WorkspaceSelectionDialog overlay；
   // ApplicationShell 内部还会再包一层 adapter 订阅同一个 controller（spec 4.1）。
   // 两个 adapter 都只是 subscribe + 转发快照，开销可忽略。
@@ -145,6 +155,9 @@ function NovelAppReady({
           onChoose={() => {
             void workspaceController.chooseAndOpen();
           }}
+          onCreate={() => {
+            void workspaceController.createAndOpen();
+          }}
           onOpenRecent={(workspaceId) => {
             void workspaceController.openRecent(workspaceId);
           }}
@@ -164,6 +177,7 @@ function NovelAppReady({
           commandSource={commandSource}
           extensions={extensions}
           windowChrome={windowChrome}
+          launchPhase={launchSnapshot.phase}
           onOpenWorkspace={() => setWorkspaceOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           overlays={
@@ -197,6 +211,9 @@ function NovelAppReady({
           }
         />
       )}
+      {launchSnapshot.phase !== "idle" ? (
+        <LaunchOverlay snapshot={launchSnapshot} />
+      ) : null}
     </NovelAppProvider>
   );
 }

@@ -48,24 +48,41 @@ describe("ProjectSelectionPage", () => {
   const snapshot = (overrides = {}) => ({
     revision: 1,
     phase: "idle",
-    recent: [{ id: "ws-1", label: "白昼计划" }],
+    recent: [
+      {
+        id: "ws-1",
+        label: "白昼计划",
+        lastOpenedAt: new Date().toISOString(),
+        rootPath: "D:\\books\\白昼计划",
+      },
+    ],
     ...overrides,
   });
 
-  it("renders choose action and recent projects, opening a recent item on click", async () => {
+  it("renders welcome brand, dual actions and recent cards, wiring callbacks", async () => {
     const user = userEvent.setup();
     const onChoose = vi.fn();
+    const onCreate = vi.fn();
     const onOpenRecent = vi.fn();
     render(
       <ProjectSelectionPage
         snapshot={snapshot()}
         onChoose={onChoose}
+        onCreate={onCreate}
         onOpenRecent={onOpenRecent}
       />,
     );
-    expect(screen.getByText("开始创作")).toBeInTheDocument();
+    // 品牌区 + 节标题（demo 欢迎页结构）
+    expect(screen.getByText("Novel")).toBeInTheDocument();
+    expect(screen.getByText("把一桩旧事，写成一本新书。")).toBeInTheDocument();
+    expect(screen.getByText("最近的项目")).toBeInTheDocument();
+    // 卡片：书名 + 副标题（相对时间 · 路径）
     expect(screen.getByText("白昼计划")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "打开项目文件夹…" }));
+    expect(screen.getByText(/D:\\books\\白昼计划/)).toBeInTheDocument();
+    // 新建（save 型命名建目录）与打开（目录选择器）分开接线
+    await user.click(screen.getByRole("button", { name: "新建项目" }));
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "打开其他项目…" }));
     expect(onChoose).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: /白昼计划/ }));
     expect(onOpenRecent).toHaveBeenCalledWith("ws-1");
@@ -76,10 +93,11 @@ describe("ProjectSelectionPage", () => {
       <ProjectSelectionPage
         snapshot={snapshot({ recent: [] })}
         onChoose={vi.fn()}
+        onCreate={vi.fn()}
         onOpenRecent={vi.fn()}
       />,
     );
-    expect(screen.getByText("还没有打开过项目")).toBeInTheDocument();
+    expect(screen.getByText(/还没有打开过项目/)).toBeInTheDocument();
 
     rerender(
       <ProjectSelectionPage
@@ -88,11 +106,13 @@ describe("ProjectSelectionPage", () => {
           error: { code: "OPEN_FAILED", retryable: true, message: "打开失败" },
         })}
         onChoose={vi.fn()}
+        onCreate={vi.fn()}
         onOpenRecent={vi.fn()}
       />,
     );
-    expect(screen.getByText("正在打开…")).toBeInTheDocument();
     expect(screen.getByText("打开失败")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "正在打开…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "打开其他项目…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /白昼计划/ })).toBeDisabled();
   });
 });

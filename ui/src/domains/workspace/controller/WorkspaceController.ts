@@ -19,6 +19,10 @@ export interface WorkspaceReferenceView {
 export interface WorkspaceSessionView {
   readonly id: string;
   readonly label: string;
+  /** 最后打开时间（ISO 字符串，registry 透传；旧数据缺省） */
+  readonly lastOpenedAt?: string;
+  /** 工作区根目录路径（registry 透传；旧数据缺省） */
+  readonly rootPath?: string;
 }
 
 export interface WorkspaceControllerErrorSnapshot {
@@ -37,6 +41,8 @@ export interface WorkspaceControllerSnapshot {
 
 export interface WorkspacePickerPort {
   pickWorkspace(): Promise<WorkspaceReferenceView | undefined>;
+  /** 新建项目（save 型对话框命名 + 建目录）；宿主未提供时新建入口报不可用 */
+  createWorkspace?(): Promise<WorkspaceReferenceView | undefined>;
 }
 
 export interface WorkspaceSessionPort {
@@ -130,6 +136,44 @@ export class WorkspaceController {
           phase: this.snapshot.current === undefined ? "idle" : "ready",
         });
         this.logger.debug("workspace_controller.selection_cancelled");
+        return undefined;
+      }
+      return this.openReference(reference);
+    });
+  }
+
+  /**
+   * 新建项目：save 型对话框命名 → 主进程建目录 → 作为工作区打开。
+   * 取消与失败语义同 chooseAndOpen（取消静默回原状态，失败置 error）。
+   */
+  createAndOpen(): Promise<WorkspaceSessionView | undefined> {
+    return this.runExclusive(async () => {
+      if (this.picker.createWorkspace === undefined) {
+        this.reject(
+          "WORKSPACE_CREATE_UNAVAILABLE",
+          false,
+          "当前客户端尚未连接 Workspace 新建服务",
+        );
+        return undefined;
+      }
+      this.publish({ phase: "selecting" });
+      this.logger.info("workspace_controller.create_started");
+      let reference: WorkspaceReferenceView | undefined;
+      try {
+        reference = captureOptionalWorkspaceReference(await this.picker.createWorkspace());
+      } catch (error) {
+        this.reject(
+          "WORKSPACE_CREATE_FAILED",
+          false,
+          error instanceof Error ? error.message : "新建项目文件夹失败",
+        );
+        return undefined;
+      }
+      if (reference === undefined) {
+        this.publish({
+          phase: this.snapshot.current === undefined ? "idle" : "ready",
+        });
+        this.logger.debug("workspace_controller.create_cancelled");
         return undefined;
       }
       return this.openReference(reference);
@@ -286,7 +330,18 @@ function captureWorkspaceSession(session: WorkspaceSessionView): WorkspaceSessio
   return Object.freeze({
     id: requireNonBlank(session.id, "Workspace id"),
     label: requireNonBlank(session.label, "Workspace label"),
+    ...(captureOptionalField(session.lastOpenedAt) !== undefined
+      ? { lastOpenedAt: session.lastOpenedAt }
+      : {}),
+    ...(captureOptionalField(session.rootPath) !== undefined
+      ? { rootPath: session.rootPath }
+      : {}),
   });
+}
+
+/** 可选字符串字段：非空串才透传（空白/缺省视为无数据） */
+function captureOptionalField(value: string | undefined): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 function captureWorkspaceSessions(

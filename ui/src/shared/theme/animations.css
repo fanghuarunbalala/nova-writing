@@ -217,3 +217,28 @@
   from { transform: scale(0.8); opacity: 0.55; }
   to   { transform: scale(2.6); opacity: 0; }
 }
+
+/* ============ 启动编排（欢迎页退场 / 分步加载遮罩 / 工作台 boot-in） ============ */
+
+/* 欢迎页退场：缩放 + 模糊淡出（demo welcome-leave） */
+@keyframes welcome-leave {
+  to { opacity: 0; transform: scale(1.03); filter: blur(6px); }
+}
+
+/* 工作台 boot-in 面板淡入（titlebar/sidebar/main/inspector 依次延迟触发） */
+@keyframes boot-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 工作台 boot-in 整体浮现：先以 0.92 固定尺寸停一拍，再放大铺满（demo boot-zoom） */
+@keyframes boot-zoom {
+  0%, 45% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+
+/* 分步加载遮罩渐变光球浮动（与 grad-flow 叠加；demo loading-bob） */
+@keyframes loading-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-5px) scale(1.06); }
+}

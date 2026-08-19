@@ -21,3 +21,39 @@
   flex: 1;
   min-height: 0;
 }
+
+/* ============ 启动编排（LaunchProgressStore 驱动；demo appFrame.bootIn 对齐） ============ */
+
+/* 打开/切换装载期间藏于分步加载遮罩下（避免新壳在模糊遮罩下闪入） */
+.launchHidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 进入工作台：整体先以 0.92 固定尺寸停一拍再放大铺满（boot-zoom），
+   TopBar → 侧栏 → 主区 → 右栏依次淡入（boot-fade，延迟 0.02/0.08/0.14/0.2s）。
+   面板用结构子选择器（TopBar/Sidebar 等根元素类属各自 module，不便穿透）：
+   .shell 首子 = TopBar；.body 三子 = Sidebar / MainArea / InspectorHost。 */
+.bootIn {
+  animation: var(--anim-boot-zoom) 0.7s 0.12s var(--ease-out) both;
+}
+
+.bootIn > :first-child {
+  animation: var(--anim-boot-fade) 0.4s 0.02s var(--ease-out) both;
+}
+
+.bootIn > .body {
+  animation: var(--anim-boot-fade) 0.45s 0.08s var(--ease-out) both;
+}
+
+.bootIn > .body > :nth-child(1) {
+  animation: var(--anim-boot-fade) 0.45s 0.08s var(--ease-out) both;
+}
+
+.bootIn > .body > :nth-child(2) {
+  animation: var(--anim-boot-fade) 0.45s 0.14s var(--ease-out) both;
+}
+
+.bootIn > .body > :nth-child(3) {
+  animation: var(--anim-boot-fade) 0.45s 0.2s var(--ease-out) both;
+}

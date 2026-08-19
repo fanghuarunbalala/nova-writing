@@ -2,7 +2,7 @@
  * NovelApp 启动路由：无 Workspace 时渲染选择页；打开后切到工作台壳。
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NovelApp } from "../../src/app/NovelApp.js";
 import { WorkspaceController } from "../../src/domains/workspace/controller/WorkspaceController.js";
@@ -142,15 +142,19 @@ function buildController() {
 }
 
 describe("NovelApp launch routing", () => {
-  it("renders the project selection page when no workspace is open", async () => {
+  it("renders the welcome page when no workspace is open", async () => {
     const { controller, sessions } = buildController();
     render(<NovelApp api={buildApi()} platform={platform} workspaceController={controller} />);
-    expect(await screen.findByText("开始创作")).toBeInTheDocument();
-    expect(await screen.findByText("白昼计划")).toBeInTheDocument();
+    // 欢迎页（demo 启动·项目选择页）：品牌区 + 最近项目 + 双入口
+    expect(await screen.findByText("把一桩旧事，写成一本新书。")).toBeInTheDocument();
+    expect(screen.getByText("最近的项目")).toBeInTheDocument();
+    expect(screen.getByText("白昼计划")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新建项目" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开其他项目…" })).toBeInTheDocument();
     expect(sessions.listRecent).toHaveBeenCalledTimes(1);
   });
 
-  it("opens a recent workspace and switches to the workbench shell", async () => {
+  it("opens a recent workspace through the launch overlay and lands on the shell", async () => {
     const user = userEvent.setup();
     const { controller, sessions } = buildController();
     render(<NovelApp api={buildApi()} platform={platform} workspaceController={controller} />);
@@ -159,9 +163,16 @@ describe("NovelApp launch routing", () => {
       referenceId: "ws-1",
       label: "白昼计划",
     });
-    expect(await screen.findByText("Novel")).toBeInTheDocument();
+    // 启动编排：分步加载遮罩出现（标题 + 步骤清单），完成后撤下并落在工作台
+    expect(await screen.findByLabelText(/正在打开/)).toBeInTheDocument();
+    expect(screen.getByText("载入大纲树")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "打开项目文件夹…" }),
+      screen.queryByRole("button", { name: "新建项目" }),
     ).not.toBeInTheDocument();
+    await waitFor(
+      () => expect(screen.queryByLabelText(/正在打开/)).not.toBeInTheDocument(),
+      { timeout: 8000 },
+    );
+    expect(screen.getByText("Novel")).toBeInTheDocument();
   });
 });

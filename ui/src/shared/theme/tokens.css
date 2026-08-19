@@ -52,6 +52,7 @@
   --z-dock:          30;   /* ApprovalPanel .list 抽屉内容 */
   --z-mode-options:  30;   /* ComposerModeBar .options 弹出（与 --z-dock 同值不同角色） */
   --z-inspector:     42;   /* InspectorHost .pending 待审徽标 */
+  --z-launch:        80;   /* 启动编排分步加载遮罩（盖工作台/欢迎页，demo z55 之上量级） */
   --z-overlay:       50;   /* Dialog .overlay + ToastHost */
   --z-dialog:        51;   /* Dialog .content */
   --z-dropdown:      60;   /* Dropdown .content */
@@ -103,7 +104,9 @@
   --fs-16-5:    16.5px;
   --fs-18:      18px; /* 精确值快照：章名/档案名（MS-2 / PM-1 / PL-1） */
   --fs-19:      19px; /* 精确值快照：档案头 46px 头像首字（PM-1） */
+  --fs-21:      21px; /* 精确值快照：欢迎页书封首字（demo projCover） */
   --fs-22:      22px;
+  --fs-24:      24px; /* 精确值快照：欢迎页品牌名（demo welcomeName） */
   --fs-30:      30px;
 
   /* 字重 */
@@ -237,6 +240,10 @@
   --anim-dir-flash:       dir-flash;
   --anim-lib-pulse:       lib-pulse;
   --anim-lib-progress-indeterminate: lib-progress-indeterminate;
+  --anim-welcome-leave:   welcome-leave;
+  --anim-boot-fade:       boot-fade;
+  --anim-boot-zoom:       boot-zoom;
+  --anim-loading-bob:     loading-bob;
 
   /* 缓动 */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
@@ -270,6 +277,11 @@
      覆盖为深墨——强调底提亮后白字对比度不足 4.5:1。用于 Button.primary、
      GenStatus、ProjectSelectionPage、WorkspaceSelectionDialog 渐变底文字 */
   --color-on-accent: #fff;
+
+  /* 书封美术资产（demo projCover：固定不随主题——封面底为项目专属双色渐变，
+     白字/白描边在亮暗主题下均正确；仅 ProjectSelectionPage 引用） */
+  --color-cover-fg: #fff;
+  --color-cover-hairline: rgba(255, 255, 255, 0.12);
 
   /* 窗口控制平台规范色（PRD WC-1/2 + TH-6 例外：平台规范固定值，不随主题；
      仅 WindowControls.module.css 引用，theme 全局层定义故不受 module 零字面量纪律约束） */

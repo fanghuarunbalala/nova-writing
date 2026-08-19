@@ -45,6 +45,7 @@ import type {
 } from "../domains/notification/index.js";
 import type { WorkspaceControllerPort } from "../domains/workspace/store/WorkspaceControllerAdapter.js";
 import { WorkspaceControllerAdapter } from "../domains/workspace/store/WorkspaceControllerAdapter.js";
+import type { LaunchPhase } from "../domains/workspace/launch/LaunchProgressStore.js";
 import type { ApplicationConfigurationClient } from "../settings/ApplicationConfigurationClient.js";
 import type { ApplicationSettingsStore } from "../settings/ApplicationSettingsStore.js";
 import type { ApplicationCommandSource } from "../command/ApplicationCommandSource.js";
@@ -92,6 +93,11 @@ export interface ApplicationShellProps {
   readonly extensions?: NovelUiExtensions;
   readonly inspectorRenderers?: InspectorRendererRegistry;
   readonly conversationCardRenderers?: ConversationCardRendererRegistry;
+  /**
+   * 启动编排阶段（LaunchProgressStore）：opening/loading 隐藏本壳（藏于遮罩下），
+   * booting 播放 boot-in（面板级联淡入 + 整体 0.92→1 放大）；缺省正常显示。
+   */
+  readonly launchPhase?: LaunchPhase;
   readonly onOpenWorkspace?: () => void;
   readonly onOpenSettings?: () => void;
   readonly overlays?: ReactNode;
@@ -111,6 +117,7 @@ export function ApplicationShell({
   toastStore,
   settingsStore,
   extensions,
+  launchPhase,
   onOpenWorkspace,
   onOpenSettings,
   overlays,
@@ -662,7 +669,15 @@ export function ApplicationShell({
   );
 
   return (
-    <div className={styles.shell}>
+    <div
+      className={[
+        styles.shell,
+        launchPhase === "opening" || launchPhase === "loading" ? styles.launchHidden : "",
+        launchPhase === "booting" ? styles.bootIn : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <TopBar
         workspaceName={workspace.current?.label}
         sidebarMode={sidebarMode}

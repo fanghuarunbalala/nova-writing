@@ -227,17 +227,31 @@ describe("renderFullText / renderSparseText", () => {
     expect(text).toContain("## 全局规则");
     expect(text).toContain("情绪优先");
     expect(text).toContain("分节确认");
+    expect(text).toContain("先问后做");
   });
 
-  it("开书 full：采集创意+篇幅（冷启动不带推荐），默认经设计模式分节构思（五节逐节确认），确认后写入 NOVEL.md 或正式稿", () => {
+  it("开书 full：采集创意+篇幅（冷启动不带推荐），默认经设计模式分节构思（五节逐节确认、委派附已确认摘要、汇总节不委派），确认后写入 NOVEL.md 或正式稿", () => {
     const text = FULL_TEXT_OF.collect;
     expect(text.startsWith("## 开书推荐工作流")).toBe(true);
     expect(text).toContain("一句话创意（开放填空，绝不配选项）");
     expect(text).toContain("每章推荐字数");
     expect(text).toContain("默认经设计模式分节构思");
     expect(text).toContain("① 主角（性格/身份/金手指）");
+    expect(text).toContain("此前各节已确认的结果摘要");
+    expect(text).toContain("第 ⑤ 节故事核汇总不委派出候选");
+    expect(text).toContain("本工作流参考案例");
     expect(text).toContain("绝不一次输出成套方案");
+    expect(text).toContain("未定设计点");
     expect(text).toContain("写入 NOVEL.md 或者正式稿");
+  });
+
+  it("大纲 full：委派前先 Ask 明确拆分设计点（粒度/范围/情绪走向），确认后再委派，一次只委派已确认块", () => {
+    const text = FULL_TEXT_OF.expand_outline;
+    expect(text).toContain("委派前先用 AskUserQuestion 明确拆分设计点");
+    expect(text).toContain("拆分粒度（拆到 arc/sequence/scene 哪层）");
+    expect(text).toContain("设计点完全确定后再 EnterComposeMode");
+    expect(text).toContain("不打包整卷/整批出方案");
+    expect(text).toContain("零星小调整（如补单个要素）可直接改");
   });
 
   it("正文 full 含三态审阅 / 两轮上限 / 发布延后", () => {
@@ -245,6 +259,7 @@ describe("renderFullText / renderSparseText", () => {
     expect(text).toContain("通过 → 定稿标 completed");
     expect(text).toContain("最多两轮");
     expect(text).toContain("每完成 10-15 个故事统一组装");
+    expect(text).toContain("委派前先用 AskUserQuestion 明确成文设计点");
   });
 
   it("sparse：各阶段一行，指针带目标", () => {

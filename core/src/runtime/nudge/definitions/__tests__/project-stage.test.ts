@@ -262,12 +262,17 @@ describe("renderFullText / renderSparseText", () => {
     expect(text).toContain("只要有一个可用的 LeafPlan 即视为完成");
   });
 
-  it("正文 full 含三态审阅 / 两轮上限 / 发布延后", () => {
+  it("正文 full：按 LeafPlan 事件序列逐步推进（每事件确认）＋候选模式＋LeafPlan 完成后 Exit 审批写入", () => {
     const text = FULL_TEXT_OF.write_prose;
-    expect(text).toContain("通过 → 定稿标 completed");
-    expect(text).toContain("最多两轮");
-    expect(text).toContain("每完成 10-15 个故事统一组装");
-    expect(text).toContain("委派前先用 AskUserQuestion 明确成文设计点");
+    expect(text).toContain("按 LeafPlan 事件序列逐步推进");
+    expect(text).toContain("每个事件都要求作者确认，确认后才推进下一个事件");
+    expect(text).toContain("如果有不明确的，用 AskUserQuestion 补充信息");
+    expect(text).toContain("生成多个候选，同作者确认");
+    expect(text).toContain("一次只委派当前一个事件，不批量委派");
+    expect(text).toContain("已有完整 LeafPlan");
+    expect(text).toContain("当前 LeafPlan 完成后 ExitComposeMode 提交审批");
+    expect(text).toContain("定稿标 completed");
+    expect(text).toContain("每完成 10-15 个场景统一组装");
   });
 
   it("sparse：各阶段一行，指针带目标", () => {

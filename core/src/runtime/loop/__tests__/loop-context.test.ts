@@ -194,7 +194,7 @@ describe("LoopContext", () => {
     expect(bareCall.system).not.toContain("约束:");
   });
 
-  it("composeGuideProvider 每调用注入：索引进 dynamic 段；未注入省略（PRD compose-案例引导）", async () => {
+  it("caseGuideProvider 每调用注入：案例条目进 dynamic 段；未注入省略（PRD compose-案例引导 v0.6）", async () => {
     const guideCapability: AgentCapability = {
       systemSections: [
         {
@@ -203,7 +203,7 @@ describe("LoopContext", () => {
           version: "1.0.0",
           label: "G",
           renderDynamic: (input) =>
-            input.composeGuide === undefined ? "" : `引导:${input.composeGuide.index}`,
+            input.caseGuide === undefined ? "" : `引导:${input.caseGuide.entries.map((e) => e.path).join(",")}`,
         },
       ],
       toolDefs: [],
@@ -214,19 +214,19 @@ describe("LoopContext", () => {
     const ctx = new LoopContext({
       agentCapability: guideCapability,
       workspace: "/ws",
-      composeGuideProvider: async () => ({ index: `v${++reads}`, casesDir: ".novel/cases" }),
+      caseGuideProvider: async () => ({ entries: [{ file: `v${++reads}.md`, path: `.novel/cases/v${reads}.md`, taskType: "prose-draft", summary: "" }], casesDir: ".novel/cases" }),
     });
     const call1 = await ctx.toProviderCall(
       { sampling: { model: "gpt-5" } },
       { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
     );
-    expect(call1.system).toContain("引导:v1");
+    expect(call1.system).toContain("引导:.novel/cases/v1.md");
     // 每 provider call 重新读取（.novel/cases 变更即时生效）
     const call2 = await ctx.toProviderCall(
       { sampling: { model: "gpt-5" } },
       { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
     );
-    expect(call2.system).toContain("引导:v2");
+    expect(call2.system).toContain("引导:.novel/cases/v2.md");
     // 未注入 provider：dynamic 段省略
     const bare = new LoopContext({ agentCapability: guideCapability, workspace: "/ws" });
     const bareCall = await bare.toProviderCall(

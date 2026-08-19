@@ -1,8 +1,8 @@
-# compose 案例引导（novel-guide）PRD —— v0.5
+# compose 案例引导（novel-guide）PRD —— v0.6
 
 > 状态：⏳ 待敲定（机制已实现：core 710 用例全绿 + typecheck + build 产物链通过；**作者已交付 15 份真实案例并替换初稿**；分类默认关闭，待验证后开启——见 §7）
 > 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；[`agent-definition-config.md`](./agent-definition-config.md)（声明式装配规范）；[`project-stage-nudge.md`](./project-stage-nudge.md)（"分类 → 注入"先例、persistent append 通道与"邻接输入"原则）；[`eval-harness.md`](./eval-harness.md)；NOVEL.md 动态段先例（`core/src/runtime/prompt/sections/novel.ts` 的 `novel.global_constraints`）
-> 演进：v0.1 选中案例正文与索引同走 system 动态段 → v0.2 通道分离（索引+协议进 system、正文以 `<novel-guide>` 标记 persistent append 进 msg）→ v0.3 **分类器直接上 LLM（Fast 采样档，弃权语义）**；**案例落位 workspace `.novel/cases/`（宿主 seed-if-absent）**——经核实文件沙盒只挡逃逸不挡 `.novel/`，自读通道 v1 即生效 → v0.4 **实现定稿**：标签/摘要由每份案例 front-matter 自描述（手写扁平解析，不引 YAML 依赖），**索引动态扫描派生、无 INDEX.md**（加/删案例 = 单文件操作，索引与目录永不漂移）；母版扁平布局 `core/resources/agent-cases/*.md`，构建期 `scripts/copy-resources.mjs` 拷入 dist 随包；evals 无 subagent 接线先例，全链路以 core 集成测试覆盖 → v0.5 **意图分类默认关闭**（`NOVEL_COMPOSE_GUIDE_CLASSIFY` env 显式开启）——索引+自读为主通道，prompt 升级为"**编写前先查案例、仅供参考、不抄袭**"；作者交付 15 份真实案例（大纲系 act/scene/overview + 设定系 world/character + 正文系 draft 与 8 类摘录），新增真实母版生效检查测试
+> 演进：v0.1 选中案例正文与索引同走 system 动态段 → v0.2 通道分离（索引+协议进 system、正文以 `<novel-guide>` 标记 persistent append 进 msg）→ v0.3 **分类器直接上 LLM（Fast 采样档，弃权语义）**；**案例落位 workspace `.novel/cases/`（宿主 seed-if-absent）**——经核实文件沙盒只挡逃逸不挡 `.novel/`，自读通道 v1 即生效 → v0.4 **实现定稿**：标签/摘要由每份案例 front-matter 自描述（手写扁平解析，不引 YAML 依赖），**索引动态扫描派生、无 INDEX.md**（加/删案例 = 单文件操作，索引与目录永不漂移）；母版扁平布局 `core/resources/agent-cases/*.md`，构建期 `scripts/copy-resources.mjs` 拷入 dist 随包；evals 无 subagent 接线先例，全链路以 core 集成测试覆盖 → v0.5 **意图分类默认关闭**（`NOVEL_COMPOSE_GUIDE_CLASSIFY` env 显式开启）——索引+自读为主通道，prompt 升级为"**编写前先查案例、仅供参考、不抄袭**"；作者交付 15 份真实案例（大纲系 act/scene/overview + 设定系 world/character + 正文系 draft 与 8 类摘录），新增真实母版生效检查测试 → v0.6 **索引并入共享质量规范段**（novel.compose.guide 独立段删除：四份规范段转 dynamic，段尾按 task_type 前缀过滤附「参考案例」小节——main 与 Compose 同源常驻；快照改型为 entries 条目数组、通道更名 caseGuide；「先查案例/不抄袭」协议并入小节头部；`<novel-guide>` msg 注入与意图分类机制保留，见 PRD project-stage-nudge v2.7 第十四批）
 
 ---
 
@@ -36,7 +36,7 @@ flowchart TD
     C --> D[seed 检查：.novel/cases 缺失则<br/>从 app 母版拷贝（存在即跳过）]
     D --> E[LLM 分类器（Fast 档）<br/>对委派 prompt 分类一次<br/>不确定 → 弃权]
     E --> F[宿主读 .novel/cases<br/>标签筛选选中 1~2 份正文<br/>node fs，不受工具沙盒约束]
-    F --> G[AgentAssembler 装配<br/>recipe 含 novel.compose.guide 动态段]
+    F --> G[AgentAssembler 装配<br/>recipe 引共享规范段（动态，尾附参考案例小节）]
     G --> H[loop.run：委派 prompt 为首条 user 消息]
     H --> I[persistent append：system 消息注入首 run<br/>内容 = novel-guide 标签包裹的选中案例正文<br/>紧随委派 prompt，任务生命周期常驻]
     I --> J[首个 provider call]
@@ -80,12 +80,12 @@ flowchart LR
 - 首批（**作者已定稿交付，15 份**）：大纲系（act-design 幕设计 / scene-design 场景设计 / outline-overview 总纲）＋ 设定系（world-design 世界观 / character-design 人物）＋ 正文系（prose-draft 撰写 + 8 类摘录：suspense/plot/atmosphere/dialogue/character/combat/emotion/psyche/setting）；situation 维度已启用（如世界观案例标"穿越流"）。
 - 索引规模约束：每案一行，总量 ≤ 20 案（索引每 provider call 渲染，控制常驻 token）。
 
-### F3 `novel.compose.guide` 动态段（system 侧：索引 + 协议）
+### F3 system 侧索引承载（v0.6 起并入共享质量规范段；原 `novel.compose.guide` 独立段已删除）
 
-- `kind: dynamic`，`renderDynamic` 读取 `input.composeGuide`。
-- 渲染结构：段标题 + 一句背书（"本任务配套案例已以 `<novel-guide>` 消息注入，起草前必须对照"）+ 索引表（常驻，指向 `.novel/cases/` 相对路径，可 Read 自读）。
-- **不渲染选中案例正文**（通道分离）也不承载成段协议文案（协议单一来源住静态段，见 F7——避免三处文案漂移）。
-- 动态段不进 base 缓存；每 provider call 重渲染（索引文件变更即时生效）。
+- 四份质量规范段（`novel.story_appeal` / `novel.outline_standard` / `novel.prose_standard` / `novel.publication_standard`，main 与 Compose recipe 共享引用）v2.0.0 转 `kind: dynamic`，`renderDynamic` 读取 `input.caseGuide`（entries 条目数组）。
+- 每段尾部按 task_type 前缀过滤附「参考案例」小节（标题含"按需 Read 对照、委派或审阅时可点名；仅供参考——不抄袭、不照搬原文"协议一句 + 过滤后索引行）；分配：story_appeal←world-/character-、outline_standard←outline-/act-/scene-、prose_standard←prose-、publication_standard 暂无（前缀占位）。
+- **不渲染选中案例正文**（通道分离，正文仍走 `<novel-guide>` msg）；快照缺失/空库/无匹配 → 仅省略小节，规范正文恒渲染（不做整段占位）。
+- 动态段不进 base 缓存；每 provider call 重渲染（案例库增删即时生效——修正 v0.5 前经 full footer 注入的时点快照缺陷）。
 
 ### F4 novel-guide 消息注入（msg 侧；**v0.5 起随分类默认关闭，暂不生效**——机制保留，env 开启后恢复）
 
@@ -112,21 +112,21 @@ flowchart LR
 
 ### F6 loop 层接线（对齐 novelConstraintsProvider 既有模式）
 
-- 索引通道：`DynamicPromptSectionInput` 增加 `composeGuide` 字段（索引内容）；loop config 增加 `composeGuideProvider` 选项；`LoopContext` 缺省 `async () => undefined`；`toProviderCall` 组装 dynamicInput 时调用。
+- 索引通道（v0.6 更名改型）：`DynamicPromptSectionInput.caseGuide` 字段（`CaseGuideSnapshot`，entries 条目数组）；loop config `caseGuideProvider` 选项；`LoopContext` 缺省 `async () => undefined`；`toProviderCall` 组装 dynamicInput 时调用。
 - 消息通道：`AgentLoop.run` 扩展 seed 消息参数（或 SubagentRuntime 在 run 前以 persistent append 注入——实现取其一，语义必须是 persistent append 而非瞬态改写）。
-- `NovelSubagentOptions` 增加 `composeGuideProvider` 与正文注入装配项，`buildNovelSubagent` 透传。
+- `NovelSubagentOptions` 的 `caseGuideProvider`（v0.5 名 composeGuideProvider，v0.6 更名）与正文注入装配项，`buildNovelSubagent` 透传。
 - prompt 层保持 provider-neutral（不接触 node:fs），文件读取与 seed 全部在 node 层。
 
 ### F7 静态段协议文案（先查后写 + 仅参考不抄袭 + 自报）
 
-- `novel.compose.process`（1.0.0 → 1.2.0）：「彻底探索」步骤加入——**编写前先查案例**：按「任务案例引导」索引选取匹配案例用 Read 通读后再动笔（或对照已注入的 `<novel-guide>` 块）；案例**仅供参考——不抄袭、不照搬原文**，产出基于当前故事的实际状态与设定。
-- `novel.compose.reporting`（1.0.0 → 1.1.0）：草案概要新增必填项「参考案例：<名称/路径>」——把软约束变成可观察、可审计的交付契约。
+- `novel.compose.process`（1.0.0 → 1.3.0）：「彻底探索」步骤加入——**编写前先查案例**：按规范段尾「参考案例」小节（v0.6 前为「任务案例引导」索引）选取匹配案例用 Read 通读后再动笔（或对照已注入的 `<novel-guide>` 块）；案例**仅供参考——不抄袭、不照搬原文**，产出基于当前故事的实际状态与设定。
+- `novel.compose.reporting`（1.0.0 → 1.2.0）：草案概要新增必填项「参考案例：<名称/路径>」——把软约束变成可观察、可审计的交付契约。
 - 协议文案只住静态段（F3 动态段仅指引 + 数据），避免多份文案漂移。
 
-### F8 Compose recipe 与定义版本
+### F8 Compose recipe 与定义版本（v0.6 改写）
 
-- `NovelComposeAgentDefinition` 的 recipe 在 `novel.prose_standard` 之后、`tool.policy` 之前插入 `novel.compose.guide`；definitionVersion 1.1.0 → 1.2.0。
-- 段注册表 `novelSections.ts` 注册新段。
+- v0.2~v0.5：recipe 曾在 `novel.prose_standard` 之后插入独立段 `novel.compose.guide`（definitionVersion 1.2.0）；v0.6 该段删除，索引由 recipe 既有的三份共享质量规范段（story_appeal / outline_standard / prose_standard）承载；definitionVersion 1.2.0 → 1.3.0（13 段）。
+- 段注册表 `novelSections.ts` 移除 `novelComposeGuideSection`（25 → 24 段）。
 
 ## 5. 边界与非目标
 
@@ -139,19 +139,19 @@ flowchart LR
   - 不做 subagent journal 级持久化（live-only 维持，见 §7）。
   - seed 只做"缺失即拷贝"，**永不覆盖** `.novel/cases/` 内既有文件（用户本地改动优先；母版升级传播策略见 §7）。
   - 注入不构成"硬保证"：案例是概率性提升；硬约束仍靠标准段条文 + 主代理审批闸门。
-  - 不给 explorer / main agent 接入本机制（仅 Compose）。main agent 的**路径可见性**经 project_stage full 尾部「本工作流参考案例」footer 提供（PRD project-stage-nudge 第九批：按工作流前缀过滤的索引行，主代理可 Read 对照/委派时点名）——非 novel-guide 注入机制，不改变本机制"仅 Compose"的边界。
+  - 不给 explorer 接入本机制（仅 main / Compose 两侧）。案例**路径可见性**由四份共享质量规范段尾「参考案例」小节提供（v0.6 起与 Compose 同源常驻；v2.4 的 project_stage full footer 机制已于 v2.7 移除）——`<novel-guide>` msg 注入仍仅 Compose，不改变正文注入"仅 Compose"的边界。
 
 ## 6. 验收标准
 
-- [x] 动态段渲染单测：索引常驻渲染、资源缺失占位降级两态（正文不经过本段）。
+- [x] 规范段小节渲染单测（v0.6 改写）：四段前缀过滤各归其位、快照缺失/空库仅省略小节正文恒渲染（正文不经过本通道）。
 - [x] novel-guide 消息注入单测：首 run 消息序 `user(委派) → system(novel-guide)`；弃权/无匹配/钩子异常不注入不阻断；仅首 run 一次。
 - [x] LLM 分类器单测（scripted provider）：命中输出标签；unknown/枚举外/垃圾文本/抛错 → 弃权；断言单次调用、空库不调用。
 - [x] 选例单测：task_type 精确过滤、可选维度细筛空则退化任务级、超 2 截断、不中 → 空。
 - [x] seed/扫描单测：缺失拷贝、存在跳过不覆盖、母版不可用降级；front-matter 解析边界（缺字段/无围栏/坏行）；mtime 缓存重扫；order 排序。
 - [x] 沙盒回归：Read/Glob 可达 `.novel/cases/`、逃逸仍拒（现状断言，防未来沙盒收紧回退）。
-- [x] loop 透传单测：composeGuideProvider 每 call 注入、未注入省略。
-- [x] recipe 生效断言：段序 14 段含 `novel.compose.guide`（dynamic，位于 `novel.prose_standard` 后）、definitionVersion 1.2.0。
-- [x] 集成用例（替代 evals——runner 无 subagent 接线先例）：真装配 + stub 闭包跑一次 `loop.run`，断言 system 含 guide 段渲染、消息序 `user → system(novel-guide)`、seed 异常降级。
+- [x] loop 透传单测：caseGuideProvider 每 call 注入、未注入省略。
+- [x] recipe 生效断言（v0.6 改写）：段序 13 段、无 `novel.compose.guide`、三规范段为 dynamic、definitionVersion 1.3.0。
+- [x] 集成用例（替代 evals——runner 无 subagent 接线先例）：真装配 + stub 闭包跑一次 `loop.run`，断言 system 含规范段「参考案例」小节渲染、消息序 `user → system(novel-guide)`、seed 异常降级。
 - [x] 既有 core 用例全绿（85 文件 710 用例）+ typecheck + build 产物链（copy-resources 落 dist/resources/agent-cases）。
 - [x] **真实母版生效检查**（v0.5）：`agent-cases-real.test.ts` 以 `core/resources/agent-cases` 实文件跑通 seed→扫描→解析→索引全链（锚定标签体系与 order 序，防手写 front-matter 笔误）。
 

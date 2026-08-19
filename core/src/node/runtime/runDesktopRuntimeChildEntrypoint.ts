@@ -36,7 +36,6 @@ import {
 import {
 	AGENT_CASES_DIR,
 	readAgentCaseContent,
-	renderAgentCasesIndex,
 	scanAgentCases,
 	seedAgentCasesIfNeeded,
 } from "../workspace/agentCases.js";
@@ -459,15 +458,18 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				})
 		: undefined;
 
-	// compose 案例引导 seed（进程级共享 memo：main 的 full 案例 footer 与 Compose
-	// builder 共用一次 seed；扫描走 mtime 缓存）。logger 闭包后置——调用时已初始化
+	// 案例引导 seed（进程级共享 memo：main 与 Compose 的规范段「参考案例」小节
+	// 共用一次 seed；扫描走 mtime 缓存）。logger 闭包后置——调用时已初始化
 	let agentCasesSeeded: Promise<boolean> | undefined;
 	const ensureAgentCasesSeeded = () =>
 		(agentCasesSeeded ??= seedAgentCasesIfNeeded(workspace, logger));
-	// project_stage full 尾部「本工作流参考案例」footer 的索引来源（第九批）
-	const agentCaseIndexProvider = async () => {
+	// 质量规范段「参考案例」小节的快照来源（main 与 Compose 同源；空库 → undefined
+	// 仅省略小节，规范正文恒渲染）
+	const caseGuideSnapshotProvider = async () => {
 		await ensureAgentCasesSeeded();
-		return scanAgentCases(workspace, logger);
+		const entries = await scanAgentCases(workspace, logger);
+		if (entries === undefined || entries.length === 0) return undefined;
+		return { entries, casesDir: AGENT_CASES_DIR };
 	};
 
 	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）。
@@ -500,10 +502,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 							debugger: createCallDebugger?.(agentId),
 						}),
 				Compose: (agentId) => {
-					// compose 案例引导装配（PRD compose-案例引导）：索引动态段常开
-					// （ensureSeeded + .novel/cases 扫描，compose 按索引先查案例再编写）；
-					// 意图分类默认关（COMPOSE_GUIDE_CLASSIFY_ENV 显式开启）——关闭时无
-					// <novel-guide> msg 注入，索引自读为主通道
+					// compose 案例引导装配（PRD compose-案例引导）：案例索引经共享质量
+					// 规范段「参考案例」小节常驻（与 main 同源快照）；意图分类默认关
+					// （COMPOSE_GUIDE_CLASSIFY_ENV 显式开启）——关闭时无 <novel-guide>
+					// msg 注入，按索引自读为主通道
 					const classifyEnabled =
 						/^(1|true)$/i.test(process.env[COMPOSE_GUIDE_CLASSIFY_ENV] ?? "");
 					const classifier = classifyEnabled
@@ -532,12 +534,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 						conversationId,
 						agentId,
 						debugger: createCallDebugger?.(agentId),
-						composeGuideProvider: async () => {
-							await ensureSeeded();
-							const entries = await scanAgentCases(workspace, logger);
-							if (entries === undefined || entries.length === 0) return undefined;
-							return { index: renderAgentCasesIndex(entries), casesDir: AGENT_CASES_DIR };
-						},
+						caseGuideProvider: caseGuideSnapshotProvider,
 						composeGuideSeed: (input) =>
 							(guideOnce ??= (async () => {
 								if (classifier === undefined) return undefined;
@@ -658,8 +655,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 					? undefined
 					: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
 			},
-			// project_stage full 尾部案例 footer 的索引来源（seed + mtime 缓存扫描）
-			agentCaseIndexProvider,
+			// 规范段「参考案例」小节的条目来源（seed + mtime 缓存扫描）
+			caseGuideProvider: caseGuideSnapshotProvider,
 		// compose 状态（nudge/权限门共享）+ 工具服务（novel.compose 组）+ 每次 provider
 		// call 发起时晋升 pendingMode（mode.set 记录后由本钩子生效，PRD F1 双态）
 		composeState,

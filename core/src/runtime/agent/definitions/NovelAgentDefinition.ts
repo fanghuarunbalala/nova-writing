@@ -7,10 +7,11 @@
  * read-only Explore / Compose subagents (delegation.allowedAgentTypes
  * drives the Agent tool whitelist; see assembly in NovelAgent.ts).
  *
- * recipe 序（static 全前、dynamic 后）：
+ * recipe 序（static 全前、dynamic 后——规范段 v2.0 转 dynamic 承载案例小节，故移至
+ * core.runtime.protocol 之后，段序约束见 AgentAssembler.resolveRecipe）：
  * novel.identity → novel.system → novel.doing-tasks → novel.actions →
- * novel.communication → novel.story_appeal → novel.outline_standard →
- * novel.prose_standard → novel.publication_standard → core.runtime.protocol →
+ * novel.communication → core.runtime.protocol → novel.story_appeal →
+ * novel.outline_standard → novel.prose_standard → novel.publication_standard →
  * tool.policy(dynamic) → tool.guidance(dynamic) → core.environment(dynamic) →
  * novel.global_constraints(dynamic)
  */
@@ -25,10 +26,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** Novel Agent 声明式定义（definitionVersion 1.1.0：+三质量规范段） */
+/** Novel Agent 声明式定义（definitionVersion 1.2.0：规范段转 dynamic 承载参考案例小节） */
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.1.0",
+  definitionVersion: "1.2.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -37,11 +38,11 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.doing-tasks"),
     new PromptSectionItem("novel.actions"),
     new PromptSectionItem("novel.communication"),
+    new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("novel.story_appeal"),
     new PromptSectionItem("novel.outline_standard"),
     new PromptSectionItem("novel.prose_standard"),
     new PromptSectionItem("novel.publication_standard"),
-    new PromptSectionItem("core.runtime.protocol"),
     new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
     new PromptSectionItem("core.environment"),

@@ -9,7 +9,7 @@ import type {
 import type { ComposeModeStateProvider } from "../../conversation/compose/index.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
 import type {
-  ComposeGuideProvider,
+  CaseGuideProvider,
   NovelConstraintsProvider,
 } from "../prompt/PromptSection.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
@@ -63,10 +63,10 @@ export interface AgentLoopConfig {
    */
   novelConstraintsProvider?: NovelConstraintsProvider;
   /**
-   * compose 案例引导提供者：每 provider call 前调用（node 层扫描 .novel/cases
-   * 派生索引）。返回 undefined → novel.compose.guide 动态段渲染占位。
+   * 案例引导提供者：每 provider call 前调用（node 层扫描 .novel/cases 派生条目）。
+   * 返回 undefined → 质量规范段仅省略「参考案例」小节（正文恒渲染）。
    */
-  composeGuideProvider?: ComposeGuideProvider;
+  caseGuideProvider?: CaseGuideProvider;
   /**
    * spawn seed 消息：首 run 开启后、首个 provider call 前调用一次，带 run 输入
    * 文本（builder 同步执行拿不到委派 prompt，意图分类在 run 内做）；结果以

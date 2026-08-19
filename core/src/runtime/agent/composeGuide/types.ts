@@ -1,9 +1,9 @@
 /**
  * compose 案例引导（novel-guide）类型（PRD compose-案例引导 v0.3）。
- * ComposeGuideSnapshot 定义在 prompt 层（PromptSection.ts，与
+ * CaseGuideSnapshot 定义在 prompt 层（PromptSection.ts，与
  * NovelGlobalConstraintsSnapshot 同位）避免 prompt↔agent 反向依赖，此处 re-export。
  */
-export type { ComposeGuideSnapshot } from "../../prompt/PromptSection.js";
+export type { CaseGuideSnapshot } from "../../prompt/PromptSection.js";
 
 /** 意图分类标签（task_type 必出；character_type / situation 有信号才出，缺省不筛） */
 export interface IntentTags {

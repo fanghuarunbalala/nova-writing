@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { coreEnvironmentSection } from "../agent.js";
-import {
-  novelCommunicationSection,
-  novelGlobalConstraintsSection,
-  novelComposeGuideSection,
-} from "../novel.js";
+import { novelCommunicationSection, novelGlobalConstraintsSection } from "../novel.js";
 import type { DynamicPromptSectionInput } from "../../PromptSection.js";
 
 describe("core.environment 动态段", () => {
@@ -89,33 +85,5 @@ describe("novel.communication 静态段", () => {
     expect(text).toContain("不使用 emoji");
     expect(text).toContain("不做负面假设");
     expect(text).toContain("不适用于正文输出本身");
-  });
-});
-
-describe("novel.compose.guide 动态段（PRD compose-案例引导）", () => {
-  it("快照输入：先查后写 + 仅参考不抄袭 + 派生索引（不渲染正文——正文走 msg 通道）", () => {
-    const text = novelComposeGuideSection.renderDynamic(
-      {
-        composeGuide: {
-          index: "- .novel/cases/大纲细化设计案例.md ｜ task=act-design ｜ 大纲-幕设计",
-          casesDir: ".novel/cases",
-        },
-      },
-      {} as never,
-    );
-    expect(text).toContain("# 任务案例引导");
-    expect(text).toContain("**编写前先查案例**");
-    expect(text).toContain("用 Read 通读");
-    expect(text).toContain("`<novel-guide>` 消息注入");
-    expect(text).toContain("**案例仅供参考**");
-    expect(text).toContain("不抄袭");
-    expect(text).toContain(".novel/cases/大纲细化设计案例.md");
-    expect(text).not.toContain("<Novel-Constraints-Content>");
-  });
-
-  it("缺输入 → 标题 + 占位一行（不省略段，对齐 global_constraints 降级语义）", () => {
-    const text = novelComposeGuideSection.renderDynamic({}, {} as never);
-    expect(text).toContain("# 任务案例引导");
-    expect(text).toContain("未就绪");
   });
 });

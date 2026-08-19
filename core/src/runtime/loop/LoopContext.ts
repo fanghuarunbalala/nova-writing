@@ -2,7 +2,7 @@ import type { ProviderCall, LLMessage } from "../provider/types.js";
 import type { AgentCapability } from "../agent/AgentCapability.js";
 import type { ToolDef } from "../tool/ToolDef.js";
 import type {
-  ComposeGuideProvider,
+  CaseGuideProvider,
   DynamicPromptSectionInput,
   NovelConstraintsProvider,
 } from "../prompt/PromptSection.js";
@@ -57,8 +57,8 @@ export class LoopContext implements ReadonlyLoopContext {
   readonly platform?: string;
   /** 小说全局约束提供者（每 provider call 前调用；缺省空——动态段渲染占位） */
   private readonly novelConstraintsProvider: NovelConstraintsProvider;
-  /** compose 案例引导提供者（每 provider call 前调用；缺省空——guide 段渲染占位） */
-  private readonly composeGuideProvider: ComposeGuideProvider;
+  /** 案例引导提供者（每 provider call 前调用；缺省空——规范段仅省略案例小节） */
+  private readonly caseGuideProvider: CaseGuideProvider;
   /** 每次 provider call 发起前回调（mode pending→active 晋升；缺省 no-op） */
   private readonly beforeProviderCall: () => void | Promise<void>;
 
@@ -77,7 +77,7 @@ export class LoopContext implements ReadonlyLoopContext {
     startSeq?: number;
     platform?: string;
     novelConstraintsProvider?: NovelConstraintsProvider;
-    composeGuideProvider?: ComposeGuideProvider;
+    caseGuideProvider?: CaseGuideProvider;
     beforeProviderCall?: () => void | Promise<void>;
   }) {
     this.agentCapability = opts.agentCapability;
@@ -85,7 +85,7 @@ export class LoopContext implements ReadonlyLoopContext {
     this.seq = opts.startSeq ?? 0;
     this.platform = opts.platform;
     this.novelConstraintsProvider = opts.novelConstraintsProvider ?? (async () => undefined);
-    this.composeGuideProvider = opts.composeGuideProvider ?? (async () => undefined);
+    this.caseGuideProvider = opts.caseGuideProvider ?? (async () => undefined);
     this.beforeProviderCall = opts.beforeProviderCall ?? (async () => {});
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
@@ -221,7 +221,7 @@ export class LoopContext implements ReadonlyLoopContext {
     }
     // ③ 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）
     const constraints = await this.novelConstraintsProvider();
-    const guide = await this.composeGuideProvider();
+    const guide = await this.caseGuideProvider();
     const dynamicInput: DynamicPromptSectionInput = {
       environment:
         this.platform === undefined || this.platform.trim().length === 0
@@ -232,7 +232,7 @@ export class LoopContext implements ReadonlyLoopContext {
               modelId: run.sampling.model,
             },
       ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
-      ...(guide === undefined ? {} : { composeGuide: guide }),
+      ...(guide === undefined ? {} : { caseGuide: guide }),
     };
     // ④ 组装基础请求（system / tools / messages / sampling；messages 快照含 ② 注入；
     // toolSequenceGuard 兜底协议合法性——存量 journal 坏序列在此自愈，不落盘）

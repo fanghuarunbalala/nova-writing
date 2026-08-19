@@ -6,11 +6,9 @@ import {
   FULL_TEXT_OF,
   classifyProjectStage,
   nextActionOf,
-  renderCaseFooter,
   renderFullText,
   renderSparseText,
 } from "../project-stage.js";
-import type { GuideCaseEntry } from "../../../agent/composeGuide/types.js";
 import type { LoopContext } from "../../../loop/LoopContext.js";
 import type { RunProgress } from "../../../loop/types.js";
 import type {
@@ -230,28 +228,38 @@ describe("renderFullText / renderSparseText", () => {
     expect(text).toContain("先问后做");
   });
 
-  it("开书 full：采集创意+篇幅（冷启动不带推荐），默认经设计模式分节构思（五节逐节确认、委派附已确认摘要、汇总节不委派），确认后写入 NOVEL.md 或正式稿", () => {
+  it("开书 full：采集创意+篇幅（冷启动不带推荐）→ 展开确认 → 三阶段逐个推进（每阶段确认或暂时跳过，阶段内 Enter→Ask 补充→Compose 候选→Ask 选择→Exit 循环直到通过），确认后固化写入 NOVEL.md 或正式稿", () => {
     const text = FULL_TEXT_OF.collect;
     expect(text.startsWith("## 开书推荐工作流")).toBe(true);
     expect(text).toContain("一句话创意（开放填空，绝不配选项）");
     expect(text).toContain("每章推荐字数");
-    expect(text).toContain("默认经设计模式分节构思");
-    expect(text).toContain("① 主角（性格/身份/金手指）");
-    expect(text).toContain("此前各节已确认的结果摘要");
-    expect(text).toContain("第 ⑤ 节故事核汇总不委派出候选");
-    expect(text).toContain("本工作流参考案例");
-    expect(text).toContain("绝不一次输出成套方案");
-    expect(text).toContain("未定设计点");
-    expect(text).toContain("写入 NOVEL.md 或者正式稿");
+    expect(text).toContain("按序推进三个阶段");
+    expect(text).toContain("用户同意暂时跳过");
+    expect(text).toContain("世界观（参考「世界观设计案例.md」）");
+    expect(text).toContain("书名和基调");
+    expect(text).toContain("主要角色设计（主角和主要配角，参考「人物设计案例.md」）");
+    expect(text).toContain("进入 EnterComposeMode（设计模式），用 AskUserQuestion 补充不明确的信息");
+    expect(text).toContain("草案创作（Compose）子代理给出候选");
+    expect(text).toContain("直到用户通过");
+    expect(text).toContain("写入 NOVEL.md 或正式稿");
   });
 
-  it("大纲 full：委派前先 Ask 明确拆分设计点（粒度/范围/情绪走向），确认后再委派，一次只委派已确认块", () => {
+  it("大纲 full：两段式——幕级拆分（先问扩展范围：横向 1→1.1/1.2/1.3 或纵向 1→1.1→1.1.1→一句话发展→拆分候选）＋场景三阶段（时间地点人物/事件序列节奏拍/状态变更）＋完成标准=有可用 LeafPlan", () => {
     const text = FULL_TEXT_OF.expand_outline;
-    expect(text).toContain("委派前先用 AskUserQuestion 明确拆分设计点");
-    expect(text).toContain("拆分粒度（拆到 arc/sequence/scene 哪层）");
-    expect(text).toContain("设计点完全确定后再 EnterComposeMode");
+    expect(text).toContain("两级细化，按作者意愿推进");
+    expect(text).toContain("幕级细化（story unit → story unit）");
+    expect(text).toContain("横向拆一层（1 → 1.1/1.2/1.3）");
+    expect(text).toContain("纵向深入（1 → 1.1 → 1.1.1）");
+    expect(text).toContain("一句话说明其发展");
     expect(text).toContain("不打包整卷/整批出方案");
-    expect(text).toContain("零星小调整（如补单个要素）可直接改");
+    expect(text).toContain("想到哪细化到哪");
+    expect(text).toContain("每次扩展前先询问作者本次范围");
+    expect(text).toContain("每个阶段都要求作者确认，或作者明确跳过，才能进入下一阶段");
+    expect(text).toContain("时间和地点、人物（时间序列、地点与人物绑定）");
+    expect(text).toContain("事件序列与节奏拍");
+    expect(text).toContain("状态变更（实体状态变化，连贯性追踪）");
+    expect(text).toContain("驳回则等待作者补充信息");
+    expect(text).toContain("只要有一个可用的 LeafPlan 即视为完成");
   });
 
   it("正文 full 含三态审阅 / 两轮上限 / 发布延后", () => {
@@ -395,70 +403,14 @@ describe("ProjectStageNudgePolicy v2（persistent full/sparse）", () => {
     await policy.persistentNudgeIfNeeded(cleared.loop, run());
     expect(cleared.appended[0]!.nudge).toBe(PROJECT_STAGE_NUDGE_FULL);
   });
-});
 
-describe("full 尾部「本工作流参考案例」footer（第九批）", () => {
-  const entries: GuideCaseEntry[] = [
-    { file: "世界观设计案例.md", path: ".novel/cases/世界观设计案例.md", taskType: "world-design", summary: "世界观", order: 26 },
-    { file: "人物设计案例.md", path: ".novel/cases/人物设计案例.md", taskType: "character-design", summary: "人物", order: 20 },
-    { file: "总纲设计案例.md", path: ".novel/cases/总纲设计案例.md", taskType: "outline-overview", summary: "总纲", order: 15 },
-    { file: "大纲细化设计案例.md", path: ".novel/cases/大纲细化设计案例.md", taskType: "act-design", summary: "幕设计", order: 10 },
-    { file: "大纲-场景设计案例.md", path: ".novel/cases/大纲-场景设计案例.md", taskType: "scene-design", summary: "场景", order: 12 },
-    { file: "正文撰写案例.md", path: ".novel/cases/正文撰写案例.md", taskType: "prose-draft", summary: "正文", order: 30 },
-  ];
-
-  it("renderCaseFooter 按工作流前缀过滤：开书=世界观/人物/总纲；大纲=总纲/幕/场景；正文=prose 系；收尾/空库不附", () => {
-    const collect = renderCaseFooter("collect", entries);
-    expect(collect).toContain(".novel/cases/世界观设计案例.md");
-    expect(collect).toContain(".novel/cases/人物设计案例.md");
-    expect(collect).toContain("task=outline-overview");
-    expect(collect).not.toContain("act-design");
-    expect(collect).not.toContain("prose-");
-    const outline = renderCaseFooter("expand_outline", entries);
-    expect(outline).toContain("task=outline-overview");
-    expect(outline).toContain("task=act-design");
-    expect(outline).toContain("task=scene-design");
-    expect(outline).not.toContain("world-design");
-    const prose = renderCaseFooter("write_prose", entries);
-    expect(prose).toContain("task=prose-draft");
-    expect(prose).not.toContain("act-design");
-    expect(renderCaseFooter("complete", entries)).toBe("");
-    expect(renderCaseFooter("collect", [])).toBe("");
-  });
-
-  it("renderFullText：有索引附案例 footer（全局规则之后）；无索引不附", () => {
-    const withCases = renderFullText({ workflow: "collect" }, entries);
-    expect(withCases).toContain("## 本工作流参考案例");
-    expect(withCases.indexOf("## 全局规则")).toBeLessThan(
-      withCases.indexOf("## 本工作流参考案例"),
-    );
-    const bare = renderFullText({ workflow: "collect" });
-    expect(bare).not.toContain("## 本工作流参考案例");
-  });
-
-  it("policy：caseIndexProvider 注入时 full 含案例 footer；sparse 不附；provider 异常降级不阻断", async () => {
-    const policy = new ProjectStageNudgePolicy({
-      handle: statefulHandle(),
-      caseIndexProvider: async () => entries,
-    });
+  it("full 不含案例索引（v2.5 迁出：案例路径常驻质量规范段「参考案例」小节）", async () => {
+    const handle = statefulHandle();
+    const policy = new ProjectStageNudgePolicy({ handle });
     const { loop, appended } = mockLoop();
     await policy.persistentNudgeIfNeeded(loop, run());
-    expect(appended[0]!.content).toContain("## 本工作流参考案例");
-    expect(appended[0]!.content).toContain(".novel/cases/世界观设计案例.md");
-    // 同工作流第二 run → sparse，无案例 footer
-    const again = mockLoop();
-    await policy.persistentNudgeIfNeeded(again.loop, run());
-    expect(again.appended[0]!.content).not.toContain("## 本工作流参考案例");
-    // provider 抛错 → full 照常注入、无 footer
-    const failing = new ProjectStageNudgePolicy({
-      handle: statefulHandle(),
-      caseIndexProvider: async () => {
-        throw new Error("scan down");
-      },
-    });
-    const failedRun = mockLoop();
-    await failing.persistentNudgeIfNeeded(failedRun.loop, run());
-    expect(failedRun.appended[0]!.content).toContain("## 开书推荐工作流");
-    expect(failedRun.appended[0]!.content).not.toContain("## 本工作流参考案例");
+    expect(appended[0]!.content).toContain("## 全局规则");
+    expect(appended[0]!.content).not.toContain("参考案例");
+    expect(appended[0]!.content).not.toContain(".novel/cases/");
   });
 });

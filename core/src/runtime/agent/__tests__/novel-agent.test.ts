@@ -13,7 +13,7 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（14 段 recipe 序含四质量规范段，tool.policy/tool.guidance 在 env 前）+ toolDefs 齐全（13 工具）", () => {
+  it("systemSections 齐全（14 段 recipe 序含四质量规范段，规范段 v2.0 转 dynamic 移至 protocol 后）+ toolDefs 齐全（13 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
     expect(cap.systemSections).toHaveLength(14);
@@ -23,18 +23,19 @@ describe("buildNovelAgent 组装", () => {
       "novel.doing-tasks",
       "novel.actions",
       "novel.communication",
+      "core.runtime.protocol",
       "novel.story_appeal",
       "novel.outline_standard",
       "novel.prose_standard",
       "novel.publication_standard",
-      "core.runtime.protocol",
       "tool.policy",
       "tool.guidance",
       "core.environment",
       "novel.global_constraints",
     ]);
-    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(10);
-    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(4);
+    // 四规范段转 dynamic（尾附「参考案例」小节）：static 6 + dynamic 8
+    expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
+    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(8);
     // library.read 暂不接入 main（定义组序已移除）——book-analyst 分支恢复后回 13
     expect(cap.toolDefs).toHaveLength(12);
   });

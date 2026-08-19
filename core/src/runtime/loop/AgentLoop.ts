@@ -100,7 +100,7 @@ export class AgentLoop {
       startSeq: config.startSeq,
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
-      composeGuideProvider: config.composeGuideProvider,
+      caseGuideProvider: config.caseGuideProvider,
       beforeProviderCall: config.beforeProviderCall,
     });
     // 压缩边界事件桥接：onCompacted 置标记，runTurnLoop / 保险丝路径冲刷为 compacted 事件

@@ -17,7 +17,7 @@ import {
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { ConversationTodoStore } from "../todo/TodoProtocol.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
-import type { ComposeGuideProvider } from "../prompt/PromptSection.js";
+import type { CaseGuideProvider } from "../prompt/PromptSection.js";
 
 /** novel 域 subagent 装配选项（explorer/compose 同构） */
 export interface NovelSubagentOptions {
@@ -35,8 +35,8 @@ export interface NovelSubagentOptions {
   agentId: string;
   /** ProviderCall 调试器（debug 模式注入；runtime builder 每任务新建，输出目录按 agentId 区分） */
   debugger?: ProviderCallDebugger;
-  /** compose 案例引导提供者（novel.compose.guide 动态段输入；每 provider call 调用） */
-  composeGuideProvider?: ComposeGuideProvider;
+  /** 案例引导提供者（质量规范段「参考案例」小节输入；每 provider call 调用） */
+  caseGuideProvider?: CaseGuideProvider;
   /** spawn seed 消息（novel-guide 案例正文注入；首 run 一次，带委派 prompt） */
   composeGuideSeed?: (input: string) => Promise<LLMessage[] | undefined>;
 }
@@ -73,8 +73,8 @@ export function buildNovelSubagent(opts: BuildNovelSubagentOptions): AgentLoop {
     conversationId: opts.conversationId,
     agentId: opts.agentId,
     debugger: opts.debugger,
-    ...(opts.composeGuideProvider !== undefined
-      ? { composeGuideProvider: opts.composeGuideProvider }
+    ...(opts.caseGuideProvider !== undefined
+      ? { caseGuideProvider: opts.caseGuideProvider }
       : {}),
     ...(opts.composeGuideSeed !== undefined ? { spawnSeedMessages: opts.composeGuideSeed } : {}),
   });

@@ -62,7 +62,7 @@ describe("buildNovelComposeAgent 装配", () => {
     }
   });
 
-  it("systemSections 14 段 recipe 序（explorer 框架 + compose 四段 + 三质量规范段 + guide 动态段 + toolPolicy/toolGuidance 收尾）", () => {
+  it("systemSections 13 段 recipe 序（explorer 框架 + compose 四段 + 三质量规范段 + toolPolicy/toolGuidance 收尾；案例索引并入规范段，无独立 guide 段）", () => {
     const cfg = cfgOf(build());
     expect(cfg.agentCapability.systemSections.map((s) => s.id)).toEqual([
       "core.runtime.protocol",
@@ -76,17 +76,16 @@ describe("buildNovelComposeAgent 装配", () => {
       "novel.story_appeal",
       "novel.outline_standard",
       "novel.prose_standard",
-      "novel.compose.guide",
       "tool.policy",
       "tool.guidance",
     ]);
-    // guide 为 dynamic 段且位于 prose_standard 之后（PRD compose-案例引导 F8）
-    const guide = cfg.agentCapability.systemSections.find((s) => s.id === "novel.compose.guide");
-    expect(guide?.kind).toBe("dynamic");
+    // 质量规范段为 dynamic（尾附「参考案例」小节，PRD compose-案例引导 v0.6）
+    const prose = cfg.agentCapability.systemSections.find((s) => s.id === "novel.prose_standard");
+    expect(prose?.kind).toBe("dynamic");
   });
 
-  it("definitionVersion 1.2.0（guide 段入 recipe）", () => {
-    expect(novelComposeAgentDefinition.definitionVersion).toBe("1.2.0");
+  it("definitionVersion 1.3.0（guide 段迁出 recipe，案例索引并入规范段）", () => {
+    expect(novelComposeAgentDefinition.definitionVersion).toBe("1.3.0");
   });
 
   it("config 盖章 conversationId + agentId，且无 listeners（live-only）", () => {
@@ -146,7 +145,7 @@ describe("Compose prompt 段内容（legacy 迁移 + 工具名适配）", () => 
 });
 
 describe("Compose 案例引导装配（novel-guide，PRD compose-案例引导 集成）", () => {
-  it("composeGuideProvider 进 system 尾部、composeGuideSeed 注入首 run 紧随委派 prompt", async () => {
+  it("caseGuideProvider 经规范段「参考案例」小节进 system、composeGuideSeed 注入首 run 紧随委派 prompt", async () => {
     const calls: Array<{ system: string; messages: Array<{ role: string; content: string }> }> = [];
     const captureProvider: Provider = {
       call: async (call) => {
@@ -159,8 +158,10 @@ describe("Compose 案例引导装配（novel-guide，PRD compose-案例引导 �
     };
     const loop = build(new InMemoryConversationTodoStore(), {
       provider: captureProvider,
-      composeGuideProvider: async () => ({
-        index: "- .novel/cases/outline-refine.md ｜ task=outline-refine ｜ 大纲细化",
+      caseGuideProvider: async () => ({
+        entries: [
+          { file: "outline-refine.md", path: ".novel/cases/outline-refine.md", taskType: "outline-refine", summary: "大纲细化" },
+        ],
         casesDir: ".novel/cases",
       }),
       composeGuideSeed: async () => [
@@ -169,13 +170,16 @@ describe("Compose 案例引导装配（novel-guide，PRD compose-案例引导 �
     });
     await loop.run("把 S3 细化为子故事", { sampling: { model: "m" } });
     expect(calls).toHaveLength(1);
-    // system：guide 段渲染（索引 + 先查后写协议）
-    expect(calls[0].system).toContain("# 任务案例引导");
+    // system：大纲规范段尾渲染「参考案例」小节（outline- 前缀命中）
+    expect(calls[0].system).toContain("## 参考案例");
     expect(calls[0].system).toContain(".novel/cases/outline-refine.md");
     expect(calls[0].system).toContain("编写前先查案例");
-    // 段序：guide 在 prose_standard 之后、tool.policy 之前
-    expect(calls[0].system.indexOf("# 任务案例引导")).toBeGreaterThan(
-      calls[0].system.indexOf("正文规范"),
+    // 段序：小节在「大纲规范」正文之后、「正文规范」段之前
+    expect(calls[0].system.indexOf("## 参考案例")).toBeGreaterThan(
+      calls[0].system.indexOf("# 大纲规范"),
+    );
+    expect(calls[0].system.indexOf("## 参考案例")).toBeLessThan(
+      calls[0].system.indexOf("# 正文规范"),
     );
     // 消息序：user(委派) → system(novel-guide)
     expect(calls[0].messages.map((m) => m.role)).toEqual(["user", "system"]);

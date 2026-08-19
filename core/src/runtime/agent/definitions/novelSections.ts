@@ -26,7 +26,6 @@ import {
   novelComposeSystemSection,
   novelComposeProcessSection,
   novelComposeReportingSection,
-  novelComposeGuideSection,
   novelBookAnalystIdentitySection,
   novelBookAnalystProcessSection,
   novelBookAnalystArtifactsSection,
@@ -38,7 +37,7 @@ import {
   novelPublicationStandardSection,
 } from "../../prompt/sections/novelStandards.js";
 
-/** novel 域段注册表（id@version；25 段：main 9 + 共享 3 + 标准 4 + explorer 1 + compose 5 + book-analyst 3） */
+/** novel 域段注册表（id@version；24 段：main 9 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -55,19 +54,19 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   contextReliabilitySection,
   completionContractSection,
   todoGuidanceSection,
-  // 质量标准段（规范层：main 与 compose recipe 引用，按名被 project_stage nudge 引用）
+  // 质量标准段（规范层：main 与 compose recipe 引用，按名被 project_stage nudge 引用；
+  // 动态段——尾附按 task_type 前缀过滤的「参考案例」小节，索引经 caseGuide 快照注入）
   novelStoryAppealSection,
   novelOutlineStandardSection,
   novelProseStandardSection,
   novelPublicationStandardSection,
   // explorer 专属段
   novelExplorerSection,
-  // compose 专属段（legacy 迁移 + guide 动态段：PRD compose-案例引导）
+  // compose 专属段（legacy 迁移；案例索引并入共享质量标准段，PRD compose-案例引导 v0.6）
   novelComposeIdentitySection,
   novelComposeSystemSection,
   novelComposeProcessSection,
   novelComposeReportingSection,
-  novelComposeGuideSection,
   // BookAnalyst 专属段（书库完本解构，PRD library-完本解构 F4）
   novelBookAnalystIdentitySection,
   novelBookAnalystProcessSection,

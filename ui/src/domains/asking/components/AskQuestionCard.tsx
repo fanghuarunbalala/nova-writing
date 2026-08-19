@@ -6,7 +6,7 @@
  * answered/skipped/expired 态原地留痕为简约单行记录（时间线即审计）。
  * context 与 option.description 走 react-markdown 渲染（与助手正文同管道，无专属特性）。
  */
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { AskQuestionAnswer, AskQuestionSpec, AskingQueueItem } from "@novel/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -22,14 +22,15 @@ export interface AskQuestionCardProps {
   readonly onSkip: (requestId: string) => void;
 }
 
-/** 单问作答草稿（本地态；picks 为选项下标集合，other/text 为自填） */
+/** 单问作答草稿（本地态；picks 为选项下标集合，other/text 为自填，otherPicked 为「其他」行点选态） */
 interface DraftAnswer {
   readonly picks: ReadonlySet<number>;
+  readonly otherPicked: boolean;
   readonly other: string;
   readonly text: string;
 }
 
-const EMPTY_DRAFT: DraftAnswer = { picks: new Set(), other: "", text: "" };
+const EMPTY_DRAFT: DraftAnswer = { picks: new Set(), otherPicked: false, other: "", text: "" };
 
 /** markdown 渲染（memo：context/description 原值比较，历史卡片零重解析） */
 const MarkdownText = memo(function MarkdownText({ text }: { readonly text: string }) {
@@ -44,7 +45,7 @@ function draftAnswered(q: AskQuestionSpec, draft: DraftAnswer | undefined): bool
   if (draft === undefined) return false;
   return isOpenQuestion(q)
     ? draft.text.trim() !== ""
-    : draft.picks.size > 0 || draft.other.trim() !== "";
+    : draft.picks.size > 0 || draft.otherPicked || draft.other.trim() !== "";
 }
 
 export const AskQuestionCard = memo(function AskQuestionCard({
@@ -83,11 +84,42 @@ export const AskQuestionCard = memo(function AskQuestionCard({
       if (q.multiSelect === true) {
         if (picks.has(optionIndex)) picks.delete(optionIndex);
         else picks.add(optionIndex);
-      } else {
-        picks.clear();
-        picks.add(optionIndex);
+        return { ...prev, picks };
       }
-      return { ...prev, picks };
+      picks.clear();
+      picks.add(optionIndex);
+      // 单选互斥：选普通选项即释放「其他」点选态；自填文本保留（切回不丢），提交时不随选上送
+      return { ...prev, picks, otherPicked: false };
+    });
+  };
+
+  const toggleOther = (index: number): void => {
+    const q = questions[index];
+    if (q === undefined || isOpenQuestion(q)) return;
+    setDraft(index, (prev) => {
+      if (q.multiSelect === true) {
+        // 多选可切换；取消「其他」时自填文本一并作废
+        return prev.otherPicked
+          ? { ...prev, otherPicked: false, other: "" }
+          : { ...prev, otherPicked: true };
+      }
+      // 单选点击「其他」清普通选项并保持选中（再点不取消，改选普通选项才会释放）
+      return { ...prev, picks: new Set(), otherPicked: true };
+    });
+  };
+
+  const changeOther = (index: number, other: string): void => {
+    const q = questions[index];
+    if (q === undefined || isOpenQuestion(q)) return;
+    setDraft(index, (prev) => {
+      if (other.trim() === "") return { ...prev, other };
+      // 输入即选中「其他」；单选下与普通选项互斥
+      return {
+        ...prev,
+        other,
+        otherPicked: true,
+        picks: q.multiSelect === true ? prev.picks : new Set(),
+      };
     });
   };
 
@@ -104,7 +136,8 @@ export const AskQuestionCard = memo(function AskQuestionCard({
       const labels = (q.options ?? [])
         .filter((_, oi) => draft.picks.has(oi))
         .map((o) => o.label);
-      const other = draft.other.trim();
+      // 「其他」未被选中时自填文本只是暂存（切回不丢），不随提交上送
+      const other = draft.otherPicked ? draft.other.trim() : "";
       if (labels.length === 0 && other === "") {
         return { question: q.question, selections: [], skipped: true };
       }
@@ -183,7 +216,8 @@ export const AskQuestionCard = memo(function AskQuestionCard({
                       question={q}
                       draft={drafts.get(index) ?? EMPTY_DRAFT}
                       onToggleOption={(oi) => toggleOption(index, oi)}
-                      onOtherChange={(other) => setDraft(index, (prev) => ({ ...prev, other }))}
+                      onToggleOther={() => toggleOther(index)}
+                      onOtherChange={(other) => changeOther(index, other)}
                       onTextChange={(text) => setDraft(index, (prev) => ({ ...prev, text }))}
                     />
                   </div>
@@ -237,15 +271,18 @@ function QuestionForm({
   question,
   draft,
   onToggleOption,
+  onToggleOther,
   onOtherChange,
   onTextChange,
 }: {
   readonly question: AskQuestionSpec;
   readonly draft: DraftAnswer;
   readonly onToggleOption: (optionIndex: number) => void;
+  readonly onToggleOther: () => void;
   readonly onOtherChange: (other: string) => void;
   readonly onTextChange: (text: string) => void;
 }) {
+  const otherInputRef = useRef<HTMLInputElement>(null);
   return (
     <div>
       <div className={styles.qTitle}>{question.question}</div>
@@ -285,14 +322,19 @@ function QuestionForm({
             </div>
           ))}
           <div
-            className={[styles.opt, draft.other.trim() !== "" ? styles.optSelected : ""].join(" ")}
+            className={[
+              styles.opt,
+              draft.otherPicked || draft.other.trim() !== "" ? styles.optSelected : "",
+            ].join(" ")}
             onClick={() => {
-              /* 其他 = 输入即选中；点击聚焦输入框 */
+              onToggleOther();
+              otherInputRef.current?.focus();
             }}
           >
             <span className={styles.optMark} />
             <span className={styles.optLabel}>其他</span>
             <input
+              ref={otherInputRef}
               className={styles.otherInput}
               placeholder="自填你的答案"
               value={draft.other}

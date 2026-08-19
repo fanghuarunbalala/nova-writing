@@ -5,6 +5,7 @@
  * 激活态为滑块（.thumb）——translateX 按列索引位移，等宽四列 grid 保证槽位精确。
  */
 import { BookOpen, CalendarDays, Library, MessageSquare, type LucideIcon } from "lucide-react";
+import type { CSSProperties } from "react";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import { Icon } from "../../shared/primitives/Icon.js";
 import styles from "./TopBarViewSwitcher.module.css";
@@ -34,7 +35,12 @@ export function TopBarViewSwitcher({ state, onChange, libraryEnabled = false }: 
     views.findIndex((view) => view.value === state),
   );
   return (
-    <div className={styles.switcher} role="tablist" aria-label="主视图">
+    <div
+      className={styles.switcher}
+      role="tablist"
+      aria-label="主视图"
+      style={{ "--view-count": views.length } as React.CSSProperties}
+    >
       <span
         className={styles.thumb}
         style={{ transform: `translateX(calc(${activeIndex} * 100%))` }}

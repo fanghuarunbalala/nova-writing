@@ -1,13 +1,14 @@
 /**
  * TopBarViewSwitcher 视觉（原型 .seg 分段 + 滑块指示）。
  *
- * 等宽四列 grid（无 gap）保证滑块槽位精确：thumb 宽 = 1/4 内容宽，
+ * 列数由组件注入 --view-count（书库 debug 门控隐藏时 = 3 列，无空槽）；
+ * 等宽 grid（无 gap）保证滑块槽位精确：thumb 宽 = 1/列数 内容宽，
  * translateX(100%) 恰好位移一列。
  */
 .switcher {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(var(--view-count, 4), 1fr);
   padding: var(--space-2px);
   border-radius: var(--radius-md);
   background: var(--color-surface-2);
@@ -18,7 +19,7 @@
   top: var(--space-2px);
   bottom: var(--space-2px);
   left: var(--space-2px);
-  width: calc((100% - var(--space-2px) * 2) / 4);
+  width: calc((100% - var(--space-2px) * 2) / var(--view-count, 4));
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   box-shadow: var(--shadow-xs);

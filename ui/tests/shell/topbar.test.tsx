@@ -6,6 +6,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TopBar } from "../../src/shell/topbar/TopBar.js";
 import { TopBarAction } from "../../src/shell/topbar/TopBarAction.js";
+import { TopBarViewSwitcher } from "../../src/shell/topbar/TopBarViewSwitcher.js";
 import {
   NotificationStore,
   type NotificationItem,
@@ -52,6 +53,30 @@ describe("TopBar", () => {
     );
     await user.click(screen.getByRole("tab", { name: "计划" }));
     expect(onViewChange).toHaveBeenCalledWith("schedule");
+  });
+});
+
+describe("TopBarViewSwitcher（书库 debug 门控列数）", () => {
+  it("libraryEnabled=false（缺省）：只渲染三视图，无书库空槽，列数为 3", () => {
+    const { container } = render(
+      <TopBarViewSwitcher state="chat" onChange={vi.fn()} />,
+    );
+    expect(screen.getByRole("tab", { name: "对话" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "内容" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "计划" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "书库" })).not.toBeInTheDocument();
+    const switcher = container.querySelector("[role=tablist]");
+    expect(switcher).not.toBeNull();
+    expect(switcher?.getAttribute("style")).toContain("--view-count: 3");
+  });
+
+  it("libraryEnabled=true：渲染四视图，列数为 4", () => {
+    const { container } = render(
+      <TopBarViewSwitcher state="chat" onChange={vi.fn()} libraryEnabled />,
+    );
+    expect(screen.getByRole("tab", { name: "书库" })).toBeInTheDocument();
+    const switcher = container.querySelector("[role=tablist]");
+    expect(switcher?.getAttribute("style")).toContain("--view-count: 4");
   });
 });
 

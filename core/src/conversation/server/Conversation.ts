@@ -28,6 +28,7 @@ import type {
 	Receipt,
 } from "../contract/types/index.js";
 import { DEFAULT_CONVERSATION_MODE } from "../contract/types/index.js";
+import { serializeUserMessageText } from "./serializeUserMessage.js";
 import type { SubagentRuntime } from "./SubagentRuntime.js";
 
 /** manager wait 通道：conversation → CMS 的 wait 提交面（子进程经 manager WS；内存模式直连 managerServer） */
@@ -245,7 +246,8 @@ export class Conversation implements ConversationInteraction, WaitingInteraction
 	async sendUserMessage(msg: ConversationUserMessage): Promise<Receipt> {
 		const arrivedAt = Date.now();
 		await this.promotePendingMode().catch(() => undefined);
-		const run = this.loop.followup(msg.text, { sampling: this.sampling });
+		// 引用（PRD F6）先序列化为实体标签追加正文：journal/回放/气泡 chips 零额外改动
+		const run = this.loop.followup(serializeUserMessageText(msg), { sampling: this.sampling });
 		const receipt =
 			this.journal !== undefined ? await this.journal.appendRun(run) : this.receipt(run.seq);
 		// 回执延迟（debug）：流式 run 的 journal 增量写在同队列前面排队时，appendRun 会等待——

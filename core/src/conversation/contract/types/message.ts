@@ -1,7 +1,19 @@
+/** 用户消息携带的实体引用（五类，对齐 ui MessageReference 与 novel.system 标签语法） */
+export interface ConversationReference {
+	/** 引用类型：character / location / outline（故事单元）/ chapter / paragraph */
+	kind: "character" | "location" | "outline" | "chapter" | "paragraph"
+	/** 实体 id（paragraph = ParagraphId） */
+	id: string
+	/** 显示名（序列化为标签内文） */
+	label: string
+}
+
 /** 用户消息 */
 export interface ConversationUserMessage {
 	/** 消息正文 */
 	text: string
+	/** 实体引用（可选）：入队前序列化为实体标签追加到 text（journal/回放/气泡 chips 零额外改动） */
+	references?: readonly ConversationReference[]
 }
 
 /** 用户命令（turn lane，agent 可见） */

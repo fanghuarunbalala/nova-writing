@@ -125,6 +125,18 @@ export type LeafRhythm =
 	| "release"
 	| "aftermath"
 
+/** LeafRhythm 全档位（工具 schema enum 与运行时校验的单一来源） */
+export const LEAF_RHYTHMS: readonly LeafRhythm[] = Object.freeze([
+	"setup",
+	"rise",
+	"hold",
+	"turn",
+	"climax",
+	"fall",
+	"release",
+	"aftermath",
+])
+
 /** 节奏拍 */
 export interface LeafRhythmBeat {
 	/** 拍 id（leaf 内唯一） */

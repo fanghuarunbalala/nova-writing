@@ -44,7 +44,7 @@ const MUTATION_FIXTURES: NovelMutation[] = [
 	{ op: "location.create", input: { name: "王城" } },
 	{ op: "location.update", locationId: li("l-1"), patch: { name: "皇城" } },
 	{ op: "location.delete", locationId: li("l-1") },
-	{ op: "paragraph.insert", storyUnitId: su("su-1"), orderKey: ok("0000"), text: "正文" },
+	{ op: "paragraph.insert", storyUnitId: su("su-1"), orderKey: ok("0000"), text: "正文", rhythm: "hold", intensity: 3 },
 	{ op: "paragraph.update", paragraphId: pi("p-1"), text: "改后正文" },
 	{ op: "paragraph.delete", paragraphId: pi("p-1") },
 	{ op: "publication.volume.create", orderKey: ok("0000"), title: "第一卷" },

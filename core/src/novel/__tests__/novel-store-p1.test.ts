@@ -54,8 +54,8 @@ describe.each(makeStores())("P1 legacy 对齐 store 行为（%s）", (store) => 
 
   it("paragraphs.list 全量（storyUnitId 缺省）与单元过滤一致", async () => {
     const su = await store.mutate({ op: "outline.storyUnit.create", title: "场景" });
-    await store.mutate({ op: "paragraph.insert", storyUnitId: su.changeId as never, text: "第一段。" });
-    await store.mutate({ op: "paragraph.insert", storyUnitId: su.changeId as never, text: "第二段。" });
+    await store.mutate({ op: "paragraph.insert", storyUnitId: su.changeId as never, text: "第一段。", rhythm: "hold", intensity: 3 });
+    await store.mutate({ op: "paragraph.insert", storyUnitId: su.changeId as never, text: "第二段。", rhythm: "hold", intensity: 3 });
     const all = (await store.query({ op: "paragraphs.list" })) as { text: string }[];
     const ofUnit = (await store.query({ op: "paragraphs.list", storyUnitId: su.changeId as never })) as {
       text: string;

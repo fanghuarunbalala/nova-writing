@@ -250,6 +250,8 @@ export class InMemoryNovelStore implements NovelStore {
 					storyUnitId: m.storyUnitId,
 					orderKey: m.orderKey ?? nextOrderKey(this.maxSiblingOrderKey([...this.paragraphs.values()].filter((p) => p.storyUnitId === m.storyUnitId).map((p) => p.orderKey))),
 					text: m.text,
+					rhythm: m.rhythm,
+					intensity: m.intensity,
 				};
 				this.paragraphs.set(p.id, p);
 				return this.result(p.entityVersion, p.id, "paragraph");
@@ -260,6 +262,8 @@ export class InMemoryNovelStore implements NovelStore {
 				if (m.text !== undefined) p.text = m.text;
 				if (m.storyUnitId !== undefined) p.storyUnitId = m.storyUnitId;
 				if (m.orderKey !== undefined) p.orderKey = m.orderKey;
+				if (m.rhythm !== undefined) p.rhythm = m.rhythm;
+				if (m.intensity !== undefined) p.intensity = m.intensity;
 				p.entityVersion++;
 				return this.result(p.entityVersion, p.id, "paragraph");
 			}

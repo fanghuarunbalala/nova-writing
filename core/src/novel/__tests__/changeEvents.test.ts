@@ -8,7 +8,7 @@ describe("deriveChangeEntities", () => {
   it("默认只返回结果实体", () => {
     expect(
       deriveChangeEntities(
-        { op: "paragraph.insert", storyUnitId: "su1" as never, text: "正文" },
+        { op: "paragraph.insert", storyUnitId: "su1" as never, text: "正文", rhythm: "hold", intensity: 3 },
         { version: 1, changeId: "p1", entity: "paragraph" },
       ),
     ).toEqual(["paragraph"]);

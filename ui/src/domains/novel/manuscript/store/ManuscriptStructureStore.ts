@@ -187,10 +187,16 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
    * 新增段落（P3 选择模型）：挂靠到章选择末段的单元，并追加进章选择。
    * 单个 mutateBatch 批内原子（客户端预生成 id 使两步无结果依赖）：
    * 章选择更新 stale → 整批回滚，段落不落库（无孤儿）；重试基于重拉快照与新 id。
+   * 节奏标注缺省 hold/3（中性；与旧库迁移默认一致，后续可由作者/Agent 改标）。
    * @param chapterId 目标章
    * @param text 段落文本
    */
-  insertParagraph(chapterId: string, text: string): Promise<void> {
+  insertParagraph(
+    chapterId: string,
+    text: string,
+    rhythm: "setup" | "rise" | "hold" | "turn" | "climax" | "fall" | "release" | "aftermath" = "hold",
+    intensity = 3,
+  ): Promise<void> {
     return this.serializer.run(async () => {
       const chapter = this.snapshot.chapters.find((c) => c.chapterId === chapterId);
       await this.runGuarded(async () => {
@@ -204,7 +210,7 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
         }
         const paragraphId = newParagraphId();
         await this.api.novel.mutateBatch([
-          { op: "paragraph.insert", id: paragraphId, storyUnitId: unitId as StoryUnitId, text },
+          { op: "paragraph.insert", id: paragraphId, storyUnitId: unitId as StoryUnitId, text, rhythm, intensity },
           {
             op: "publication.chapter.update",
             chapterId: chapterId as never,

@@ -43,8 +43,14 @@ export function storyUnit(
 	};
 }
 
-export function paragraph(id: string, storyUnitId: string, text: string): NovelMutation {
-	return { op: "paragraph.insert", id, storyUnitId: branded(storyUnitId), text };
+export function paragraph(
+	id: string,
+	storyUnitId: string,
+	text: string,
+	rhythm: "setup" | "rise" | "hold" | "turn" | "climax" | "fall" | "release" | "aftermath" = "hold",
+	intensity = 3,
+): NovelMutation {
+	return { op: "paragraph.insert", id, storyUnitId: branded(storyUnitId), text, rhythm, intensity };
 }
 
 export function volume(id: string, title: string): NovelMutation {

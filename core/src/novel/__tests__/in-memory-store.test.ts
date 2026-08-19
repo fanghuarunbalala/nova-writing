@@ -51,7 +51,7 @@ describe("InMemoryNovelStore", () => {
   it("paragraph insert → paragraphs.list 按 storyUnitId 读回", async () => {
     const s = new InMemoryNovelStore();
     const su = await s.mutate({ op: "outline.storyUnit.create", orderKey: "a" as never, title: "章" });
-    await s.mutate({ op: "paragraph.insert", storyUnitId: su.changeId as never, orderKey: "a" as never, text: "正文" });
+    await s.mutate({ op: "paragraph.insert", storyUnitId: su.changeId as never, orderKey: "a" as never, text: "正文", rhythm: "hold", intensity: 3 });
     const list = (await s.query({ op: "paragraphs.list", storyUnitId: su.changeId as never })) as Array<{ text: string }>;
     expect(list).toHaveLength(1);
     expect(list[0].text).toBe("正文");

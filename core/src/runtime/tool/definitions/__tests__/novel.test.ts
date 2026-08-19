@@ -171,6 +171,66 @@ describe("NovelWrite（kind 分发）", () => {
       /values 不能为空/,
     );
   });
+
+  it("kind=paragraph 节奏标注：rhythm/intensity 必填 + 枚举/范围校验；合法写入透传", async () => {
+    const { handle, mutateBatch } = mockHandle();
+    const write = toolOf(handle, "NovelWrite");
+    // 缺 rhythm / 缺 intensity → 拒
+    await expect(
+      write.handler.execute(call("NovelWrite", { kind: "paragraph", values: [{ storyUnitId: "su", text: "他抬头。" }] })),
+    ).rejects.toThrow(/rhythm/);
+    await expect(
+      write.handler.execute(
+        call("NovelWrite", { kind: "paragraph", values: [{ storyUnitId: "su", text: "他抬头。", rhythm: "turn" }] }),
+      ),
+    ).rejects.toThrow(/intensity 必填/);
+    // 枚举外 / 范围外 / 非整数 → 拒
+    await expect(
+      write.handler.execute(
+        call("NovelWrite", { kind: "paragraph", values: [{ storyUnitId: "su", text: "他抬头。", rhythm: "boom", intensity: 3 }] }),
+      ),
+    ).rejects.toThrow(/rhythm 必须/);
+    await expect(
+      write.handler.execute(
+        call("NovelWrite", { kind: "paragraph", values: [{ storyUnitId: "su", text: "他抬头。", rhythm: "turn", intensity: 0 }] }),
+      ),
+    ).rejects.toThrow(/intensity 必填/);
+    await expect(
+      write.handler.execute(
+        call("NovelWrite", { kind: "paragraph", values: [{ storyUnitId: "su", text: "他抬头。", rhythm: "turn", intensity: 3.5 }] }),
+      ),
+    ).rejects.toThrow(/intensity 必填/);
+    // 合法 → mutateBatch 透传 beat 字段
+    await write.handler.execute(
+      call("NovelWrite", { kind: "paragraph", values: [{ storyUnitId: "su", text: "他抬头。", rhythm: "turn", intensity: 4 }] }),
+    );
+    expect(mutateBatch).toHaveBeenCalledWith([
+      { op: "paragraph.insert", id: undefined, storyUnitId: "su", orderKey: undefined, text: "他抬头。", rhythm: "turn", intensity: 4 },
+    ]);
+  });
+
+  it("kind=paragraph Edit：rhythm/intensity 可单独 patch；枚举外仍拒绝", async () => {
+    const { handle, mutateBatch, query } = mockHandle();
+    query.mockResolvedValue({ id: "p1", entityVersion: 2 });
+    mutateBatch.mockResolvedValue([{ version: 3, changeId: "p1", entity: "paragraph" }]);
+    const edit = toolOf(handle, "NovelEdit");
+    await edit.handler.execute(
+      call("NovelEdit", { kind: "paragraph", values: [{ id: "p1", baseRevision: 2, value: { rhythm: "climax", intensity: 5 } }] }),
+    );
+    expect(mutateBatch).toHaveBeenCalledWith([
+      { op: "paragraph.update", paragraphId: "p1", baseRevision: 2, text: undefined, storyUnitId: undefined, orderKey: undefined, rhythm: "climax", intensity: 5 },
+    ]);
+    await expect(
+      edit.handler.execute(
+        call("NovelEdit", { kind: "paragraph", values: [{ id: "p1", baseRevision: 2, value: { intensity: 9 } }] }),
+      ),
+    ).rejects.toThrow(/intensity 必填/);
+    await expect(
+      edit.handler.execute(
+        call("NovelEdit", { kind: "paragraph", values: [{ id: "p1", baseRevision: 2, value: { rhythm: "nope" } }] }),
+      ),
+    ).rejects.toThrow(/rhythm 必须/);
+  });
 });
 
 describe("NovelEdit（kind 分发）", () => {

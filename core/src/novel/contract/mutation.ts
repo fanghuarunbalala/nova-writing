@@ -16,6 +16,7 @@ import type {
 import type {
 	LeafPlan,
 	LeafPlanPatch,
+	LeafRhythm,
 	OrderKey,
 	StoryUnitAbandonment,
 	StoryUnitBlockState,
@@ -109,7 +110,7 @@ export type NovelMutation =
 	| { op: "location.create"; id?: string; input: LocationInput }
 	| { op: "location.update"; locationId: LocationId; baseRevision: NovelRevision; patch: Partial<LocationInput> }
 	| { op: "location.delete"; locationId: LocationId; baseRevision: NovelRevision }
-	// ── 草稿段落（不可变值对象：insert 追加 / update PATCH） ──
+	// ── 草稿段落（不可变值对象：insert 追加 / update PATCH；一段一句 + 节奏标注） ──
 	| {
 			op: "paragraph.insert"
 			/** 自选 id（缺省宿主生成；重复抛 duplicate_id） */
@@ -118,6 +119,10 @@ export type NovelMutation =
 			/** 排序键（缺省 = 该单元末段后继） */
 			orderKey?: OrderKey
 			text: string
+			/** 节奏档位（必填，对齐 leaf 节奏拍八档） */
+			rhythm: LeafRhythm
+			/** 情绪强度 1-5（必填） */
+			intensity: number
 	  }
 	| {
 			op: "paragraph.update"
@@ -129,6 +134,10 @@ export type NovelMutation =
 			storyUnitId?: StoryUnitId
 			/** 重排序 */
 			orderKey?: OrderKey
+			/** 改节奏档位（未提供保留） */
+			rhythm?: LeafRhythm
+			/** 改情绪强度（未提供保留） */
+			intensity?: number
 	  }
 	| { op: "paragraph.delete"; paragraphId: ParagraphId; baseRevision: NovelRevision }
 	// ── 发布 ──

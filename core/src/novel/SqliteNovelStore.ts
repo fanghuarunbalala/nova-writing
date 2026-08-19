@@ -90,7 +90,8 @@ export class SqliteNovelStore implements NovelStore {
 			);
 			CREATE TABLE IF NOT EXISTS paragraphs (
 				id TEXT PRIMARY KEY, entity_version INTEGER NOT NULL, story_unit_id TEXT NOT NULL,
-				order_key TEXT NOT NULL, text TEXT NOT NULL
+				order_key TEXT NOT NULL, text TEXT NOT NULL,
+				rhythm TEXT NOT NULL DEFAULT 'hold', intensity INTEGER NOT NULL DEFAULT 3
 			);
 			CREATE TABLE IF NOT EXISTS volumes (
 				id TEXT PRIMARY KEY, entity_version INTEGER NOT NULL, order_key TEXT NOT NULL, title TEXT NOT NULL
@@ -107,6 +108,7 @@ export class SqliteNovelStore implements NovelStore {
 				PRIMARY KEY (chapter_id, paragraph_id)
 			);
 		`);
+		this.migrateParagraphBeatColumns();
 		this.migrateChapterSelections();
 		this.db
 			.prepare("INSERT OR IGNORE INTO outline (id, novel_id) VALUES (?, ?)")
@@ -294,18 +296,32 @@ export class SqliteNovelStore implements NovelStore {
 					storyUnitId: m.storyUnitId,
 					orderKey: m.orderKey ?? nextOrderKey(this.maxOrderKey("paragraphs WHERE story_unit_id = ?", m.storyUnitId)),
 					text: m.text,
+					rhythm: m.rhythm,
+					intensity: m.intensity,
 				} as Paragraph;
 				this.db
-					.prepare("INSERT INTO paragraphs (id, entity_version, story_unit_id, order_key, text) VALUES (?, ?, ?, ?, ?)")
-					.run(p.id, p.entityVersion, p.storyUnitId, p.orderKey, p.text);
+					.prepare(
+						"INSERT INTO paragraphs (id, entity_version, story_unit_id, order_key, text, rhythm, intensity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+					)
+					.run(p.id, p.entityVersion, p.storyUnitId, p.orderKey, p.text, p.rhythm, p.intensity);
 				return this.result(p.entityVersion, p.id, "paragraph");
 			}
 			case "paragraph.update": {
 				const p = this.getParagraph(m.paragraphId);
 				this.checkRevision(p.entityVersion, m.baseRevision, p.id);
 				this.db
-					.prepare("UPDATE paragraphs SET text = ?, story_unit_id = ?, order_key = ?, entity_version = ? WHERE id = ?")
-					.run(m.text ?? p.text, m.storyUnitId ?? p.storyUnitId, m.orderKey ?? p.orderKey, p.entityVersion + 1, p.id);
+					.prepare(
+						"UPDATE paragraphs SET text = ?, story_unit_id = ?, order_key = ?, rhythm = ?, intensity = ?, entity_version = ? WHERE id = ?",
+					)
+					.run(
+						m.text ?? p.text,
+						m.storyUnitId ?? p.storyUnitId,
+						m.orderKey ?? p.orderKey,
+						m.rhythm ?? p.rhythm,
+						m.intensity ?? p.intensity,
+						p.entityVersion + 1,
+						p.id,
+					);
 				return this.result(p.entityVersion + 1, p.id, "paragraph");
 			}
 			case "paragraph.delete": {
@@ -482,6 +498,21 @@ export class SqliteNovelStore implements NovelStore {
 			map.set(r.chapter_id, list);
 		}
 		return map;
+	}
+
+	/** 节奏标注列迁移：旧库 paragraphs 缺 rhythm/intensity → ADD COLUMN 带默认值（旧行=hold/3） */
+	private migrateParagraphBeatColumns(): void {
+		const columns = new Set(
+			(this.db.prepare("PRAGMA table_info(paragraphs)").all() as unknown as Array<{ name: string }>).map(
+				(c) => c.name,
+			),
+		);
+		if (!columns.has("rhythm")) {
+			this.db.exec("ALTER TABLE paragraphs ADD COLUMN rhythm TEXT NOT NULL DEFAULT 'hold'");
+		}
+		if (!columns.has("intensity")) {
+			this.db.exec("ALTER TABLE paragraphs ADD COLUMN intensity INTEGER NOT NULL DEFAULT 3");
+		}
 	}
 
 	/** P3 一次性迁移：存量 chapter.story_unit_id 指针展开为该单元全部段落的选择，随后清空指针 */
@@ -788,6 +819,9 @@ function toParagraph(row: Row): Paragraph {
 		storyUnitId: row.story_unit_id as string,
 		orderKey: row.order_key as string,
 		text: row.text as string,
+		// 迁移默认值兜底：列带 DEFAULT，正常路径不触发；手工构造的行才可能缺
+		rhythm: (row.rhythm as Paragraph["rhythm"]) ?? "hold",
+		intensity: (row.intensity as number) ?? 3,
 	} as Paragraph;
 }
 

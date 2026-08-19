@@ -54,8 +54,8 @@ async function seedSelectionScene(store: NovelStore): Promise<{
   const chapterId = `ch${n}`;
   await store.mutate({ op: "publication.volume.create", id: volumeId, title: "第一卷" });
   await store.mutate({ op: "outline.storyUnit.create", id: unitId, title: "场景" });
-  await store.mutate({ op: "paragraph.insert", id: p1, storyUnitId: unitId as never, text: "第一段。" });
-  await store.mutate({ op: "paragraph.insert", id: p2, storyUnitId: unitId as never, text: "第二段。" });
+  await store.mutate({ op: "paragraph.insert", id: p1, storyUnitId: unitId as never, text: "第一段。", rhythm: "hold", intensity: 3 });
+  await store.mutate({ op: "paragraph.insert", id: p2, storyUnitId: unitId as never, text: "第二段。", rhythm: "hold", intensity: 3 });
   await store.mutate({
     op: "publication.chapter.create",
     id: chapterId,
@@ -170,7 +170,7 @@ describe("P3 章选择与级联（两 store 同语义）", () => {
       const n = ++seedSeq;
       // 场景一：失败批（stale/缺失项回滚）与并发裸 mutate——裸写不得被批回滚连带丢弃
       const failing = store.mutateBatch([
-        { op: "paragraph.insert", id: `fa${n}`, storyUnitId: unitId as never, text: "将被回滚。" },
+        { op: "paragraph.insert", id: `fa${n}`, storyUnitId: unitId as never, text: "将被回滚。", rhythm: "hold", intensity: 3 },
         { op: "paragraph.delete", paragraphId: "ghost" as never, baseRevision: 1 },
       ]);
       const concurrent = store.mutate({
@@ -178,6 +178,8 @@ describe("P3 章选择与级联（两 store 同语义）", () => {
         id: `fb${n}`,
         storyUnitId: unitId as never,
         text: "并发插入。",
+        rhythm: "hold",
+        intensity: 3,
       });
       const [failResult, okResult] = await Promise.allSettled([failing, concurrent]);
       expect(failResult.status).toBe("rejected");
@@ -185,12 +187,12 @@ describe("P3 章选择与级联（两 store 同语义）", () => {
       // 场景二：两个并发批（修复前第二个 BEGIN 报嵌套事务错）
       await Promise.all([
         store.mutateBatch([
-          { op: "paragraph.insert", id: `ca${n}`, storyUnitId: unitId as never, text: "并发批一。" },
-          { op: "paragraph.insert", id: `ca2${n}`, storyUnitId: unitId as never, text: "并发批一续。" },
+          { op: "paragraph.insert", id: `ca${n}`, storyUnitId: unitId as never, text: "并发批一。", rhythm: "hold", intensity: 3 },
+          { op: "paragraph.insert", id: `ca2${n}`, storyUnitId: unitId as never, text: "并发批一续。", rhythm: "hold", intensity: 3 },
         ]),
         store.mutateBatch([
-          { op: "paragraph.insert", id: `cb${n}`, storyUnitId: unitId as never, text: "并发批二。" },
-          { op: "paragraph.insert", id: `cb2${n}`, storyUnitId: unitId as never, text: "并发批二续。" },
+          { op: "paragraph.insert", id: `cb${n}`, storyUnitId: unitId as never, text: "并发批二。", rhythm: "hold", intensity: 3 },
+          { op: "paragraph.insert", id: `cb2${n}`, storyUnitId: unitId as never, text: "并发批二续。", rhythm: "hold", intensity: 3 },
         ]),
       ]);
       const paras = (await store.query({ op: "paragraphs.list", storyUnitId: unitId as never })) as unknown[];

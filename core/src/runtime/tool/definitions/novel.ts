@@ -21,6 +21,7 @@ import type { ToolCall } from "../../provider/types.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 import type { NovelMutateResult } from "../../../novel/contract/snapshot.js";
 import type { OrderKey } from "../../../novel/model/outline.js";
+import { LEAF_RHYTHMS } from "../../../novel/model/outline.js";
 import { ID_PATTERN, ORDER_KEY_PATTERN } from "../../../novel/keys.js";
 import {
   novelReadPreview,
@@ -238,7 +239,7 @@ const LEAF_PLAN_PROPERTIES: Record<string, unknown> = {
         orderKey: { type: "string", minLength: 4, maxLength: 512, description: "排序键" },
         rhythm: {
           type: "string",
-          enum: ["setup", "rise", "hold", "turn", "climax", "fall", "release", "aftermath"],
+          enum: [...LEAF_RHYTHMS],
           description: "节拍：setup=铺垫 / rise=上升 / hold=维持 / turn=转折 / climax=高潮 / fall=回落 / release=释放 / aftermath=余波",
         },
         intensity: { type: "integer", minimum: 1, maximum: 5, description: "强度 1-5" },
@@ -445,7 +446,7 @@ const READ_ALLOWED_PARAMS: Record<NovelKind | "overview", ReadonlySet<string>> =
 const WRITE_ITEM_FIELDS: Record<NovelKind, ReadonlySet<string>> = {
   character: new Set(["id", "name", "aliases", "summary", "initialState", "authorNotes"]),
   location: new Set(["id", "name", "aliases", "summary", "initialState", "authorNotes"]),
-  paragraph: new Set(["id", "storyUnitId", "orderKey", "text"]),
+  paragraph: new Set(["id", "storyUnitId", "orderKey", "text", "rhythm", "intensity"]),
   volume: new Set(["id", "title", "orderKey"]),
   chapter: new Set(["id", "volumeId", "title", "storyUnitId", "paragraphIds", "orderKey"]),
   story_unit: new Set([
@@ -458,7 +459,7 @@ const WRITE_ITEM_FIELDS: Record<NovelKind, ReadonlySet<string>> = {
 const WRITE_REQUIRED_FIELDS: Record<NovelKind, readonly string[]> = {
   character: ["name"],
   location: ["name"],
-  paragraph: ["storyUnitId", "text"],
+  paragraph: ["storyUnitId", "text", "rhythm"], // intensity 非字符串，必填与范围在 validateParagraphBeat 校验
   volume: ["title"],
   chapter: ["title"],
   story_unit: ["title"],
@@ -468,7 +469,7 @@ const WRITE_REQUIRED_FIELDS: Record<NovelKind, readonly string[]> = {
 const EDIT_VALUE_FIELDS: Record<NovelKind, ReadonlySet<string>> = {
   character: new Set(["name", "aliases", "summary", "initialState", "authorNotes"]),
   location: new Set(["name", "aliases", "summary", "initialState", "authorNotes"]),
-  paragraph: new Set(["storyUnitId", "orderKey", "text"]),
+  paragraph: new Set(["storyUnitId", "orderKey", "text", "rhythm", "intensity"]),
   volume: new Set(["title", "orderKey"]),
   chapter: new Set(["title", "orderKey", "volumeId", "paragraphIds"]),
   story_unit: new Set([
@@ -504,6 +505,25 @@ function validateReadArgs(toolName: string, args: Record<string, unknown>): Nove
   return kind as NovelKind | "overview";
 }
 
+/** paragraph 节奏标注校验：rhythm 八档枚举 + intensity 1-5 整数（Write 必填；Edit 出现即校验） */
+function validateParagraphBeat(
+  toolName: string,
+  v: Record<string, unknown>,
+  required: boolean,
+): void {
+  if (required || v.rhythm !== undefined) {
+    if (!LEAF_RHYTHMS.includes(v.rhythm as never)) {
+      throw argsFail(toolName, `paragraph 的 rhythm 必须是 ${LEAF_RHYTHMS.join(" / ")} 之一`);
+    }
+  }
+  if (required || v.intensity !== undefined) {
+    const n = v.intensity;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > 5) {
+      throw argsFail(toolName, "paragraph 的 intensity 必填且必须是 1-5 的整数（情绪强度）");
+    }
+  }
+}
+
 /** 校验 NovelWrite 参数：kind 合法（无 overview）+ values 项字段与 kind 匹配 + 必填齐备 */
 function validateWriteArgs(
   toolName: string,
@@ -537,6 +557,7 @@ function validateWriteArgs(
         throw argsFail(toolName, `kind=${kind} 的 values 项缺少必填字段 ${field}`);
       }
     }
+    if (kind === "paragraph") validateParagraphBeat(toolName, v, true);
   }
   return { kind: kind as NovelKind, values };
 }
@@ -582,6 +603,7 @@ function validateEditArgs(
         );
       }
     }
+    if (kind === "paragraph") validateParagraphBeat(toolName, value, false);
   }
   return {
     kind: kind as NovelKind,
@@ -648,7 +670,7 @@ function novelRead(handle: NovelHandle): ToolDef {
       "- overview：返回 { title, counts: { storyUnits, characters, locations, volumes, chapters, paragraphs } }——开卷、汇报进度先看总览。",
       "- character / location：省略 id 列出全部（含 id/name/entityVersion）；传 characterId / locationId 返回单个完整档案（aliases/summary/initialState/authorNotes）。",
       "- story_unit：省略 storyUnitId 返回全树平铺；传 storyUnitId 返回单个单元；includePlans=true 各单元附 leaf 计划与叶完成度 progress。",
-      "- paragraph：传 paragraphId 返回单段；传 storyUnitId 返回该单元全部段落（orderKey 升序）；都省略返回全部段落（按单元分组）。",
+      "- paragraph：传 paragraphId 返回单段；传 storyUnitId 返回该单元全部段落（orderKey 升序，各段附 rhythm/intensity 节奏标注）；都省略返回全部段落（按单元分组）。",
       "- volume：无参数，恒返回全部卷（id/title/orderKey，不含章）。",
       "- chapter：省略参数返回全部章；volumeId 过滤某卷；chapterId 只读该章；includeContent=true 附带每章按 paragraphIds 选择取回的正文段落。",
       "",
@@ -850,7 +872,7 @@ function novelWrite(handle: NovelHandle, requireApproval: boolean): ToolDef {
       "",
       "## 用法",
       "- character / location：name 必填；aliases 别名列表（≤32 项）；summary 摘要；initialState 初始状态；authorNotes 作者备注（不进正文）。不做重名校验——查重先 NovelRead。",
-      "- paragraph：storyUnitId（推荐 scene 级单元，正文落在大纲树末端）+ text（该段完整正文，一个自然段一项，不合并多段）必填；orderKey 可选（4 位大写十六进制组，缺省排到该单元末尾）。",
+      "- paragraph：storyUnitId（推荐 scene 级单元，正文落在大纲树末端）+ text（一句一项——网文范式每句一段）+ rhythm（节奏档位八档之一）+ intensity（情绪强度 1-5）必填；orderKey 可选（4 位大写十六进制组，缺省排到该单元末尾）。rhythm/intensity 对齐场景节奏拍，是情绪曲线检查的数据源。",
       "- volume：title 必填（1-500 字）；orderKey 可选（缺省排到末卷之后）。",
       "- chapter：title 必填；volumeId 可选（缺省=未归卷）；paragraphIds 可选（章内段落有序选择，可跨单元、可拆分合并重排，引用段落须已存在，缺省空选择）；storyUnitId 仅来源提示（只在创建时可带）；orderKey 可选（同卷排序）。",
       "- story_unit：title 必填（1-500 字）；parentId 缺省=顶层（必须引用已存在单元——不能引用同批先建项，多层结构分批建）；intent 单元意图；synopsis 情节梗概（数百字量级，勿塞正文）；scope 层级（saga/arc/sequence/scene/custom）；planningStatus / realizationStatus 缺省 idea / pending；blockState / abandonment / leaf 可随创建携带（leaf 引用的角色/地点 id 须已存在）。",
@@ -891,7 +913,13 @@ function novelWrite(handle: NovelHandle, requireApproval: boolean): ToolDef {
               authorNotes: { type: "string", maxLength: 50000, description: "作者备注（character / location；不进正文）" },
               storyUnitId: { type: "string", pattern: ID_PATTERN, description: "paragraph：所属大纲单元（必填，推荐 scene 级）；chapter：来源提示（仅创建可带）" },
               orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "排序键（paragraph 段间 / volume 卷间 / chapter 同卷 / story_unit 兄弟间；缺省排到末尾）" },
-              text: { type: "string", description: "段落完整正文（paragraph 必填；一个自然段一项）" },
+              text: { type: "string", description: "段落完整正文（paragraph 必填；一句一项——网文范式每句一段）" },
+              rhythm: {
+                type: "string",
+                enum: [...LEAF_RHYTHMS],
+                description: "段落节奏档位（paragraph 必填；对齐场景节奏拍）：setup=铺垫 / rise=上升 / hold=维持 / turn=转折 / climax=高潮 / fall=回落 / release=释放 / aftermath=余波",
+              },
+              intensity: { type: "integer", minimum: 1, maximum: 5, description: "段落情绪强度（paragraph 必填）1-5，情绪曲线检查的数据源" },
               title: { type: "string", minLength: 1, maxLength: 500, description: "标题（volume / chapter / story_unit 必填）" },
               volumeId: { type: "string", pattern: ID_PATTERN, description: "所属卷 id（chapter；缺省 = 未归卷）" },
               paragraphIds: { type: "array", items: { type: "string", pattern: ID_PATTERN }, maxItems: 4096, description: "章内段落有序选择（chapter；可跨单元；引用段落须已存在）" },
@@ -954,12 +982,23 @@ function novelWrite(handle: NovelHandle, requireApproval: boolean): ToolDef {
             break;
           }
           case "paragraph": {
-            mutations = (values as Array<{ id?: string; storyUnitId: string; orderKey?: string; text: string }>).map((v) => ({
+            mutations = (
+              values as Array<{
+                id?: string;
+                storyUnitId: string;
+                orderKey?: string;
+                text: string;
+                rhythm: (typeof LEAF_RHYTHMS)[number];
+                intensity: number;
+              }>
+            ).map((v) => ({
               op: "paragraph.insert",
               id: v.id,
               storyUnitId: v.storyUnitId as never,
               orderKey: v.orderKey as OrderKey | undefined,
               text: v.text,
+              rhythm: v.rhythm,
+              intensity: v.intensity,
             }));
             break;
           }
@@ -1148,7 +1187,9 @@ function novelEdit(handle: NovelHandle, requireApproval: boolean): ToolDef {
                   authorNotes: { type: ["string", "null"], maxLength: 50000, description: "作者备注（null 清空；character / location）" },
                   storyUnitId: { type: "string", pattern: ID_PATTERN, description: "移动到该大纲单元（仅 paragraph；章的来源提示不可改）" },
                   orderKey: { type: "string", pattern: ORDER_KEY_PATTERN, description: "重排序（paragraph 段间 / volume 卷间 / chapter 同卷 / story_unit 兄弟间）" },
-                  text: { type: "string", description: "替换后的完整段落文本（仅 paragraph）" },
+                  text: { type: "string", description: "替换后的完整段落文本（仅 paragraph；一句一项——网文范式每句一段）" },
+                  rhythm: { type: "string", enum: [...LEAF_RHYTHMS], description: "改段落节奏档位（仅 paragraph；八档同场景节奏拍）" },
+                  intensity: { type: "integer", minimum: 1, maximum: 5, description: "改段落情绪强度（仅 paragraph）1-5" },
                   title: { type: "string", minLength: 1, maxLength: 500, description: "标题（覆盖；volume / chapter / story_unit）" },
                   volumeId: { type: "string", pattern: ID_PATTERN, description: "所属卷 id（仅 chapter；调整归卷）" },
                   paragraphIds: { type: ["array", "null"], items: { type: "string", pattern: ID_PATTERN }, maxItems: 4096, description: "全量替换有序段落选择（仅 chapter；null 清空；引用段落须已存在）" },
@@ -1204,13 +1245,27 @@ function novelEdit(handle: NovelHandle, requireApproval: boolean): ToolDef {
             break;
           }
           case "paragraph": {
-            mutations = (items as unknown as Array<TargetedItem & { value: { text?: string; storyUnitId?: string; orderKey?: string } }>).map((v) => ({
+            mutations = (
+              items as unknown as Array<
+                TargetedItem & {
+                  value: {
+                    text?: string;
+                    storyUnitId?: string;
+                    orderKey?: string;
+                    rhythm?: (typeof LEAF_RHYTHMS)[number];
+                    intensity?: number;
+                  };
+                }
+              >
+            ).map((v) => ({
               op: "paragraph.update",
               paragraphId: v.id as never,
               baseRevision: v.baseRevision,
               text: v.value.text,
               storyUnitId: v.value.storyUnitId as never | undefined,
               orderKey: v.value.orderKey as OrderKey | undefined,
+              rhythm: v.value.rhythm,
+              intensity: v.value.intensity,
             }));
             break;
           }

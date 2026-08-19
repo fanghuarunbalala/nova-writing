@@ -17,6 +17,7 @@ import type { ConversationCatalogStore } from "../../../domains/conversation/sto
 import type { ToastStore } from "../../../shared/state/ToastStore.js";
 import { useExternalStore } from "../../../shared/state/useExternalStore.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
+import { LoadingState } from "../../../shared/primitives/LoadingState.js";
 import styles from "./ConversationListSection.module.css";
 import dirStyles from "./directory.module.css";
 
@@ -140,7 +141,9 @@ export function ConversationListSection({
             aria-label="搜索对话"
           />
         </div>
-        {snapshot.conversations.length === 0 ? (
+        {snapshot.phase === "loading" && snapshot.conversations.length === 0 ? (
+          <LoadingState label="对话载入中" />
+        ) : snapshot.conversations.length === 0 ? (
           <div className={styles.empty}>暂无对话 · 点击上方创建</div>
         ) : filtered.length === 0 ? (
           <div className={styles.empty}>没有匹配「{query.trim()}」的对话</div>

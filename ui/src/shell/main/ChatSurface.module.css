@@ -26,6 +26,15 @@
   z-index: var(--z-decor);
 }
 
+/* 目录装载期间的整面加载态（无 activeId 且 phase=loading 时替代空态） */
+.loadingSurface {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 0;
+  animation: var(--anim-view-in) var(--duration-base) var(--ease-out);
+}
+
 .composeBadge {
   font-size: var(--fs-12);
   padding: var(--space-2px) var(--space-10px);

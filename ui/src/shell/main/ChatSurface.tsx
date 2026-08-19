@@ -27,6 +27,7 @@ import { useExitPhase } from "../../shared/state/useExitPhase.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
+import { LoadingState } from "../../shared/primitives/LoadingState.js";
 import { Dropdown, DropdownItem, DropdownSeparator } from "../../shared/primitives/Dropdown.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { ConversationProjectionBinding } from "../../domains/conversation/binding/ConversationProjectionBinding.js";
@@ -90,6 +91,14 @@ export function ChatSurface({
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
   if (activeId === undefined) {
+    // 目录装载中不亮「开始创作」空态（首开/切换瞬间闪空），先给加载态
+    if (catalog.phase === "loading") {
+      return (
+        <div className={styles.loadingSurface}>
+          <LoadingState label="对话载入中" />
+        </div>
+      );
+    }
     return <ChatEmptyState onCreate={onCreateConversation} />;
   }
   const activeItem = catalog.conversations.find((item) => item.id === activeId);

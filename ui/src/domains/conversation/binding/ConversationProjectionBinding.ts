@@ -4,6 +4,7 @@ import type {
   ConversationHandle,
   ConversationMode,
   ConversationSystemControl,
+  ConversationUserMessage,
   Logger,
   NovelApiClient,
   Receipt,
@@ -85,9 +86,9 @@ export class ConversationProjectionBinding {
     return tracked;
   }
 
-  /** 发送用户消息（run lane）。 */
-  sendUserMessage(text: string): Promise<Receipt> {
-    return this.requireHandle().sendUserMessage({ text });
+  /** 发送用户消息（run lane；references 由 core 序列化为实体标签追加正文）。 */
+  sendUserMessage(message: ConversationUserMessage): Promise<Receipt> {
+    return this.requireHandle().sendUserMessage(message);
   }
 
   /** 发送系统控制（control lane：mode.set / stop / reload.config）。 */

@@ -8,6 +8,7 @@
  * 引导线。阻塞/废弃原因不在树行显示（SB-7 口径），由单元详情页横幅承载。
  */
 import { ChevronDown, ChevronRight } from "lucide-react";
+import type { DragEvent } from "react";
 import { Icon, StatusChip } from "../../../../shared/primitives/index.js";
 import type { StoryOutlineTreeNode } from "../projection/StoryOutlineTreeProjection.js";
 import { REAL_STATUS, SCOPE_TYPE } from "../outlineStatus.js";
@@ -20,6 +21,10 @@ export interface StoryOutlineTreeRowProps {
   readonly selected: boolean;
   readonly onSelect: () => void;
   readonly onToggleExpand: () => void;
+  /** 可拖（拖入对话输入框作引用；右栏目录开启） */
+  readonly draggable?: boolean;
+  /** 拖拽开始（宿主写入引用载荷） */
+  readonly onDragStart?: (event: DragEvent<HTMLElement>) => void;
 }
 
 export function StoryOutlineTreeRow({
@@ -29,6 +34,8 @@ export function StoryOutlineTreeRow({
   selected,
   onSelect,
   onToggleExpand,
+  draggable = false,
+  onDragStart,
 }: StoryOutlineTreeRowProps) {
   const hasChildren = unit.children.length > 0;
   const real = REAL_STATUS[unit.realization];
@@ -40,6 +47,8 @@ export function StoryOutlineTreeRow({
       className={[styles.row, selected ? styles.selected : ""].filter(Boolean).join(" ")}
       data-depth={depth}
       data-expanded={expanded ? "true" : "false"}
+      draggable={draggable}
+      onDragStart={onDragStart}
     >
       {hasChildren ? (
         <button

@@ -21,6 +21,7 @@ import { ConversationTimeline } from "../../domains/conversation/components/Conv
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
+import type { ComposerDraftStore } from "../../domains/conversation/store/ComposerDraftStore.js";
 import { ApprovalPendingBar } from "../../domains/approval/components/ApprovalPendingBar.js";
 import { useExitPhase } from "../../shared/state/useExitPhase.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
@@ -63,6 +64,8 @@ export interface ChatSurfaceProps {
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
+  /** 引用草稿 store（右栏拖入的实体引用按会话持久化；传给 composer 引用栏） */
+  readonly composerDraft?: ComposerDraftStore;
 }
 
 export function ChatSurface({
@@ -82,6 +85,7 @@ export function ChatSurface({
   onReferenceClick,
   resolveReference,
   onNotify,
+  composerDraft,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
@@ -118,6 +122,7 @@ export function ChatSurface({
       onReferenceClick={onReferenceClick}
       resolveReference={resolveReference}
       onNotify={onNotify}
+      composerDraft={composerDraft}
     />
   );
 }
@@ -144,6 +149,7 @@ interface ActiveChatSurfaceProps {
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
+  readonly composerDraft?: ComposerDraftStore;
 }
 
 function ActiveChatSurface({
@@ -167,6 +173,7 @@ function ActiveChatSurface({
   onReferenceClick,
   resolveReference,
   onNotify,
+  composerDraft,
 }: ActiveChatSurfaceProps) {
   const session = useActiveConversationSession(conversationBinding);
   const { snapshot, sendUserMessage, sendSystemControl, getConversationMode, resume } = session;
@@ -213,7 +220,13 @@ function ActiveChatSurface({
   // queued（生成/审批进行中再发送）：run 边界事件在开跑时才发射，琥珀「排队中」秒表。
   // 真实 user 项出现 N 条（run 开跑）即移除队首 N 条，失败按 id 回收。
   const [queuedSends, setQueuedSends] = useState<
-    readonly { id: number; phase: "flight" | "queued"; text: string; at: number }[]
+    readonly {
+      id: number;
+      phase: "flight" | "queued";
+      text: string;
+      references?: readonly { readonly kind: "character" | "location" | "outline" | "chapter" | "paragraph"; readonly id: string; readonly label: string }[];
+      at: number;
+    }[]
   >([]);
   const queuedSeqRef = useRef(0);
 
@@ -274,6 +287,7 @@ function ActiveChatSurface({
         text: queued.text,
         queuedAt: queued.at,
         phase: queued.phase,
+        references: queued.references,
       })),
       ...askItems,
     ],
@@ -400,6 +414,7 @@ function ActiveChatSurface({
         disconnected={runtime.state === "disconnected"}
         mode={mode}
         pendingMode={pendingMode}
+        draftStore={composerDraft}
         onModeChange={(next) => {
           // 无乐观本地回显：mode.pending 事件回显「待生效」，mode.changed 落 active
           void sendSystemControl({ type: "mode.set", mode: next }).catch(() => {
@@ -408,7 +423,10 @@ function ActiveChatSurface({
         }}
         onSend={(input) => {
           // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
-          debugLog("[renderer] onSend 触发:", input.text.slice(0, 40));
+          debugLog("[renderer] onSend 触发:", {
+            text: input.text.slice(0, 40),
+            references: input.references.map((reference) => `${reference.kind}:${reference.label}`),
+          });
           // 无条件乐观回显：空闲发送 flight（「发送中」旋转图标，落定即止）；
           // 生成/思考/审批中发送 queued（「排队中」秒表，等上一 run 收口接续）。
           const phase =
@@ -426,9 +444,9 @@ function ActiveChatSurface({
           });
           setQueuedSends((current) => [
             ...current,
-            { id: ghostId, phase, text: input.text, at: Date.now() },
+            { id: ghostId, phase, text: input.text, references: input.references, at: Date.now() },
           ]);
-          void sendUserMessage(input.text)
+          void sendUserMessage(input)
             .then((receipt) => {
               debugLog("[renderer] send resolved:", JSON.stringify(receipt));
               setSendError(undefined);

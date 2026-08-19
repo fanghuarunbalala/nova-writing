@@ -183,6 +183,14 @@ export class ManuscriptStructureStore extends WorkspaceDomainStore<ManuscriptStr
     return this.versionsById.get(paragraphId);
   }
 
+  /** 段落 → 所属章 id 反查（右栏 paragraph 引用定位开章详情页用）；未命中返回 undefined */
+  findChapterByParagraphId(paragraphId: string): string | undefined {
+    for (const chapter of this.snapshot.chapters) {
+      if (chapter.paragraphIds.includes(paragraphId)) return chapter.chapterId;
+    }
+    return undefined;
+  }
+
   /**
    * 新增段落（P3 选择模型）：挂靠到章选择末段的单元，并追加进章选择。
    * 单个 mutateBatch 批内原子（客户端预生成 id 使两步无结果依赖）：

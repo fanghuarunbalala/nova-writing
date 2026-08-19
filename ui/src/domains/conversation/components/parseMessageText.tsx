@@ -19,6 +19,45 @@ const INLINE_TAG_PATTERN = new RegExp(
   "g",
 );
 
+/** 整行仅由引用标签构成（core 序列化格式：正文 + "\n" + 标签行…）。 */
+const TAG_ONLY_LINE_PATTERN = new RegExp(
+  `^(?:<(?:${REF_KIND})\\s+id="[^"]+"(?:\\s+name="[^"]*")?\\s*(?:\\/>|>(?:[^<]*)<\\/(?:${REF_KIND})>))+$`,
+);
+
+export interface SplitTrailingReferencesResult {
+  /** 剥离尾部引用标签行后的正文（纯引用消息为空串） */
+  readonly text: string;
+  /** 尾部引用标签解析出的引用（保持原顺序） */
+  readonly references: readonly MessageReference[];
+}
+
+/**
+ * 剥离用户消息尾部的引用标签块（core 把 references 序列化为整行标签追加在
+ * 正文后）：气泡把这些渲染为顶部 chips 行（对齐 demo .msgRefs），正文部分
+ * 继续走 parseMessageText（正文中手写的内联标签仍按行内 chip 渲染）。
+ */
+export function splitTrailingReferences(text: string): SplitTrailingReferencesResult {
+  const lines = text.split("\n");
+  let cut = lines.length;
+  while (cut > 0 && TAG_ONLY_LINE_PATTERN.test(lines[cut - 1] ?? "")) cut -= 1;
+  if (cut === lines.length) return { text, references: [] };
+  const tagBlock = lines.slice(cut).join("\n");
+  const references: MessageReference[] = [];
+  let match: RegExpExecArray | null;
+  INLINE_TAG_PATTERN.lastIndex = 0;
+  while ((match = INLINE_TAG_PATTERN.exec(tagBlock)) !== null) {
+    const name = match[3];
+    const inner = match[4];
+    const label = name !== undefined && name !== "" ? name : (inner ?? "");
+    references.push({
+      refKind: match[1] as MessageReference["refKind"],
+      id: match[2]!,
+      ...(label !== "" ? { label } : {}),
+    });
+  }
+  return { text: lines.slice(0, cut).join("\n").replace(/\n+$/, ""), references };
+}
+
 export function parseMessageText(
   text: string,
   onReferenceClick?: (reference: MessageReference) => void,

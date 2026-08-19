@@ -40,6 +40,21 @@
   padding-left: var(--space-38px);
 }
 
+/* 深层（saga→arc→sequence→scene 起 depth≥3）：延续 20px 步进梯度（18→38→58→…），
+   缺规则会回落到基础内距（7px）导致深层行视觉上「缩进反而更小」；
+   非刻度精确值经 calc 组合既有 token，避免新增快照 */
+.row[data-depth="3"] {
+  padding-left: calc(var(--space-38px) + var(--space-5));
+}
+
+.row[data-depth="4"] {
+  padding-left: calc(var(--space-38px) + var(--space-5) * 2);
+}
+
+.row[data-depth="5"] {
+  padding-left: calc(var(--space-38px) + var(--space-5) * 3);
+}
+
 .row[data-depth="1"]::before {
   content: "";
   position: absolute;
@@ -80,6 +95,78 @@
   content: "";
   position: absolute;
   left: var(--space-29px);
+  top: 50%;
+  width: 9px;
+  height: 1px;
+  background: var(--color-border-strong);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.row[data-depth="3"]::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-29px) + var(--space-5));
+  top: calc(-1 * var(--space-1));
+  bottom: calc(-1 * var(--space-1));
+  width: 1px;
+  background: var(--color-border-strong);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.row[data-depth="3"]::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-29px) + var(--space-5));
+  top: 50%;
+  width: 9px;
+  height: 1px;
+  background: var(--color-border-strong);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.row[data-depth="4"]::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-29px) + var(--space-5) * 2);
+  top: calc(-1 * var(--space-1));
+  bottom: calc(-1 * var(--space-1));
+  width: 1px;
+  background: var(--color-border-strong);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.row[data-depth="4"]::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-29px) + var(--space-5) * 2);
+  top: 50%;
+  width: 9px;
+  height: 1px;
+  background: var(--color-border-strong);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.row[data-depth="5"]::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-29px) + var(--space-5) * 3);
+  top: calc(-1 * var(--space-1));
+  bottom: calc(-1 * var(--space-1));
+  width: 1px;
+  background: var(--color-border-strong);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.row[data-depth="5"]::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-29px) + var(--space-5) * 3);
   top: 50%;
   width: 9px;
   height: 1px;

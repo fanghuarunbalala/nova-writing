@@ -101,3 +101,9 @@
   width: 15px;
   height: 15px;
 }
+
+/* 气泡顶部引用 chips 行（demo .msgRefs）：剥离的尾部标签渲染为紧凑 chips */
+.references {
+  display: flex;
+  margin-bottom: var(--space-5px);
+}

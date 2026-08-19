@@ -1,0 +1,78 @@
+/**
+ * ReferenceChips 视觉（demo v0.10 .refTray/.refChip）：pill 形引用 chip，
+ * 图标 + 名称 + ×（removable）；hover 浮起。
+ */
+
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5px);
+  /* 对齐 demo .refTray：margin 2px 2px 6px（chips 直排于状态行下，无外框） */
+  margin: var(--space-2px) var(--space-2px) var(--space-6px);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  /* 对齐 demo .refTrayChip：padding 2px 4px 2px 9px、gap 4px */
+  gap: var(--space-4px);
+  max-width: 100%;
+  padding: var(--space-2px) var(--space-4px) var(--space-2px) var(--space-9px);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-8-transparent);
+  color: var(--color-accent-ink);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-medium);
+}
+
+.chipLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipX {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.chipX:hover {
+  opacity: 1;
+  background: color-mix(in oklab, var(--color-accent) 18%, transparent);
+}
+
+/* ============ 紧凑变体（气泡 / 幽灵项，demo .msgRefs .refChip） ============ */
+.trayDense {
+  margin: 0;
+  gap: var(--space-4px);
+}
+
+.chipDense {
+  padding: 1px var(--space-8px);
+  font-size: var(--fs-10);
+}
+
+button.chip {
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+button.chip:hover {
+  background: var(--color-accent-11);
+}

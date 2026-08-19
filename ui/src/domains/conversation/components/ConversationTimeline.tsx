@@ -226,7 +226,14 @@ function renderItem(item: TimelineItem, deps: RenderItemDeps): ReactNode {
         />
       );
     case "queued":
-      return <QueuedUserMessage text={item.text} queuedAt={item.queuedAt} phase={item.phase} />;
+      return (
+        <QueuedUserMessage
+          text={item.text}
+          queuedAt={item.queuedAt}
+          phase={item.phase}
+          references={item.references}
+        />
+      );
     case "assistant":
       return (
         <AssistantMessage

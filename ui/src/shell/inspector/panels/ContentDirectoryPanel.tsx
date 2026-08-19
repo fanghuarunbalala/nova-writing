@@ -1,13 +1,14 @@
 /**
  * ContentDirectoryPanel
  *
- * 右栏内容目录：对话视图常驻的四 tab——
- * 大纲（树复用：所有节点点击就地展开简略卡「意图/梗概 + 查看单元详情」，
- * 不直接跳转；子级展开/折叠走行首 chevron）/ 正文（卷章目录复用，章点击跳
- * 内容视图正文位并滚动高亮）/ 人物 / 地点（行点击就地展开详情卡：简介 /
- * 初始状态 / 关联单元 chips +「打开完整档案」跳内容视图）。
- * 关联单元由大纲 leaf 绑定派生；手风琴单开；实体标签点击经
- * ContentDirectoryStore.locate 切 tab + 滚动高亮。
+ * 右栏内容目录（PRD conversation-目录下钻与实体引用，demo v0.10）：列表 ⇄
+ * 下钻详情页两态——
+ * 列表态四 tab：大纲（父级行点击=展开/收起子层级；场景叶行点击=进单元详情）/
+ * 正文（章行点击=进章详情）/ 人物 / 地点（行点击=进档案页）；所有目录行可
+ * 拖入输入框作引用（HTML5 DnD 自定义 MIME，PRD F5）。
+ * 详情态（store.detail）：DirectoryDetailHead（返回 + 标题，locate 闪烁目标）
+ * + DirectoryDetailBody（场景完整 leaf + 段落 / 章·段落 / 档案，段落行可拖）。
+ * locate(detail) 五类直达详情页（paragraph → 章详情 + 段落行闪烁）。
  * 数据复用 chat 视图已加载的域 store（novelChangeBus 自动失效刷新）。
  */
 import { useEffect, useMemo, useRef } from "react";
@@ -22,11 +23,16 @@ import { StoryOutlineTreeProjection } from "../../../domains/novel/outline/proje
 import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import { StoryOutlineTree } from "../../../domains/novel/outline/components/StoryOutlineTree.js";
 import { ManuscriptDirectory } from "../../sidebar/sections/ManuscriptDirectory.js";
+import { setReferenceDragPayload } from "../../../domains/conversation/reference/referenceDnd.js";
 import {
   ContentDirectoryStore,
   type ContentDirectoryTab,
-  type DirectoryEntityKind,
 } from "../ContentDirectoryStore.js";
+import {
+  DirectoryDetailBody,
+  DirectoryDetailHead,
+  type DirectoryDetailContext,
+} from "./ContentDirectoryDetail.js";
 import styles from "./ContentDirectoryPanel.module.css";
 
 const TABS: readonly { readonly id: ContentDirectoryTab; readonly label: string; readonly icon: typeof ListTree }[] = [
@@ -42,14 +48,26 @@ export interface ContentDirectoryPanelProps {
   readonly manuscript: ManuscriptStructureStore;
   readonly characters: CharacterStore;
   readonly locations: LocationStore;
-  /** 大纲详情卡「查看单元详情」→ 跳内容视图单元详情 */
+  /** 单元详情页「查看单元详情」→ 跳内容视图单元详情 */
   readonly onSelectOutlineUnit: (unitId: string) => void;
-  /** 正文 tab 章点击 → 跳内容视图正文位并滚动定位高亮 */
+  /** 章详情页「在正文中查看」/ 段落行点击 → 跳内容视图正文位 */
   readonly onOpenChapter: (chapterId: string) => void;
-  /** 详情卡「打开完整档案」→ 跳内容视图人物档案 */
+  /** 档案页「打开完整档案」→ 跳内容视图人物档案 */
   readonly onOpenCharacter: (characterId: string) => void;
-  /** 详情卡「打开完整档案」→ 跳内容视图地点档案 */
+  /** 档案页「打开完整档案」→ 跳内容视图地点档案 */
   readonly onOpenLocation: (locationId: string) => void;
+}
+
+function findTreeNode(
+  nodes: readonly StoryOutlineTreeNode[],
+  unitId: string,
+): StoryOutlineTreeNode | undefined {
+  for (const node of nodes) {
+    if (node.unitId === unitId) return node;
+    const hit = findTreeNode(node.children, unitId);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
 }
 
 export function ContentDirectoryPanel({
@@ -68,20 +86,8 @@ export function ContentDirectoryPanel({
   const manuscriptSnapshot = useExternalStore(manuscript);
   const characterSnapshot = useExternalStore(characters);
   const locationSnapshot = useExternalStore(locations);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // 关联单元 chips：unitId → 标题（大纲树快照派生）；实体 → unitIds（leaf 绑定派生）
-  const unitTitleById = useMemo(() => {
-    const map = new Map<string, string>();
-    const walk = (nodes: readonly { unitId: string; title: string; children: readonly unknown[] }[]): void => {
-      for (const node of nodes) {
-        map.set(node.unitId, node.title);
-        walk(node.children as readonly { unitId: string; title: string; children: readonly unknown[] }[]);
-      }
-    };
-    walk(outlineSnapshot.tree as never);
-    return map;
-  }, [outlineSnapshot.tree]);
   // storyUnitId → 实现态（正文 tab 章行状态圆点派生用，同 Sidebar 口径）
   const realizationByUnit = useMemo(() => {
     const map = new Map<string, string>();
@@ -94,22 +100,23 @@ export function ContentDirectoryPanel({
     walk(outlineSnapshot.tree);
     return map;
   }, [outlineSnapshot.tree]);
-  const unitIdsOf = (kind: "characters" | "locations", id: string): readonly string[] =>
-    outlineSnapshot.bindings[kind].get(id) ?? [];
 
-  // 实体定位：切 tab 后滚动到目标行并闪烁（nonce 驱动，同一目标重复点击也生效）
+  // 定位闪烁（nonce 驱动重复生效）：paragraph → 章详情页段落行；其余 → 详情标题行
   const locate = dirSnapshot.locate;
   const rowFlashClass = styles.rowFlash ?? "";
   useEffect(() => {
-    if (locate === undefined || scrollRef.current === null || rowFlashClass === "") return;
-    const row = scrollRef.current.querySelector<HTMLElement>(
-      `[data-dir-key="${locate.kind}:${locate.id}"]`,
-    );
-    if (row === null) return;
-    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    row.classList.remove(rowFlashClass);
-    void row.offsetWidth;
-    row.classList.add(rowFlashClass);
+    if (locate === undefined || rootRef.current === null || rowFlashClass === "") return;
+    const target =
+      locate.detail.paragraphId !== undefined
+        ? rootRef.current.querySelector<HTMLElement>(
+            `[data-dir-paragraph="${locate.detail.paragraphId}"]`,
+          )
+        : rootRef.current.querySelector<HTMLElement>("[data-dir-detail-title]");
+    if (target === null) return;
+    target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    target.classList.remove(rowFlashClass);
+    void target.offsetWidth;
+    target.classList.add(rowFlashClass);
   }, [locate, rowFlashClass]);
 
   const workspaceId =
@@ -119,36 +126,59 @@ export function ContentDirectoryPanel({
     [outlineSnapshot.tree],
   );
 
+  const detail = dirSnapshot.detail;
+  const detailCtx: DirectoryDetailContext | undefined =
+    detail !== undefined
+      ? {
+          detail,
+          store,
+          outlineTree,
+          manuscript,
+          characters,
+          locations,
+          onSelectOutlineUnit,
+          onOpenChapter,
+          onOpenCharacter,
+          onOpenLocation,
+        }
+      : undefined;
+
   return (
-    <div className={styles.panel}>
-      <div className={styles.tabs} role="tablist" aria-label="内容目录">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={dirSnapshot.tab === tab.id}
-            className={[styles.tab, dirSnapshot.tab === tab.id ? styles.tabActive : ""]
-              .filter(Boolean)
-              .join(" ")}
-            onClick={() => store.setTab(tab.id)}
-          >
-            <Icon icon={tab.icon} size="sm" />
-            <span>{tab.label}</span>
-            {tab.id === "outline" && outlineCount > 0 ? (
-              <span className={styles.tabCount}>{outlineCount}</span>
-            ) : tab.id === "manuscript" && manuscriptSnapshot.chapters.length > 0 ? (
-              <span className={styles.tabCount}>{manuscriptSnapshot.chapters.length}</span>
-            ) : tab.id === "characters" && characterSnapshot.characters.length > 0 ? (
-              <span className={styles.tabCount}>{characterSnapshot.characters.length}</span>
-            ) : tab.id === "locations" && locationSnapshot.locations.length > 0 ? (
-              <span className={styles.tabCount}>{locationSnapshot.locations.length}</span>
-            ) : null}
-          </button>
-        ))}
-      </div>
-      <div className={styles.scroll} ref={scrollRef}>
-        {dirSnapshot.tab === "outline" ? (
+    <div className={styles.panel} ref={rootRef}>
+      {detailCtx !== undefined ? (
+        <DirectoryDetailHead {...detailCtx} />
+      ) : (
+        <div className={styles.tabs} role="tablist" aria-label="内容目录">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={dirSnapshot.tab === tab.id}
+              className={[styles.tab, dirSnapshot.tab === tab.id ? styles.tabActive : ""]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => store.setTab(tab.id)}
+            >
+              <Icon icon={tab.icon} size="sm" />
+              <span>{tab.label}</span>
+              {tab.id === "outline" && outlineCount > 0 ? (
+                <span className={styles.tabCount}>{outlineCount}</span>
+              ) : tab.id === "manuscript" && manuscriptSnapshot.chapters.length > 0 ? (
+                <span className={styles.tabCount}>{manuscriptSnapshot.chapters.length}</span>
+              ) : tab.id === "characters" && characterSnapshot.characters.length > 0 ? (
+                <span className={styles.tabCount}>{characterSnapshot.characters.length}</span>
+              ) : tab.id === "locations" && locationSnapshot.locations.length > 0 ? (
+                <span className={styles.tabCount}>{locationSnapshot.locations.length}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={styles.scroll}>
+        {detailCtx !== undefined ? (
+          <DirectoryDetailBody {...detailCtx} />
+        ) : dirSnapshot.tab === "outline" ? (
           <StoryOutlineTree
             workspaceId={workspaceId}
             tree={outlineSnapshot.tree}
@@ -156,41 +186,28 @@ export function ContentDirectoryPanel({
             expansionState={outlineSnapshot.expansionState}
             selectedUnitId={outlineSnapshot.selectedUnitId}
             onSelectUnit={(unitId) => {
-              // 所有节点（顶层/父节点/leaf）点击 = 展开/收起详情卡，不直接跳转；
-              // 跳转只走卡内「查看单元详情」，子级展开/折叠走行首 chevron。
-              store.toggleExpand(`outline:${unitId}`);
+              // 叶（场景）行点击 = 进单元详情页；父级行点击 = 展开/收起子层级；
+              // 跳内容视图只走详情页内「查看单元详情」。
+              const node = findTreeNode(outlineSnapshot.tree, unitId);
+              if (node !== undefined && node.children.length === 0) {
+                store.openDetail({ kind: "unit", id: unitId });
+              } else {
+                outlineTree.toggleExpand(unitId);
+              }
             }}
             onToggleExpand={(id) => outlineTree.toggleExpand(id)}
             showLegend={false}
-            renderUnitDetail={(node) => {
-              if (dirSnapshot.expandedKey !== `outline:${node.unitId}`) return null;
-              const unit = outlineTree.getUnit(node.unitId);
-              return (
-                <div className={styles.detailCard} data-dir-key={`outline:${node.unitId}`}>
-                  <div className={styles.ddSec}>
-                    <span className={styles.ddLabel}>意图</span>
-                    {unit?.intent ?? "（尚未填写——这个单元要达成什么）"}
-                  </div>
-                  <div className={styles.ddSec}>
-                    <span className={styles.ddLabel}>梗概</span>
-                    {unit?.synopsis ?? "（尚未填写情节梗概）"}
-                  </div>
-                  <button
-                    type="button"
-                    className={styles.ddGo}
-                    onClick={() => onSelectOutlineUnit(node.unitId)}
-                  >
-                    查看单元详情
-                    <Icon icon={ArrowRight} size="xs" />
-                  </button>
-                </div>
-              );
+            draggableUnits={() => true}
+            onUnitDragStart={(unitId, event) => {
+              const node = findTreeNode(outlineSnapshot.tree, unitId);
+              if (node === undefined) return;
+              setReferenceDragPayload(event, { kind: "outline", id: unitId, label: node.title });
             }}
           />
         ) : dirSnapshot.tab === "manuscript" ? (
           <ManuscriptDirectory
             snapshot={manuscriptSnapshot}
-            onSelectChapter={onOpenChapter}
+            onSelectChapter={(chapterId) => store.openDetail({ kind: "chapter", id: chapterId })}
             resolveChapterState={(chapterId) => {
               const chapter = manuscriptSnapshot.chapters.find(
                 (item) => item.chapterId === chapterId,
@@ -199,27 +216,28 @@ export function ContentDirectoryPanel({
                 ? realizationByUnit.get(chapter.storyUnitId)
                 : undefined;
             }}
+            draggableChapters={() => true}
+            onChapterDragStart={(chapterId, event) => {
+              const chapter = manuscriptSnapshot.chapters.find(
+                (item) => item.chapterId === chapterId,
+              );
+              if (chapter === undefined) return;
+              setReferenceDragPayload(event, { kind: "chapter", id: chapterId, label: chapter.title });
+            }}
           />
         ) : dirSnapshot.tab === "characters" ? (
           characterSnapshot.characters.length === 0 ? (
             <div className={styles.empty}>尚无角色档案——对话里让助理建档后出现在这里</div>
           ) : (
             characterSnapshot.characters.map((c) => (
-              <EntityRowWithDetail
+              <EntityDirectoryRow
                 key={c.characterId}
                 kind="character"
                 id={c.characterId}
                 avatarText={c.avatarText}
                 title={c.name}
                 subtitle={c.role}
-                expanded={dirSnapshot.expandedKey === `character:${c.characterId}`}
-                summaryNote={c.note}
-                relatedUnits={unitIdsOf("characters", c.characterId)}
-                unitTitleById={unitTitleById}
-                onToggle={() => store.toggleExpand(`character:${c.characterId}`)}
-                onOpen={() => onOpenCharacter(c.characterId)}
-                loadDetail={() => void characters.loadDetail(c.characterId)}
-                detail={characterSnapshot.detailCache.get(c.characterId)}
+                onOpen={() => store.openDetail({ kind: "character", id: c.characterId })}
               />
             ))
           )
@@ -227,68 +245,47 @@ export function ContentDirectoryPanel({
           <div className={styles.empty}>尚无地点档案</div>
         ) : (
           locationSnapshot.locations.map((l) => (
-            <EntityRowWithDetail
+            <EntityDirectoryRow
               key={l.locationId}
               kind="location"
               id={l.locationId}
               avatarText={l.avatarText}
               title={l.name}
               subtitle={l.locState}
-              expanded={dirSnapshot.expandedKey === `location:${l.locationId}`}
-              summaryNote={l.note}
-              relatedUnits={unitIdsOf("locations", l.locationId)}
-              unitTitleById={unitTitleById}
-              onToggle={() => store.toggleExpand(`location:${l.locationId}`)}
-              onOpen={() => onOpenLocation(l.locationId)}
-              loadDetail={() => void locations.loadDetail(l.locationId)}
-              detail={locationSnapshot.detailCache.get(l.locationId)}
+              onOpen={() => store.openDetail({ kind: "location", id: l.locationId })}
             />
           ))
         )}
-        <div className={styles.foot}>
-          对话流中的 <code>&lt;character_某某&gt;</code> 等实体标签可点击：本栏切到对应页签并高亮定位；面板左缘可拖拽调宽（双击复位）。
-        </div>
+        {detailCtx === undefined ? (
+          <div className={styles.foot}>
+            点击行进入详情（场景完整 leaf 与段落、章·段落、人物/地点档案），左上「目录」返回；行与段落均可拖入下方输入框作引用，随消息发送。面板左缘可拖拽调宽（双击复位）。
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-/** 人物/地点共用的详情数据形状（CharacterDetail / LocationDetail 同构子集） */
-interface EntityDetailLike {
-  readonly summary: string;
-  readonly initialState: string;
-}
-
-/** 目录行 + 手风琴详情卡（展开时懒加载 detail；未缓存先用 note 摘要占位） */
-function EntityRowWithDetail(props: {
-  readonly kind: DirectoryEntityKind;
+/** 人物/地点目录行（点击=进档案详情页；可拖入输入框作引用） */
+function EntityDirectoryRow(props: {
+  readonly kind: "character" | "location";
   readonly id: string;
   readonly avatarText: string;
   readonly title: string;
   readonly subtitle: string;
-  readonly expanded: boolean;
-  readonly summaryNote: string;
-  readonly relatedUnits: readonly string[];
-  readonly unitTitleById: ReadonlyMap<string, string>;
-  readonly onToggle: () => void;
   readonly onOpen: () => void;
-  readonly loadDetail: () => void;
-  readonly detail: EntityDetailLike | undefined;
 }) {
-  const { expanded, loadDetail, detail } = props;
-  useEffect(() => {
-    if (expanded && detail === undefined) loadDetail();
-  }, [expanded, detail, loadDetail]);
-
   return (
     <div className={styles.entityBlock}>
       <button
         type="button"
-        className={[styles.row, expanded ? styles.rowOpen : ""].filter(Boolean).join(" ")}
-        data-dir-key={`${props.kind}:${props.id}`}
-        data-active={expanded || undefined}
-        aria-expanded={expanded}
-        onClick={props.onToggle}
+        className={styles.row}
+        draggable
+        title={`${props.title} · 点击看档案 · 可拖入输入框引用`}
+        onClick={props.onOpen}
+        onDragStart={(event) =>
+          setReferenceDragPayload(event, { kind: props.kind, id: props.id, label: props.title })
+        }
       >
         <span className={styles.avatar} aria-hidden="true">
           {props.avatarText}
@@ -297,43 +294,10 @@ function EntityRowWithDetail(props: {
           <span className={styles.rowTitle}>{props.title}</span>
           <span className={styles.rowSubtitle}>{props.subtitle}</span>
         </span>
-        <span className={[styles.rowChev, expanded ? styles.rowChevOpen : ""].join(" ")}>
+        <span className={styles.rowChev}>
           <Icon icon={ArrowRight} size="xs" />
         </span>
       </button>
-      {expanded ? (
-        <div className={styles.detailCard}>
-          <div className={styles.ddSec}>
-            <span className={styles.ddLabel}>简介</span>
-            {detail?.summary ?? props.summaryNote}
-          </div>
-          {props.kind === "character" && detail?.initialState ? (
-            <div className={styles.ddSec}>
-              <span className={styles.ddLabel}>初始状态</span>
-              {detail.initialState}
-            </div>
-          ) : null}
-          {props.relatedUnits.length > 0 ? (
-            <div className={styles.ddSec}>
-              <span className={styles.ddLabel}>关联单元</span>
-              <span className={styles.ddChips}>
-                {props.relatedUnits.map((unitId) => {
-                  const title = props.unitTitleById.get(unitId);
-                  return title === undefined ? null : (
-                    <span key={unitId} className={styles.ddChip}>
-                      {title}
-                    </span>
-                  );
-                })}
-              </span>
-            </div>
-          ) : null}
-          <button type="button" className={styles.ddGo} onClick={props.onOpen}>
-            打开完整档案
-            <Icon icon={ArrowRight} size="xs" />
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

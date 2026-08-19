@@ -407,5 +407,5 @@
   margin-left: var(--space-2px);
   vertical-align: -0.15em;
   background: var(--color-accent);
-  animation: var(--anim-draft-cursor);
+  animation: var(--anim-draft-cursor) 1s steps(2, start) infinite;
 }

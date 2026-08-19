@@ -24,6 +24,7 @@ import { LibrarySurface } from "./LibrarySurface.js";
 import type { ContentTab } from "./contentTab.js";
 import type { ReferenceResolver } from "../../domains/conversation/reference/ReferenceResolver.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
+import type { ComposerDraftStore } from "../../domains/conversation/store/ComposerDraftStore.js";
 import type { ApprovalStore } from "../../domains/approval/ApprovalStore.js";
 import { ScheduleSurface } from "./ScheduleSurface.js";
 import styles from "./MainArea.module.css";
@@ -71,6 +72,8 @@ export interface MainAreaProps {
   readonly onTodoAction?: (id: string, action: string) => void;
   readonly onReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
+  /** 引用草稿 store（右栏拖入的实体引用按会话持久化；传给对话输入框引用栏） */
+  readonly composerDraft?: ComposerDraftStore;
   readonly locateReference?: { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   /** 内容视图：切资料位（详情面板「在正文中查看」） */
@@ -107,6 +110,7 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           onReferenceClick={props.onReferenceClick}
           resolveReference={props.resolveReference}
           onNotify={props.onNotify}
+          composerDraft={props.composerDraft}
         />
       ) : mainView.state === "content" ? (
         // key=contentTab：tab 切换也重挂载触发 view-in 过渡

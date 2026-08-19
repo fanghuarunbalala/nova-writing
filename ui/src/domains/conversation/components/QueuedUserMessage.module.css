@@ -80,3 +80,8 @@
   background: var(--color-accent-9);
   color: var(--color-accent-ink);
 }
+
+/* 幽灵项引用 chips 行（气泡顶部，demo .msgRefs） */
+.references {
+  margin-bottom: var(--space-5px);
+}

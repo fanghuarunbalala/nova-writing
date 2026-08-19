@@ -86,4 +86,35 @@ describe("ComposerDraftStore", () => {
     expect(() => store.setText("c1", "a\u0000b")).toThrow();
     expect(() => store.addReference("c1", { kind: "character", id: "", label: "" })).toThrow();
   });
+
+  it("accepts all five reference kinds (人物/地点/大纲/章/段落)", () => {
+    const store = new ComposerDraftStore();
+    store.addReference("c1", { kind: "character", id: "ch-1", label: "林夏" });
+    store.addReference("c1", { kind: "location", id: "l-1", label: "旧船坞" });
+    store.addReference("c1", { kind: "outline", id: "u1", label: "第一章 · 雾起" });
+    store.addReference("c1", { kind: "chapter", id: "chap-1", label: "雾起" });
+    store.addReference("c1", { kind: "paragraph", id: "p-1", label: "段 1 · 雾起" });
+    expect(store.getDraft("c1").references).toHaveLength(5);
+    // kind 越界仍拒绝
+    expect(() =>
+      store.addReference("c1", { kind: "volume", id: "v-1", label: "第一卷" } as unknown as ComposerReference),
+    ).toThrow();
+  });
+
+  it("clearReferences empties references but keeps text and mode", () => {
+    const store = new ComposerDraftStore();
+    store.setText("c1", "帮我收紧这段");
+    store.setMode("c1", "compose");
+    store.addReference("c1", characterRef);
+    store.addReference("c1", { kind: "paragraph", id: "p-1", label: "段 1" });
+    store.clearReferences("c1");
+    const draft = store.getDraft("c1");
+    expect(draft.references).toHaveLength(0);
+    expect(draft.text).toBe("帮我收紧这段");
+    expect(draft.mode).toBe("compose");
+    // 空引用再清为 no-op（草稿引用不变）
+    const before = store.getDraft("c1");
+    store.clearReferences("c1");
+    expect(store.getDraft("c1")).toBe(before);
+  });
 });

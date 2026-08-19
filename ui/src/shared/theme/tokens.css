@@ -29,6 +29,8 @@
   --sidebar-current-w:   272px;
   --sidebar-width-collapsed: 0;
   --insp-w: 376px;
+  /* 顶栏视图切换器列数（TopBarViewSwitcher 注入；书库门控隐藏时 = 3，缺省 4 兜底） */
+  --view-count: 4;
 
   /* max-width 快照（跨组件复用 ≥2 次才建 token；Dialog 的 400/720/960 频次 1 留在组件内） */
   --max-w-surface:   1000px; /* ContentSurface + ScheduleSurface 的 paneInner */

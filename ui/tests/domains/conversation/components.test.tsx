@@ -171,6 +171,45 @@ describe("UserMessage", () => {
     });
   });
 
+  it("renders trailing serialized references as a top chips row (demo .msgRefs)", async () => {
+    const user = userEvent.setup();
+    const onReferenceClick = vi.fn();
+    render(
+      <UserMessage
+        sequence={3}
+        text={'帮我收紧这段\n<character id="char-linxia">林夏</character><paragraph id="p-2">段 2 · 雨夜追逃</paragraph>'}
+        timestamp={1000}
+        onReferenceClick={onReferenceClick}
+      />,
+    );
+    expect(screen.getByText("帮我收紧这段")).toBeInTheDocument();
+    // 尾部标签剥离为顶部 chips（图标 + 名称 pill），点击反向定位
+    await user.click(screen.getByRole("button", { name: /林夏/ }));
+    expect(onReferenceClick).toHaveBeenCalledWith({
+      refKind: "character",
+      id: "char-linxia",
+      label: "林夏",
+    });
+    await user.click(screen.getByRole("button", { name: /段 2 · 雨夜追逃/ }));
+    expect(onReferenceClick).toHaveBeenCalledWith({
+      refKind: "paragraph",
+      id: "p-2",
+      label: "段 2 · 雨夜追逃",
+    });
+  });
+
+  it("renders a reference-only message as chips without text body", () => {
+    render(
+      <UserMessage
+        sequence={4}
+        text={'<character id="char-linxia">林夏</character>'}
+        timestamp={1000}
+        onReferenceClick={() => undefined}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /林夏/ })).toBeInTheDocument();
+  });
+
   it("copies text via clipboard and notifies on success", async () => {
     const user = userEvent.setup();
     const onNotify = vi.fn();

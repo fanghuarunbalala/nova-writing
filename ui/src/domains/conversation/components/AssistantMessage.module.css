@@ -190,7 +190,7 @@
   border-top-color: transparent;
   border-radius: 50%;
   vertical-align: -1px;
-  animation: var(--anim-spinner-rotate);
+  animation: var(--anim-spinner-rotate) 0.8s linear infinite;
 }
 
 
@@ -198,5 +198,5 @@
   margin-left: var(--space-1);
   font-family: var(--font-mono);
   font-size: var(--fs-11);
-  animation: var(--anim-node-pulse);
+  animation: var(--anim-node-pulse) 1.8s ease-in-out infinite;
 }

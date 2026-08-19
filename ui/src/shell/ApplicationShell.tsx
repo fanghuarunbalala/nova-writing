@@ -52,7 +52,8 @@ import type { NovelUiExtensions } from "../extensions/NovelUiExtensions.js";
 import type { ConversationCardRendererRegistry } from "../domains/conversation/cards/ConversationCardRendererRegistry.js";
 import type { InspectorRendererRegistry } from "./inspector/InspectorRendererRegistry.js";
 import { InspectorHost } from "./inspector/InspectorHost.js";
-import { ContentDirectoryStore } from "./inspector/ContentDirectoryStore.js";
+import { ContentDirectoryStore, type DirectoryDetail } from "./inspector/ContentDirectoryStore.js";
+import { ComposerDraftStore } from "../domains/conversation/store/ComposerDraftStore.js";
 import { MainArea } from "./main/MainArea.js";
 import type { ContentTab } from "./main/contentTab.js";
 import { OverlaysHost } from "./overlays/OverlaysHost.js";
@@ -154,6 +155,8 @@ export function ApplicationShell({
   const inspectorRoute = useInspectorRoute(inspectorRouter);
   // 右栏内容目录（demo 方案 A v0.8）：tab / 手风琴 / 实体标签定位
   const contentDirectory = useMemo(() => new ContentDirectoryStore(), []);
+  // 输入框引用草稿（PRD F5/F6）：右栏拖入的实体引用按会话进程内持久化
+  const composerDraft = useMemo(() => new ComposerDraftStore(), []);
   const [contentTab, setContentTab] = useState<ContentTab>("outline");
   // 档案/计划选区（PRD CV/PN）：人物·地点详情在内容视图主区渲染，
   // 选区状态由壳持有（目录在侧栏、详情在主区，二者为兄弟节点）。
@@ -369,6 +372,8 @@ export function ApplicationShell({
   // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
   useEffect(() => {
     if (workspaceId === undefined) return;
+    // 引用草稿跨项目清空（conversationId 各项目同号，不清会串项目）
+    composerDraft.clearAll();
     const {
       conversationCatalog,
       novelOverview,
@@ -385,7 +390,7 @@ export function ApplicationShell({
     void character.loadWorkspace(workspaceId);
     void location.loadWorkspace(workspaceId);
     void library.loadWorkspace(workspaceId);
-  }, [domainStores, workspaceId]);
+  }, [composerDraft, domainStores, workspaceId]);
 
   // 进入对话视图默认展开内容目录（首次挂载同样生效）；用户手动收起后
   // 本次停留内不再强制展开（离开再回来才恢复默认）。
@@ -513,21 +518,46 @@ export function ApplicationShell({
           text: `暂未建立「${resolved.label}」的档案`,
         });
       }
+      // 对话视图（PRD F8，demo v0.10）：五类统一右栏下钻详情页直达 + 闪烁
+      // （paragraph → 章详情页 + 段落行；outline → 单元详情页），不再跳内容视图。
+      if (mainView.state === "chat") {
+        let detail: DirectoryDetail | undefined;
+        switch (reference.refKind) {
+          case "character":
+          case "location":
+            detail = { kind: reference.refKind, id: reference.id };
+            break;
+          case "outline":
+            detail = { kind: "unit", id: reference.id };
+            break;
+          case "chapter":
+            detail = { kind: "chapter", id: reference.id };
+            break;
+          case "paragraph": {
+            const chapterId = domainStores.manuscriptStructure.findChapterByParagraphId(
+              reference.id,
+            );
+            detail =
+              chapterId !== undefined
+                ? { kind: "chapter", id: chapterId, paragraphId: reference.id }
+                : undefined;
+            break;
+          }
+        }
+        if (detail !== undefined) {
+          contentDirectory.locate(detail);
+          inspectorRouter.transition({ kind: "directory" });
+        }
+        return;
+      }
+      // 内容视图：维持原路由（跳对应资料位 + 正文定位高亮）
       switch (reference.refKind) {
         case "character":
-        case "location": {
-          // 对话视图：实体标签定位优先（demo 方案 A）——右栏目录切 tab +
-          // 展开详情卡 + 滚动高亮；详情卡「打开完整档案」再跳内容视图。
-          if (mainView.state === "chat") {
-            contentDirectory.locate(reference.refKind, reference.id);
-            inspectorRouter.transition({ kind: "directory" });
-          } else if (reference.refKind === "character") {
-            handleSelectCharacter(reference.id);
-          } else {
-            handleSelectLocation(reference.id);
-          }
+          handleSelectCharacter(reference.id);
           break;
-        }
+        case "location":
+          handleSelectLocation(reference.id);
+          break;
         case "outline":
           handleSelectOutlineUnit(reference.id);
           break;
@@ -552,6 +582,7 @@ export function ApplicationShell({
       mainView,
       mainViewRouter,
       contentDirectory,
+      domainStores,
       inspectorRouter,
       resolveReference,
       toastStore,
@@ -729,6 +760,7 @@ export function ApplicationShell({
           onTodoAction={handleTodoAction}
           onReferenceClick={handleReferenceClick}
           resolveReference={resolveReference}
+          composerDraft={composerDraft}
           locateReference={locateReference}
           onNotify={handleNotify}
           onSelectContentPane={handleSelectContentPane}

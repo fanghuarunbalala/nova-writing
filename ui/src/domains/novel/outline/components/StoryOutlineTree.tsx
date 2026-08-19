@@ -6,7 +6,7 @@
  * loading / 空树走 LoadingState / EmptyState。
  */
 import { ListTree } from "lucide-react";
-import type { ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
 import type { StoryOutlineTreeNode } from "../projection/StoryOutlineTreeProjection.js";
 import { EmptyState, LoadingState } from "../../../../shared/primitives/index.js";
 import { StoryOutlineTreeLegend } from "./StoryOutlineTreeLegend.js";
@@ -25,6 +25,10 @@ export interface StoryOutlineTreeProps {
   readonly showLegend?: boolean;
   /** 行下详情插槽（如右栏 leaf 简略卡；返回 null 不渲染） */
   readonly renderUnitDetail?: (unit: StoryOutlineTreeNode) => ReactNode;
+  /** 行可拖（右栏目录：拖入输入框作引用）；返回 false/缺省不可拖 */
+  readonly draggableUnits?: (unitId: string) => boolean;
+  /** 行拖拽开始（dragstart：宿主写入引用载荷） */
+  readonly onUnitDragStart?: (unitId: string, event: DragEvent<HTMLElement>) => void;
 }
 
 function renderNode(
@@ -44,6 +48,8 @@ function renderNode(
         selected={props.selectedUnitId === node.unitId}
         onSelect={() => props.onSelectUnit?.(node.unitId)}
         onToggleExpand={() => props.onToggleExpand?.(node.unitId)}
+        draggable={props.draggableUnits?.(node.unitId) ?? false}
+        onDragStart={(event) => props.onUnitDragStart?.(node.unitId, event)}
       />
       {detail}
       {expanded

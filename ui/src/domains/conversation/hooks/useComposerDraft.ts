@@ -28,6 +28,10 @@ export function useComposerDraft(store: ComposerDraftStore, conversationId: stri
     [conversationId, store],
   );
   const clear = useCallback(() => store.clear(conversationId), [conversationId, store]);
+  const clearReferences = useCallback(
+    () => store.clearReferences(conversationId),
+    [conversationId, store],
+  );
   return useMemo(
     () =>
       Object.freeze({
@@ -37,7 +41,8 @@ export function useComposerDraft(store: ComposerDraftStore, conversationId: stri
         addReference,
         removeReference,
         clear,
+        clearReferences,
       }),
-    [addReference, clear, draft, removeReference, setMode, setText],
+    [addReference, clear, clearReferences, draft, removeReference, setMode, setText],
   );
 }

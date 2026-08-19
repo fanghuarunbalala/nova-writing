@@ -13,6 +13,7 @@ import type {
   ConversationApprovalDecision,
   ConversationMode,
   ConversationSystemControl,
+  ConversationUserMessage,
   Logger,
   NovelApiClient,
   Receipt,
@@ -27,8 +28,8 @@ import type { ConversationProjectionBindingSnapshot } from "../binding/Conversat
 export interface ActiveConversationSession {
   /** 投影绑定快照（无活动会话为 null） */
   readonly snapshot: ConversationProjectionBindingSnapshot | null;
-  /** 发送用户消息（无活动会话时 reject） */
-  readonly sendUserMessage: (text: string) => Promise<Receipt>;
+  /** 发送用户消息（无活动会话时 reject；references 由 core 序列化为实体标签） */
+  readonly sendUserMessage: (message: ConversationUserMessage) => Promise<Receipt>;
   /** 发送系统控制（mode.set / stop / reload.config） */
   readonly sendSystemControl: (ctrl: ConversationSystemControl) => Promise<Receipt>;
   /** 查询当前生效的会话模式 */
@@ -96,9 +97,9 @@ export function useActiveConversationSession(
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   const sendUserMessage = useCallback(
-    (text: string): Promise<Receipt> => {
+    (message: ConversationUserMessage): Promise<Receipt> => {
       if (binding === undefined) return Promise.reject(new Error("无活动会话"));
-      return binding.sendUserMessage(text);
+      return binding.sendUserMessage(message);
     },
     [binding],
   );

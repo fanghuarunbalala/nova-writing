@@ -11,6 +11,7 @@
 import type { ConversationCardDescriptor } from "./ConversationCardDescriptor.js";
 import type { AssistantSegment, ConversationMode, ToolTraceView } from "@novel/core/client";
 import type { AskingQueueItem } from "@novel/core";
+import type { ComposerReference } from "../store/ComposerDraftStore.js";
 
 export type { ToolTraceView, AssistantSegment };
 
@@ -36,6 +37,8 @@ export type ConversationTimelineItem =
       readonly text: string;
       readonly queuedAt: number;
       readonly phase?: "flight" | "queued";
+      /** 随消息发送的实体引用（幽灵项回显 chips；落定后实消息由文本标签渲染） */
+      readonly references?: readonly ComposerReference[];
     }
   | {
       readonly kind: "assistant";

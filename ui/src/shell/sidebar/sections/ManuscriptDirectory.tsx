@@ -5,7 +5,7 @@
  * chevron + 章数）→ 章行（状态圆点 + 草稿标记「草」）。章状态从关联 story unit
  * 的实现态派生（无关联 = neutral）。点击章 = manuscript.selectChapter。
  */
-import { memo, useState } from "react";
+import { memo, useState, type DragEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import type { ManuscriptStructureSnapshot } from "../../../domains/novel/manuscript/store/ManuscriptStructureStore.js";
@@ -16,12 +16,18 @@ export interface ManuscriptDirectoryProps {
   readonly onSelectChapter: (chapterId: string) => void;
   /** 章状态解析（storyUnitId → 实现态；宿主用大纲树派生） */
   readonly resolveChapterState?: (chapterId: string) => string | undefined;
+  /** 章行可拖（右栏目录：拖入输入框作引用）；缺省不可拖 */
+  readonly draggableChapters?: (chapterId: string) => boolean;
+  /** 章行拖拽开始（dragstart：宿主写入引用载荷） */
+  readonly onChapterDragStart?: (chapterId: string, event: DragEvent<HTMLElement>) => void;
 }
 
 export const ManuscriptDirectory = memo(function ManuscriptDirectory({
   snapshot,
   onSelectChapter,
   resolveChapterState,
+  draggableChapters,
+  onChapterDragStart,
 }: ManuscriptDirectoryProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   if (snapshot.volumes.length === 0) {
@@ -63,6 +69,10 @@ export const ManuscriptDirectory = memo(function ManuscriptDirectory({
                       chapter.chapterId === snapshot.selectedChapterId || undefined
                     }
                     style={{ paddingLeft: "var(--space-6)" }}
+                    draggable={draggableChapters?.(chapter.chapterId) ?? false}
+                    onDragStart={(event) =>
+                      onChapterDragStart?.(chapter.chapterId, event)
+                    }
                     onClick={() => onSelectChapter(chapter.chapterId)}
                   >
                     <span

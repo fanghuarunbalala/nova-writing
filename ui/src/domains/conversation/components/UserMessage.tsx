@@ -14,7 +14,8 @@ import { memo, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import type { ToastKind } from "../../../shared/state/ToastStore.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
-import { parseMessageText } from "./parseMessageText.js";
+import { parseMessageText, splitTrailingReferences } from "./parseMessageText.js";
+import { ReferenceChips } from "./ReferenceChips.js";
 import type { MessageReference, ResolvedReference } from "./MessageReference.js";
 import styles from "./UserMessage.module.css";
 
@@ -86,11 +87,37 @@ export const UserMessage = memo(function UserMessage({
 
   const rootClass = inPad ? `${styles.message} ${styles.actionsInPad}` : styles.message;
 
+  // 尾部引用标签块剥离为顶部 chips 行（core 把 references 序列化为整行标签
+  // 追加在正文后；对齐 demo .msgRefs：气泡顶部 chips + 正文文本）
+  const { text: bodyText, references } = splitTrailingReferences(text);
+
   return (
     <div className={rootClass} data-sequence={sequence}>
       <div className={styles.body}>
         <div className={styles.text}>
-          {parseMessageText(text, onReferenceClick, resolveReference)}
+          {references.length > 0 ? (
+            <div className={styles.references}>
+              <ReferenceChips
+                dense
+                references={references.map((reference) => ({
+                  kind: reference.refKind,
+                  id: reference.id,
+                  label: reference.label ?? reference.id,
+                }))}
+                onReferenceClick={
+                  onReferenceClick !== undefined
+                    ? (reference) =>
+                        onReferenceClick({
+                          refKind: reference.kind,
+                          id: reference.id,
+                          label: reference.label,
+                        })
+                    : undefined
+                }
+              />
+            </div>
+          ) : null}
+          {bodyText !== "" ? parseMessageText(bodyText, onReferenceClick, resolveReference) : null}
         </div>
         <div className={styles.actions}>
           <button

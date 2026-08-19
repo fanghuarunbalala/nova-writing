@@ -4,14 +4,22 @@
  * 对话维度的本地草稿（文本/模式/引用），按 conversationId 索引。
  * 仅进程内持久化（不写 core）。快照为不可变数组，任何草稿变更整体替换。
  */
+import { debugLog } from "@novel/core/client";
 import { ExternalStore } from "../../../shared/state/ExternalStore.js";
 
 /** 执行模式（对齐 core）：需审核（提议后审批提交）/ 直接执行（跳过审批）/ 设计（仅草稿可写）。 */
 /** Execution mode (aligned with core): review (ask) / bypass (direct) / compose (design-only). */
 export type ComposerMode = "review" | "bypass" | "compose";
 
+export type ComposerReferenceKind =
+  | "character"
+  | "location"
+  | "outline"
+  | "chapter"
+  | "paragraph";
+
 export interface ComposerReference {
-  readonly kind: "character" | "location" | "outline";
+  readonly kind: ComposerReferenceKind;
   readonly id: string;
   readonly label: string;
 }
@@ -81,14 +89,16 @@ export class ComposerDraftStore extends ExternalStore<readonly ComposerDraft[]> 
     const capturedId = requireConversationId(conversationId);
     const captured = captureReference(reference);
     this.upsert(capturedId, (draft) => {
-      if (draft.references.some((item) => item.kind === captured.kind && item.id === captured.id)) {
+      const deduped = draft.references.some(
+        (item) => item.kind === captured.kind && item.id === captured.id,
+      );
+      if (deduped) {
+        debugLog("[refs] add: 重复引用已忽略", { conversationId, ...captured });
         return draft;
       }
-      return {
-        ...draft,
-        references: [...draft.references, captured],
-        updatedAt: Date.now(),
-      };
+      const references = [...draft.references, captured];
+      debugLog("[refs] add:", { conversationId, ...captured, count: references.length });
+      return { ...draft, references, updatedAt: Date.now() };
     });
   }
 
@@ -98,7 +108,18 @@ export class ComposerDraftStore extends ExternalStore<readonly ComposerDraft[]> 
     this.upsert(capturedId, (draft) => {
       const references = draft.references.filter((item) => item.id !== capturedReferenceId);
       if (references.length === draft.references.length) return draft;
+      debugLog("[refs] remove:", { conversationId, id: capturedReferenceId, count: references.length });
       return { ...draft, references, updatedAt: Date.now() };
+    });
+  }
+
+  /** 发送后只清引用（文本由 composer 本地 state 自理）。 */
+  clearReferences(conversationId: string): void {
+    const capturedId = requireConversationId(conversationId);
+    this.upsert(capturedId, (draft) => {
+      if (draft.references.length === 0) return draft;
+      debugLog("[refs] cleared (sent):", { conversationId, count: draft.references.length });
+      return { ...draft, references: Object.freeze([]), updatedAt: Date.now() };
     });
   }
 
@@ -130,11 +151,19 @@ export class ComposerDraftStore extends ExternalStore<readonly ComposerDraft[]> 
   }
 }
 
+const REFERENCE_KINDS: readonly string[] = [
+  "character",
+  "location",
+  "outline",
+  "chapter",
+  "paragraph",
+];
+
 function captureReference(reference: ComposerReference): ComposerReference {
   if (
     reference === null ||
     typeof reference !== "object" ||
-    !["character", "location", "outline"].includes(reference.kind) ||
+    !REFERENCE_KINDS.includes(reference.kind) ||
     typeof reference.id !== "string" ||
     reference.id.trim() === ""
   ) {

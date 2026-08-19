@@ -16,6 +16,8 @@ import { Clock } from "lucide-react";
 import { debugLog } from "@novel/core/client";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import { Spinner } from "../../../shared/primitives/Spinner.js";
+import type { ComposerReference } from "../store/ComposerDraftStore.js";
+import { ReferenceChips } from "./ReferenceChips.js";
 import styles from "./QueuedUserMessage.module.css";
 
 export interface QueuedUserMessageProps {
@@ -25,12 +27,15 @@ export interface QueuedUserMessageProps {
   /** 幽灵相位（缺省 queued，向后兼容）：flight = 空闲发送「发送中」；
    * queued = 生成/审批中再发送「排队中 Ns」。 */
   readonly phase?: "flight" | "queued";
+  /** 随消息发送的实体引用（幽灵项回显 chips；落定后实消息由文本标签渲染） */
+  readonly references?: readonly ComposerReference[];
 }
 
 export const QueuedUserMessage = memo(function QueuedUserMessage({
   text,
   queuedAt,
   phase = "queued",
+  references,
 }: QueuedUserMessageProps) {
   // 渲染诊断：确认幽灵以哪个形态上屏（flight = 虚线气泡 + 左侧旋转「发送中」；
   // queued = 琥珀「排队中 Ns」）。与 [ghost] enqueue 对看可定位渲染链路问题。
@@ -49,6 +54,11 @@ export const QueuedUserMessage = memo(function QueuedUserMessage({
   return (
     <div className={styles.message}>
       <div className={styles.body}>
+        {(references?.length ?? 0) > 0 ? (
+          <div className={styles.references}>
+            <ReferenceChips references={references} dense />
+          </div>
+        ) : null}
         <span className={styles.text}>
           {/* badge 必须是气泡的子元素（demo 同构）：放兄弟位置时最近定位祖先会
               跳过气泡落到 .enter 行容器（content-visibility containment 使其成为

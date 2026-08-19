@@ -5,7 +5,13 @@
  * 暴露 sendUserMessage / sendSystemControl / resume（api/logger 由组合层注入）。
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import type { ConversationSystemControl, Logger, NovelApiClient, Receipt } from "@novel/core";
+import type {
+  ConversationSystemControl,
+  ConversationUserMessage,
+  Logger,
+  NovelApiClient,
+  Receipt,
+} from "@novel/core";
 import { ConversationProjectionBinding } from "../binding/ConversationProjectionBinding.js";
 import type { ConversationProjectionBindingSnapshot } from "../binding/ConversationProjectionBindingTypes.js";
 
@@ -16,7 +22,7 @@ export interface UseConversationProjectionDeps {
 
 export interface ConversationProjectionHookResult {
   readonly snapshot: ConversationProjectionBindingSnapshot;
-  readonly sendUserMessage: (text: string) => Promise<Receipt>;
+  readonly sendUserMessage: (message: ConversationUserMessage) => Promise<Receipt>;
   readonly sendSystemControl: (ctrl: ConversationSystemControl) => Promise<Receipt>;
   readonly resume: () => Promise<void>;
 }
@@ -46,7 +52,10 @@ export function useConversationProjection(
     };
   }, [binding]);
 
-  const sendUserMessage = useCallback((text: string) => binding.sendUserMessage(text), [binding]);
+  const sendUserMessage = useCallback(
+    (message: ConversationUserMessage) => binding.sendUserMessage(message),
+    [binding],
+  );
   const sendSystemControl = useCallback(
     (ctrl: ConversationSystemControl) => binding.sendSystemControl(ctrl),
     [binding],

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { EventPublisher } from "../EventPublisher.js";
 import { EventSubscriber } from "../EventSubscriber.js";
 import { bindFocusChannel, requestFocus } from "../FocusChannel.js";
@@ -64,26 +66,30 @@ describe("EventPublisher / EventSubscriber（inproc）", () => {
 });
 
 describe("事件地址按实例唯一化", () => {
-	it("novelEventsAddr 默认带 pid；env 覆盖生效", () => {
+	it("novelEventsAddr 默认 = <tmpdir>/novel-events-<pid>；env 覆盖生效", () => {
 		const saved = process.env.NOVEL_EVENTS_ADDR;
 		try {
 			delete process.env.NOVEL_EVENTS_ADDR;
-			expect(novelEventsAddr()).toBe(`ipc://novel-events-${process.pid}`);
-			process.env.NOVEL_EVENTS_ADDR = "ipc://debug-events";
-			expect(novelEventsAddr()).toBe("ipc://debug-events");
+			expect(novelEventsAddr()).toBe(`ipc://${join(tmpdir(), `novel-events-${process.pid}`)}`);
+			process.env.NOVEL_EVENTS_ADDR = "inproc://debug-events";
+			expect(novelEventsAddr()).toBe("inproc://debug-events");
 		} finally {
 			if (saved === undefined) delete process.env.NOVEL_EVENTS_ADDR;
 			else process.env.NOVEL_EVENTS_ADDR = saved;
 		}
 	});
 
-	it("conversationEventsAddr：无命名空间保持原形态；有则拼入", () => {
+	it("conversationEventsAddr：无命名空间与有命名空间均落 tmpdir 且互不相同", () => {
 		const saved = process.env.NOVEL_EVENT_NAMESPACE;
 		try {
 			delete process.env.NOVEL_EVENT_NAMESPACE;
-			expect(conversationEventsAddr("conv_1")).toBe("ipc://conversation-conv_1-events");
+			expect(conversationEventsAddr("conv_1")).toBe(
+				`ipc://${join(tmpdir(), "novel-conv-conv_1-events")}`,
+			);
 			process.env.NOVEL_EVENT_NAMESPACE = "12345";
-			expect(conversationEventsAddr("conv_1")).toBe("ipc://conversation-12345-conv_1-events");
+			expect(conversationEventsAddr("conv_1")).toBe(
+				`ipc://${join(tmpdir(), "novel-conv-12345-conv_1-events")}`,
+			);
 		} finally {
 			if (saved === undefined) delete process.env.NOVEL_EVENT_NAMESPACE;
 			else process.env.NOVEL_EVENT_NAMESPACE = saved;

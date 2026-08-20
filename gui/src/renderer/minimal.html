@@ -3,9 +3,42 @@
 <head>
   <meta charset="utf-8" />
   <title>Novel</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #faf9f6; }
+    /* 页内启动占位：覆盖"窗口已显示（ready-to-show 只等空 HTML 首帧）但 React 未挂载"
+       的白屏窗口期。React createRoot 首次 commit 会清空 #root 现有子节点 → 占位与
+       首帧 UI 同一 commit 消失/替换，无接缝。视觉与 main 侧 splash 同款 */
+    .boot-placeholder {
+      height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #2a2724;
+    }
+    .boot-inner { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+    .boot-mark { font-size: 26px; font-weight: 700; letter-spacing: .12em; }
+    .boot-bar {
+      width: 132px; height: 3px; border-radius: 2px;
+      background: #e6e2da; overflow: hidden; position: relative;
+    }
+    .boot-bar::after {
+      content: ""; position: absolute; left: -40%; width: 40%; height: 100%;
+      background: #b48254; animation: boot-slide 1s ease-in-out infinite;
+    }
+    @keyframes boot-slide { to { left: 100%; } }
+    .boot-tip { font-size: 13px; color: #8a857c; }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div class="boot-placeholder">
+      <div class="boot-inner">
+        <div class="boot-mark">Novel</div>
+        <div class="boot-bar"></div>
+        <div class="boot-tip">正在启动…</div>
+      </div>
+    </div>
+  </div>
   <script type="module" src="./minimal-renderer.tsx"></script>
 </body>
 </html>

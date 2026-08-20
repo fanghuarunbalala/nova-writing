@@ -24,6 +24,13 @@ export type WorkspaceLockResult =
 	| { status: "acquired"; lock: WorkspaceDirLock }
 	| { status: "held"; holderPid: number; lockPath: string };
 
+/** inspect 结果：锁存在（附持有者 pid 与存活探测）/ 无锁或内容不可读 */
+export interface WorkspaceLockStatus {
+	holderPid: number
+	alive: boolean
+	lockPath: string
+}
+
 /** pid 存活探测（signal 0 不发信号只校验权限）：ESRCH = 已死；EPERM = 活着但无权限 */
 function isProcessAlive(pid: number): boolean {
 	try {
@@ -99,6 +106,18 @@ export class WorkspaceDirLock {
 		rmSync(lockPath, { force: true });
 		if (tryCreate(lockPath, content)) return { status: "acquired", lock: new WorkspaceDirLock(lockPath) };
 		return { status: "held", holderPid: holder?.pid ?? 0, lockPath };
+	}
+
+	/**
+	 * 只读探测（不获取）：派发前占用检查用（如"在新窗口打开"先探测再决定 spawn）。
+	 * 锁缺失 / 内容损坏返回 undefined；存在则附持有者 pid 与存活探测结果
+	 * @param storeDir 工作区存储目录
+	 */
+	static inspect(storeDir: string): WorkspaceLockStatus | undefined {
+		const lockPath = join(storeDir, LOCK_FILE_NAME);
+		const holder = readLock(lockPath);
+		if (holder === undefined) return undefined;
+		return { holderPid: holder.pid, alive: isProcessAlive(holder.pid), lockPath };
 	}
 
 	/** 释放锁（删除锁文件；尽力而为，进程退出时由 pid 探活兜底回收） */

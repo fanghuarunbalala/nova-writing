@@ -102,6 +102,40 @@ flowchart LR
 - 功能点六：附带加固两处（本次触碰区域的相邻缺陷，小改）
   - `rebindLibraryService`（`minimal.ts:445`）重建前 `libraryService.close()`，修 Windows 下 book.db 只读句柄泄漏（多次切换项目累积锁定）。
   - `SqliteNovelStore` 构造后执行 `PRAGMA busy_timeout = 3000`：两实例并发触发完本解析写共享 `library/book.db`（已 WAL）时等待重试而非抛 SQLITE_BUSY。
+- 功能点七：打开位置选择（当前窗口 / 新窗口）与新实例启动自动打开
+  - 触发：已有项目打开时，应用内"打开项目"对话框（`WorkspaceSelectionDialog`）选定项目（目录选择器或最近列表）后。
+  - 输入：待打开的工作区引用（目录路径或最近项 workspaceId）。
+  - 处理：对话框改两步式——选定后弹出选择面板 **[在当前窗口打开] [在新窗口打开] [取消]**，附提示"当前窗口打开会结束本项目全部运行中的对话；新窗口打开保持本窗口不动"。
+    - 当前窗口：`WorkspaceController.open`（既有 rebind 切换语义，不变）。
+    - 新窗口：`workspaceApi.openInNewWindow`（校验同 open，**不取锁不切换本实例**）→ `spawnNewGuiInstance(root)`：子进程 env 注入 `NOVEL_OPEN_WORKSPACE=<root>`。新实例启动时立即从 `process.env` 摘取该值（防向会话子进程/孙实例传播）并加入 open 白名单（来源为他实例用户经原生选择器/注册表的授权），renderer 经 `takeStartupWorkspace`（取出即清，防 StrictMode 双挂载重复打开）取走后走完整 open 流程——含同项目双开锁与焦点回切；若项目已被第三实例持有，新实例欢迎页显示双开提示且持有窗口被拉到前台，不崩溃。
+    - `spawnNewGuiInstance` 派发 env 同时剔除 `NOVEL_EVENT_NAMESPACE` 与 `NOVEL_OPEN_WORKSPACE`（后者随后按需显式写入），防跨代传播。
+    - 顺带修复：`WorkspaceController.openReference` 原先吞掉底层错误 message 换通用文案（双开提示实际不可见）——改为优先透传 `error.message`（kkrpc 保真远端 message），空/非 Error 回退通用文案。
+  - 输出：当前窗口切换（原行为）或新窗口自动打开所选项目且本窗口不动；失败文案（双开提示等）直达 UI。
+  - 异常：`openInNewWindow` 端口缺省报 `WORKSPACE_NEW_WINDOW_UNAVAILABLE`；派发失败（未授权引用等）报底层文案；新实例启动自动打开失败走欢迎页 error 态。
+  - 边界：欢迎页（无当前项目）保持直达打开不加选择；菜单"新建窗口"保持无上下文 spawn（显示项目选择页）。
+- 功能点八：切换目标过滤当前项目 + 已打开弹窗告知 + 新窗口独立弹到前台
+  - 触发：已开项目时应用内"打开项目"对话框的列表与打开动作；"在新窗口打开"派生新实例。
+  - 输入：最近列表 / 待打开引用。
+  - 处理：
+    - **过滤当前项目**：切换对话框"最近打开"渲染层排除 `snapshot.current`（id 为主、rootPath 兜底），过滤后为空显示"没有其他可切换的项目"；欢迎页（无 current）不受影响。
+    - **已打开弹窗告知**（`dialog.showMessageBox` info 型，不受 renderer 覆盖层状态影响）：① `open` 锁被本进程持有且即当前项目（目录选择器手动选回）→ 幂等成功（不 rebind，更新 lastOpenedAt）+ 弹窗"《label》已在当前窗口打开"；② 被他实例持有且焦点回切应答 → 弹窗"《label》已在另一窗口打开，已为你切换到该窗口"后照旧抛错（对话框保持打开时错误区可见原因）；③ `openInNewWindow` 派发前经 `WorkspaceDirLock.inspect` 只读探测——已被活进程持有则不 spawn，置前持有窗口 + 按持有者（本窗口/他实例）分别弹窗，短路返回成功。
+    - **新窗口独立弹到前台**：带启动上下文的派生实例窗口**级联偏移定位**（primary workArea + 48px，不再与原窗口完全重叠），创建后短暂 alwaysOnTop → show → 取消 → focus 强制前台（绕过 Windows SetForegroundWindow 前台锁，防 detached 子进程被压底不可见）。
+    - **对话框失败不即关**：NovelApp 中 `open`/`openInNewWindow` 成功（含幂等/短路成功）才收起对话框，失败保持打开显示透传文案。
+    - 新增 `WorkspaceDirLock.inspect(storeDir)`：只读探测（holderPid + 存活 + lockPath；无锁/损坏返回 undefined），不获取不改动。
+  - 输出：切换列表不再出现当前书；已打开项目再点击有明确弹窗反馈且持有窗口置前；新窗口可见地独立弹出。
+  - 异常：焦点通道超时（持有实例卡死）→ 派发侧短路按"未持有"处理 spawn（新实例 open 时再兜底报错）；幂等分支的残留自锁（root 不一致）→ 释放守卫重取。
+  - 边界：任务栏两实例仍归组同一图标（Windows 默认，同 Word 多文档），不改 AppUserModelID（打包后需保持归组支持固定到任务栏）。
+- 功能点九：splash 启动遮罩 + 引导标记跨实例持久化
+  - 触发：任意启动路径（首启 / 手动双开 / "在新窗口打开"派生实例）。
+  - 输入：无（启动流程内置）。
+  - 处理：
+    - **splash**：`whenReady` 后立即创建（420×260 frameless、不可拖动/聚焦、skipTaskbar、alwaysOnTop，原生 backgroundColor 置底色），加载内联 data: URL 品牌页（"Novel" 字标 + 加载条 + "正在启动…"）；主窗口改 `show: false` + `backgroundColor: "#faf9f6"`（≈ tokens 默认浅色主题 `--color-bg`），`ready-to-show`（本地页首帧绘制完成）才 reveal（派生实例的前台强制从创建时机移至 reveal）并销毁 splash；20s 兜底定时器防加载异常 splash 悬挂，reveal 幂等。
+    - **引导标记**：完成标记由 renderer localStorage（多实例共享 userData 下 LevelDB 快照互不可见，第二实例每次重复弹引导）改为主进程文件 `userData/onboarding.json`，经 `workspaceApi.getOnboardingDone/markOnboardingDone` 读写；ui 侧 NovelApp 新增可选 `onboardingPort`（isCompleted/markCompleted）——判定链：端口已完成 → 不弹；端口未完成但 localStorage 已完成 → 补写文件迁移后不弹；端口异常/未提供（测试与他宿主）→ 回退 localStorage；都无记录 → 弹。向导关闭（完成/跳过/ESC/X）localStorage 与主进程文件双写。
+    - **事件 socket 落点迁移**：`ipc://` 地址在本机映射为 Unix domain socket 文件，原先的相对路径名（`novel-events-<pid>` 等）落在进程 CWD（gui/ 仓库目录），不干净退出残留污染（实测已积累 6 个 focus + 十余个 conversation 残留）。`topics.ts` 统一改派生 `<tmpdir>/novel-*` 绝对路径——干净关闭由 zeromq 自动删除、残留由 OS 兜底清理、同名重绑不受残留影响（已实测）。旧实例（CWD 相对地址）与新实例（tmpdir 地址）过渡期焦点回切会失联一次（回退报错文案），旧实例重启后对齐。
+    - **页内启动占位 + 启动计时日志**（修"reveal 后仍 3-4s 全白"）：`ready-to-show` 只等空 HTML 首帧——React 挂载完成前 reveal 的窗口是纯白底（实测 cold 启动 bundle 求值 + mount 可达 1-3s）。`minimal.html` 内联同款品牌占位（React createRoot 首次 commit 清空 #root 子节点，占位与首帧 UI 同 commit 替换，无接缝）；main 侧增 `[boot]` 计时链（app ready / splash / window created / loadFile / dom-ready / ready-to-show / revealed，相对 main() 进入的毫秒数），renderer 增里程碑（modules evaluated / root render start / app mounted，console.info 经 console-message 桥按 `[boot]` 前缀转发并附毫秒）。实测（温启）：reveal(+2196ms) 晚于 mount(+1226ms)——splash 直达完整 UI；冷启/慢机 reveal 早于 mount 时由页内占位覆盖，结构性消除白屏。
+  - 输出：启动全程无白屏（splash → 首帧就绪的主窗口）；引导只在真正首次使用时弹一次，任何实例完成即全局生效。
+  - 异常：标记文件读写失败 → 回退 localStorage 行为（同实例不重弹）；splash 兜底 20s 后强制 reveal。
+  - 边界：splash/主窗口底色取默认浅色主题色——深色主题用户启动瞬间有浅色 splash → 深色界面的短暂过渡（主进程读不到 renderer 的主题选择），仍优于纯白屏。
 
 ## 5. 边界与非目标
 
@@ -121,10 +155,18 @@ flowchart LR
 - [ ] 锁生命周期冒烟：A 关闭项目1（或退出应用）后 B 可正常打开项目1；A 切换到项目3 后项目1 立即可被 B 打开。
 - [ ] 注册表冒烟：A、B 交替打开不同项目后，两边"最近项目"列表条目齐全无丢失。
 - [x] core typecheck+test（750/750）、ui check+test（408/408）、全仓构建 + 双实例启动冒烟通过（2026-08-20，Windows）。
+- [x] 单测：WorkspaceController——pick 仅选择不打开（相位回落可交互）、open/openInNewWindow（成功派发不动 current / 端口缺省 / 失败透传文案）、openStartupWorkspace（有则打开/取出即清/无端口静默）、open 错误 message 透传（2026-08-20）。
+- [x] 单测：WorkspaceSelectionDialog——选定目录后出现打开位置面板、新窗口/当前窗口分别派发对应回调、最近项进面板、取消清面板（2026-08-20）。
+- [x] 单测：`WorkspaceDirLock.inspect`——无锁/损坏/活 pid/死 pid 四态，只读不改动；切换对话框过滤当前项目（id/rootPath 双匹配 + 空态文案）（2026-08-20）。
+- [x] 单测：NovelApp 引导门控——端口已完成不弹 / 端口未完成 + localStorage 已完成迁移补写不弹 / 都无记录弹（2026-08-20）。
+- [ ] 功能点九冒烟：启动先见品牌 splash（无白屏）→ 主窗口首帧就绪后 splash 消失；完成一次引导后 spawn 第二实例 → 不再弹引导且 `userData/onboarding.json` 内容正确。
+- [ ] 功能点八冒烟：对话框"最近打开"不含当前项目；A 对 B 持有的项目"在新窗口打开"→ 不 spawn、B 置前、A 弹窗告知；目录选择器手动选回当前项目 → 幂等 + 弹窗"已在当前窗口打开"；新窗口以 48px 级联偏移出现在前台并自动打开。
+- [ ] 功能点七冒烟：A 开项目1 → 应用内"打开项目"→ 选项目2 →"在新窗口打开"→ 新实例自动打开项目2 且 A 保持项目1；同流程选"在当前窗口打开"→ A 切换（原会话终止）；新实例启动自动打开失败（双开）时欢迎页显示提示。（spawn 上下文主链路已冒烟：env 派发 → 启动摘取 → 自动 open → 锁落盘，见功能点七）
 
 ## 7. 开放问题
 
 - 焦点回切 ack 超时 500ms 是否够（跨进程 Pair 建连 + 窗口操作）？可先 500ms，实测调整。
 - 锁持有 pid 被系统复用误判"活着"的兜底：仅靠报错文案给删锁路径是否足够？v1 不做 pid 起始时间比对。
-- "新建窗口"入口是否需要同时在欢迎页/切换对话框露出按钮？v1 只做菜单项。
+- ~~"新建窗口"入口是否需要同时在欢迎页/切换对话框露出按钮？~~ 已由功能点七解决：切换对话框选定项目后选择"在新窗口打开"；欢迎页（无当前项目）保持直达打开。
 - 提示与报错文案措辞（"已为你切换到该窗口"等）是否符合产品语气，实施时以现网文案风格微调。
+- 主题选择（`novel.theme`）仍是 localStorage：多实例下第二实例可能回落默认主题（LevelDB 快照互不可见，同引导标记问题）；如用户反馈明显再按功能点九同款"主进程文件 + 端口"模式迁移。

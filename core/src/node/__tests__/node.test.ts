@@ -102,4 +102,38 @@ describe("WorkspaceDirLock（同项目进程锁）", () => {
 		if (result.status !== "acquired") throw new Error("损坏锁应被回收并获取成功");
 		result.lock.release();
 	});
+
+	it("inspect 只读探测：无锁 / 活 pid / 死 pid / 损坏", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "novel-lock-"));
+		// 无锁
+		expect(WorkspaceDirLock.inspect(dir)).toBeUndefined();
+		// 损坏（不可读内容，等同无有效持有者）
+		writeFileSync(join(dir, "workspace.lock"), "not-json", "utf8");
+		expect(WorkspaceDirLock.inspect(dir)).toBeUndefined();
+		// 活 pid（本测试进程）
+		writeFileSync(
+			join(dir, "workspace.lock"),
+			JSON.stringify({ ...identity, pid: process.pid, acquiredAt: new Date().toISOString() }),
+			"utf8",
+		);
+		expect(WorkspaceDirLock.inspect(dir)).toEqual({
+			holderPid: process.pid,
+			alive: true,
+			lockPath: join(dir, "workspace.lock"),
+		});
+		// 死 pid（spawnSync 等待退出的子进程）
+		const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"], { timeout: 10_000 });
+		writeFileSync(
+			join(dir, "workspace.lock"),
+			JSON.stringify({ ...identity, pid: dead.pid, acquiredAt: new Date().toISOString() }),
+			"utf8",
+		);
+		const status = WorkspaceDirLock.inspect(dir);
+		expect(status?.holderPid).toBe(dead.pid);
+		expect(status?.alive).toBe(false);
+		// acquire 时死 pid 锁被回收（inspect 本身不改动）
+		const result = WorkspaceDirLock.acquire(dir, identity);
+		if (result.status !== "acquired") throw new Error("死 pid 锁应可被 acquire 回收");
+		result.lock.release();
+	});
 });

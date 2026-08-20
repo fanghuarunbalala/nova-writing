@@ -15,12 +15,14 @@ import type { ConversationTodoStore } from "../../todo/TodoProtocol.js";
 import type { ComposeModeService } from "../../../conversation/compose/index.js";
 import { createFileTools } from "../definitions/files.js";
 import { createTodoWriteTool } from "../definitions/todo.js";
+import { createSkillTool } from "../definitions/skill.js";
 import { createComposeTools } from "../definitions/compose.js";
 import { createAskUserTool } from "../definitions/askUser.js";
 import type { AskUserChannel } from "../definitions/askUser.js";
 import { createNovelEntityTools } from "../definitions/novel.js";
 import { createLibraryReadTool } from "../definitions/library.js";
 import type { LibraryReadDeps } from "../definitions/library.js";
+import type { SkillRegistry } from "../../skill/SkillRegistry.js";
 
 /** runtime.todo：会话执行计划（TodoWrite） */
 export const NOVEL_TOOL_GROUP_TODO = new ToolGroupManifest({
@@ -47,6 +49,15 @@ export const NOVEL_TOOL_GROUP_ASK = new ToolGroupManifest({
   label: "Runtime Ask",
   description: "向作者提问（选择题/开放填空题，AskUserQuestion 挂起等待作答）",
   tools: ["AskUserQuestion"],
+});
+
+/** runtime.skills：技能读取（skill 元工具；Agent Skills 开放标准装载） */
+export const NOVEL_TOOL_GROUP_SKILLS = new ToolGroupManifest({
+  id: "runtime.skills",
+  version: "1.0.0",
+  label: "Runtime Skills",
+  description: "技能读取（skill：按名读取已装载技能的 SKILL.md 完整说明）",
+  tools: ["skill"],
 });
 
 /** novel.compose：设计模式进入/退出（Exit 硬审批门） */
@@ -91,6 +102,7 @@ export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = 
   [NOVEL_TOOL_GROUP_TODO.id, NOVEL_TOOL_GROUP_TODO],
   [NOVEL_TOOL_GROUP_FILES.id, NOVEL_TOOL_GROUP_FILES],
   [NOVEL_TOOL_GROUP_ASK.id, NOVEL_TOOL_GROUP_ASK],
+  [NOVEL_TOOL_GROUP_SKILLS.id, NOVEL_TOOL_GROUP_SKILLS],
   [NOVEL_TOOL_GROUP_COMPOSE.id, NOVEL_TOOL_GROUP_COMPOSE],
   [NOVEL_TOOL_GROUP_ENTITIES.id, NOVEL_TOOL_GROUP_ENTITIES],
   [NOVEL_TOOL_GROUP_ANALYST_FILES.id, NOVEL_TOOL_GROUP_ANALYST_FILES],
@@ -111,6 +123,8 @@ export interface NovelToolGroupResolverOptions {
   compose?: { service: ComposeModeService; conversationId: string };
   /** 提问通道（runtime.ask 组 AskUserQuestion；由 buildNovelAgent 注入，缺省工具回「未送达」文本） */
   ask?: { channel: AskUserChannel; conversationId: string };
+  /** 技能注册表（runtime.skills 组 skill；缺省=未装配降级，工具回「未装配」文本，对齐 runtime.ask 先例） */
+  skills?: { registry: SkillRegistry };
   /** 书库服务（library.read 组 LibraryRead；workspace 同上作为书单访问控制根。缺省组装配报错） */
   library?: { deps: LibraryReadDeps };
   /** novel.entities 写工具审批覆盖（缺省 true=需审批；BookAnalyst 后台无人审批会话传 false，对齐 analyst.files 免审批先例） */
@@ -142,6 +156,8 @@ export function createNovelToolGroupResolver(
       "runtime.ask",
       () => [createAskUserTool(options.ask?.channel, options.ask?.conversationId ?? "")],
     ],
+    // runtime.skills：registry 缺省=未装配降级（工具回不可用文本，对齐 runtime.ask 先例）
+    ["runtime.skills", () => [createSkillTool(options.skills?.registry)]],
     [
       "novel.compose",
       () => {

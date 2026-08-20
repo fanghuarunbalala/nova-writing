@@ -10,7 +10,7 @@ import { expose, wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
 import type { Logger, ProjectedEvent } from "@novel/core";
-import type { ConfigApi, ConfigMutation, ConnectionTestInput } from "@novel/core";
+import type { ConfigApi, ConfigMutation, ConnectionTestInput, McpServerInput } from "@novel/core";
 import { emitApprovalsChanged, emitAskingsChanged, emitNovelChanged } from "@novel/ui";
 import {
   NovelApp,
@@ -77,6 +77,10 @@ const configurationClient = {
       return { providerLive: true };
     }
   },
+  // 技能清单（main 实时扫描两级 skills 目录）：旧 server 未暴露时 undefined → 面板显示未装配
+  skillsList: () => configApi.skillsList?.(),
+  // MCP 测试连接（main 临时连接 initialize + tools/list）：旧 server 未暴露时 undefined → 隐藏按钮
+  testMcp: (input: McpServerInput) => configApi.testMcp?.(input),
 };
 
 interface WorkspaceSessionDto {

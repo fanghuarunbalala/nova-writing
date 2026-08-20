@@ -13,10 +13,10 @@ const handle = {
 } as unknown;
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（14 段 recipe 序含四质量规范段，规范段 v2.0 转 dynamic 移至 protocol 后）+ toolDefs 齐全（13 工具）", () => {
+  it("systemSections 齐全（15 段 recipe 序含 skill.index 专属动态段）+ toolDefs 齐全（13 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
-    expect(cap.systemSections).toHaveLength(14);
+    expect(cap.systemSections).toHaveLength(15);
     expect(cap.systemSections.map((s) => s.id)).toEqual([
       "novel.identity",
       "novel.system",
@@ -30,17 +30,18 @@ describe("buildNovelAgent 组装", () => {
       "novel.publication_standard",
       "tool.policy",
       "tool.guidance",
+      "skill.index",
       "core.environment",
       "novel.global_constraints",
     ]);
-    // 四规范段转 dynamic（尾附「参考案例」小节）：static 6 + dynamic 8
+    // 四规范段 + skill.index 转 dynamic：static 6 + dynamic 9
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
-    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(8);
-    // library.read 暂不接入 main（定义组序已移除）——book-analyst 分支恢复后回 13
-    expect(cap.toolDefs).toHaveLength(12);
+    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(9);
+    // library.read 暂不接入 main（定义组序已移除）——book-analyst 分支恢复后回 14
+    expect(cap.toolDefs).toHaveLength(13);
   });
 
-  it("工具名覆盖 todo + files + ask + compose + novel.entities（5 组 12 工具；library.read 暂不接入）", () => {
+  it("工具名覆盖 todo + files + ask + skills + compose + novel.entities（6 组 13 工具；library.read 暂不接入）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { toolDefs: Array<{ name: string }> } } }).config.agentCapability;
     const names = cap.toolDefs.map((t) => t.name);
@@ -50,6 +51,7 @@ describe("buildNovelAgent 组装", () => {
     expect(names).toContain("Write");
     expect(names).toContain("Edit");
     expect(names).toContain("AskUserQuestion");
+    expect(names).toContain("skill");
     expect(names).toContain("EnterComposeMode");
     expect(names).toContain("ExitComposeMode");
     expect(names).toContain("NovelRead");
@@ -66,7 +68,7 @@ describe("buildNovelAgent 组装", () => {
     expect(result).toContain("[]");
   });
 
-  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（15 工具），Agent 返回 acceptance", async () => {
+  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（16 工具），Agent 返回 acceptance", async () => {
     const spawner = {
       spawn: () => ({ taskId: "task_1", status: "running" as const }),
       queryTasks: async () => [],
@@ -93,8 +95,8 @@ describe("buildNovelAgent 组装", () => {
         };
       }
     ).config.agentCapability;
-    // 12（5 组，含 novel.entities 四工具与 novel.compose 两工具） + 3（subagent 派发三工具）
-    expect(cap.toolDefs).toHaveLength(15);
+    // 13（6 组，含 novel.entities 四工具与 novel.compose 两工具） + 3（subagent 派发三工具）
+    expect(cap.toolDefs).toHaveLength(16);
     const names = cap.toolDefs.map((t) => t.name);
     expect(names).toContain("Agent");
     expect(names).toContain("TaskOutput");

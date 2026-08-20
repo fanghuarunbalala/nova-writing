@@ -10,6 +10,7 @@ import type {
 	ConfigMutation,
 	ConfigSnapshot,
 	CredentialRef,
+	McpServerConfig,
 	ModelProfile,
 	RuntimeSettings,
 } from "../../config/contract.js";
@@ -18,6 +19,8 @@ import {
 	validateModelCapabilities,
 	validateRuntimeSettings,
 } from "../../config/runtimeSettings.js";
+import { validateSkillsDisabled } from "../../config/skillsSettings.js";
+import { validateMcpServerInput } from "../../config/mcpSettings.js";
 
 /** node config store 构造选项 */
 export interface NodeApplicationConfigStoreOptions {
@@ -34,6 +37,8 @@ interface PersistedConfig {
 	profiles: ModelProfile[]
 	defaultProfileId?: string
 	runtime?: RuntimeSettings
+	skillsDisabled?: string[]
+	mcpServers?: McpServerConfig[]
 	credentials: Record<CredentialRef, string>
 }
 
@@ -45,6 +50,8 @@ export class NodeApplicationConfigStore implements ConfigStore {
 	private profiles: ModelProfile[] = [];
 	private defaultProfileId?: string;
 	private runtime?: RuntimeSettings;
+	private skillsDisabled?: string[];
+	private mcpServers: McpServerConfig[] = [];
 	private credentials = new Map<CredentialRef, string>();
 
 	/**
@@ -73,10 +80,27 @@ export class NodeApplicationConfigStore implements ConfigStore {
 				// 旧版本/异常落盘的 runtime 非法：丢弃回退默认（profiles/凭据不受影响）
 				this.runtime = undefined;
 			}
+			try {
+				this.skillsDisabled = validateSkillsDisabled(parsed.skillsDisabled ?? []);
+			} catch {
+				// 旧版本/异常落盘的禁用名单非法：丢弃回退全启用
+				this.skillsDisabled = undefined;
+			}
+			// 单条非法的服务器丢弃该条，其余保留（避免一台脏数据拖垮全部 MCP 配置）
+			this.mcpServers = (parsed.mcpServers ?? []).filter((s) => {
+				try {
+					validateMcpServerInput(s);
+					return true;
+				} catch {
+					return false;
+				}
+			});
 		} catch {
 			this.profiles = [];
 			this.defaultProfileId = undefined;
 			this.runtime = undefined;
+			this.skillsDisabled = undefined;
+			this.mcpServers = [];
 			this.credentials = new Map();
 		}
 	}
@@ -90,6 +114,8 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			...(this.defaultProfileId !== undefined ? { defaultProfileId: this.defaultProfileId } : {}),
 			credentials: Object.freeze(credentials),
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
+			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
+			...(this.mcpServers.length > 0 ? { mcpServers: this.mcpServers } : {}),
 			diagnostics: { logLevel: "info" },
 		};
 	}
@@ -120,6 +146,18 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			case "runtime.set":
 				this.runtime = validateRuntimeSettings(m.runtime, this.profiles.map((p) => p.id));
 				break;
+			case "skills.setDisabled":
+				this.skillsDisabled = validateSkillsDisabled([...m.names]);
+				break;
+			case "mcp.upsert": {
+				validateMcpServerInput(m.server);
+				const next: McpServerConfig = { id: m.serverId, ...m.server };
+				this.mcpServers = [...this.mcpServers.filter((s) => s.id !== m.serverId), next];
+				break;
+			}
+			case "mcp.remove":
+				this.mcpServers = this.mcpServers.filter((s) => s.id !== m.serverId);
+				break;
 			case "credential.save":
 				this.credentials.set(m.ref, await this.cipher.encrypt(m.secret));
 				break;
@@ -142,6 +180,8 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			profiles: this.profiles,
 			...(this.defaultProfileId !== undefined ? { defaultProfileId: this.defaultProfileId } : {}),
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
+			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
+			...(this.mcpServers.length > 0 ? { mcpServers: this.mcpServers } : {}),
 			credentials: Object.fromEntries(this.credentials),
 		};
 		await writeFile(this.filePath, JSON.stringify(payload, null, 2), "utf8");

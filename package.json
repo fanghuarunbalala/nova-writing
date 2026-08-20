@@ -4,6 +4,10 @@
   "private": true,
   "license": "MIT",
   "author": "Fang Huarun",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fanghuarunbalala/nova-writing.git"
+  },
   "type": "module",
   "packageManager": "pnpm@11.8.0",
   "engines": {

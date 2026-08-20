@@ -122,8 +122,6 @@ docs/                PRD、架构文档、开发规范
 | <img src="docs/assets/xhs-qr.png" width="150" alt="小红书主页二维码"> | <img src="docs/assets/wechat-qr.png" width="150" alt="微信群二维码"> |
 | <sub>扫码或[点击主页](https://xhslink.cn/o/8tS4tRCxeD4)关注，交流创作心得并提改进意见</sub> | <sub>扫码加入微信群，交流创作心得</sub> |
 
-*微信群二维码 7 天内有效，失效可在 Issues 留言获取最新。*
-
 - 问题与建议：欢迎到 [GitHub Issues](https://github.com/fanghuarunbalala/nova-writing/issues) 提
 - 想参与开发：`docs/development/` 下有编码规范与协议文档，欢迎 fork、提 PR
 

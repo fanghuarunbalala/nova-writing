@@ -3,7 +3,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { basename, dirname, join, normalize } from "node:path";
+import { join, normalize } from "node:path";
 import type { WorkspaceLocation } from "../../workspace/contract.js";
 import type { WorkspaceLocator } from "../../workspace/locator.js";
 
@@ -41,10 +41,15 @@ export class NodeWorkspaceStoreLocator implements WorkspaceLocator {
 		const hash = createHash("sha1").update(workspaceRoot).digest("hex");
 		const workspaceId = hash.slice(0, 12);
 		// 目录名可读化：<父目录小写>-<项目名>--<hash8>（hash8 = sha1 前 8 位，
-		// 同名项目 / 路径大小写变体靠它区分；父目录小写对齐历史方案样式）
-		const root = normalize(workspaceRoot);
-		const leaf = toDirSegment(basename(root));
-		const parent = toDirSegment(basename(dirname(root))).toLowerCase();
+		// 同名项目 / 路径大小写变体靠它区分；父目录小写对齐历史方案样式）。
+		// 分隔符跨平台归一（\ 与 / 均切分）：宿主 basename/dirname 随平台走，
+		// Windows 风格路径在 Linux/macOS 宿主下须派生一致目录名（CI 即此场景）
+		const segments = normalize(workspaceRoot)
+			.replaceAll("\\", "/")
+			.split("/")
+			.filter((segment) => segment !== "");
+		const leaf = toDirSegment(segments.at(-1) ?? "");
+		const parent = toDirSegment(segments.at(-2) ?? "").toLowerCase();
 		const dirName = `${parent ? `${parent}-` : ""}${leaf || "workspace"}--${hash.slice(0, 8)}`;
 		return {
 			workspaceId,

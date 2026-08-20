@@ -120,8 +120,8 @@ docs/                PRD、架构文档、开发规范
 | 小红书 | 微信群 |
 | --- | --- |
 | <img src="docs/assets/xhs-qr.png" width="150" alt="小红书主页二维码"> | <img src="docs/assets/wechat-qr.png" width="150" alt="微信群二维码"> |
-| <sub>扫码或[点击主页](https://xhslink.cn/o/8tS4tRCxeD4)关注，交流创作心得并提改进意见</sub> | <sub>扫码加入微信群，交流创作心得</sub> |
 
+- 扫码或[点击主页](https://xhslink.cn/o/8tS4tRCxeD4)关注，欢迎大家一起来交流创作心得并提改进意见
 - 问题与建议：欢迎到 [GitHub Issues](https://github.com/fanghuarunbalala/nova-writing/issues) 提
 - 想参与开发：`docs/development/` 下有编码规范与协议文档，欢迎 fork、提 PR
 

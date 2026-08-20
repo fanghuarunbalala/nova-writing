@@ -18,6 +18,7 @@ import type { LibraryStore } from "../../domains/library/store/LibraryStore.js";
 import type { ScheduleStore } from "../../domains/schedule/store/ScheduleStore.js";
 import type { ScheduleTodoStore } from "../../domains/schedule/store/ScheduleTodoStore.js";
 import type { ConversationProjectionBinding } from "../../domains/conversation/binding/ConversationProjectionBinding.js";
+import type { ChatStagingDraft } from "../../domains/conversation/components/ChatStaging.js";
 import { ChatSurface } from "./ChatSurface.js";
 import { ContentSurface } from "./ContentSurface.js";
 import { LibrarySurface } from "./LibrarySurface.js";
@@ -67,6 +68,15 @@ export interface MainAreaProps {
   readonly planTodoId: string | null;
   readonly onSelectPlanTodo: (id: string | null) => void;
   readonly onCreateConversation: () => void;
+  /** 新创作中转页（demo 决议：首条消息才建会话）——透传 ChatSurface */
+  readonly staging?: boolean;
+  readonly stagingDraft?: ChatStagingDraft;
+  readonly onStagingDraftChange?: (draft: ChatStagingDraft) => void;
+  readonly onStagingExit?: () => void;
+  /** 当前工作区标题（中转页上下文摘要卡） */
+  readonly workspaceLabel?: string;
+  /** 示例指令（壳层按当前项目角色/章节派生）；缺省用组件内置通用文案 */
+  readonly stagingExamples?: readonly string[];
   /** 打开会话信息面板（inspector conversation 路由；PRD 决议 1） */
   readonly onOpenConversationInfo?: (conversationId: string) => void;
   readonly onTodoAction?: (id: string, action: string) => void;
@@ -111,6 +121,12 @@ export const MainArea = memo(function MainArea(props: MainAreaProps) {
           resolveReference={props.resolveReference}
           onNotify={props.onNotify}
           composerDraft={props.composerDraft}
+          staging={props.staging}
+          stagingDraft={props.stagingDraft}
+          onStagingDraftChange={props.onStagingDraftChange}
+          onStagingExit={props.onStagingExit}
+          workspaceLabel={props.workspaceLabel}
+          stagingExamples={props.stagingExamples}
         />
       ) : mainView.state === "content" ? (
         // key=contentTab：tab 切换也重挂载触发 view-in 过渡

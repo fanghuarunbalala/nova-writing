@@ -1156,6 +1156,31 @@
   .composerHint { margin: 6px 4px 0; font-size: var(--fs-10-5); color: var(--color-faint); display: flex; gap: 10px; flex-wrap: wrap; }
   .composerHint b { color: var(--color-muted); font-weight: var(--fw-medium); }
 
+  /* ============ 新创作中转页（类 Codex：居中单输入 + 介绍，非消息流；首条消息发出后才建会话） ============ */
+  .stagePage { flex: 1; min-height: 0; overflow: auto; display: flex; }
+  .stageInner { margin: auto; width: 100%; max-width: 720px; padding: 44px 28px 60px; display: flex; flex-direction: column; align-items: center; text-align: center; animation: view-in 0.3s var(--ease-out); }
+  .stageBrand { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-11); font-weight: var(--fw-bold); letter-spacing: 0.14em; color: var(--color-faint); }
+  .stageBrand svg { color: var(--color-accent-ink); }
+  .stageTitle { margin: 16px 0 0; font-size: 22px; font-weight: var(--fw-bold); letter-spacing: 0.01em; }
+  .stageSub { margin: 12px 0 0; max-width: 540px; font-size: var(--fs-13); line-height: 1.75; color: var(--color-muted); }
+  .stageCtx { margin-top: 22px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-surface); font-size: var(--fs-12); color: var(--color-muted); }
+  .stageCtx svg { flex: none; color: var(--color-accent-ink); }
+  .stageCtx b { font-weight: var(--fw-medium); color: var(--color-fg); }
+  .stageCtx .dotSep { color: var(--color-faint); }
+  .stageComposer { width: 100%; margin-top: 26px; text-align: left; }
+  .stageExs { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .stageEx { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: var(--fs-12); color: var(--color-muted); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-pill); cursor: pointer; transition: border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out); }
+  .stageEx:hover { border-color: var(--color-accent); color: var(--color-fg); box-shadow: 0 0 0 3px var(--color-accent-8-t); }
+  .stageEx svg { color: var(--color-faint); }
+  .stageEx:hover svg { color: var(--color-accent-ink); }
+  .stageTips { margin-top: 34px; width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; text-align: left; }
+  .stageTip { display: flex; gap: 10px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: color-mix(in oklab, var(--color-fg) 2%, transparent); }
+  .stageTip > svg { flex: none; margin-top: 2px; color: var(--color-accent-ink); }
+  .stageTip b { display: block; font-size: var(--fs-12-5); font-weight: var(--fw-medium); }
+  .stageTip small { display: block; margin-top: 3px; font-size: var(--fs-11-5); line-height: 1.65; color: var(--color-faint); }
+  .stageFoot { margin-top: 24px; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-11); color: var(--color-faint); }
+  @media (max-width: 720px) { .stageTips { grid-template-columns: 1fr; } }
+
   /* ============ 审批右栏 ============ */
   .inspector {
     display: flex; flex-direction: column; flex: none;
@@ -2975,6 +3000,8 @@ const state = {
   view: "chat", contentTab: "outline",
   selUnit: "u2", selChapter: "c2", selChar: "ch1", selLoc: "l1",
   planSel: "overview", mode: "compose", pendingMode: null, modeMenuOpen: false, genState: "generating",
+  /* 对话主区阶段：sample=示例会话消息流 / staging=新创作中转页（未建会话）/ new=中转页首条消息后新建的会话 */
+  convStage: "sample",
   sidebarCollapsed: false, maximized: false, ws: "北河旧事", pinned: false,
   dirOpen: true, dirTab: "outline", dirDetail: null, insW: null,
   /* 输入框引用（拖入右栏实体）：{ kind, id, label }，随消息发送后清空 */
@@ -3153,12 +3180,12 @@ function chatSidebarHTML() {
       ${["置顶", "今天", "更早"].map(g => {
         const items = CONVS.filter(c => c.group === g);
         if (!items.length) return "";
-        return `<div class="dirGroup">${g}</div>` + items.map(convRow).join("");
+        return `<div class="dirGroup">${g}</div>` + items.map(c => convRow(c, CONVS.indexOf(c))).join("");
       }).join("")}
     </div>`;
 }
-function convRow({ title, meta, icon, dot, active, pin }) {
-  return `<div class="convItem${active ? " active" : ""}" ${active ? 'data-active="1"' : ""}>
+function convRow({ title, meta, icon, dot, active, pin }, idx) {
+  return `<div class="convItem${active ? " active" : ""}" data-act="convSel" data-id="${idx}" ${active ? 'data-active="1"' : ""} title="${esc(title)} · ${esc(meta)}">
     <span class="convIcon">${ic(icon, 13)}</span>
     <span class="convText">
       <span class="convTitle">${esc(title)}${pin ? `<span class="pinMini">${ic("pin", 10)}</span>` : ""}</span>
@@ -3653,21 +3680,77 @@ function updateModeUI() {
   if (row) row.innerHTML = modeRowInner();
 }
 
+/* ================= 新创作中转页（类 Codex） =================
+   会话尚未创建：居中的介绍 + 完整 composer + 示例与用法；
+   首条消息发出时才建会话入列（startNewConv），此前侧栏无新行 */
+const STAGE_EXAMPLES = [
+  "起草第二卷「雾锁」的开篇场景",
+  "把第 2 章雨夜追逃段改写出两个版本",
+  "为林晚补全角色档案",
+  "梳理当前大纲，找出没有正文的单元",
+];
+const STAGE_TIPS = [
+  { icon: "shieldCheck", name: "三种执行模式", desc: "需审核 / 直接执行 / 设计——会话级生效，输入框左下角随时切换。" },
+  { icon: "quote", name: "引用书稿实体", desc: "输入中按 Tab 引用 角色 / 大纲 / 正文，让 Agent 精确定位到相关档案。" },
+  { icon: "listTree", name: "右栏内容目录", desc: "对话中可展开大纲树与人物地点；把手拖拽调宽，点正文实体标签直达档案。" },
+  { icon: "hourglass", name: "先审后落库", desc: "档案写入与正文修改均生成审批项，处理完自动继续（直接执行模式除外）。" },
+];
+function stagingMainHTML() {
+  return `
+  <div class="stagePage">
+    <div class="stageInner">
+      <span class="stageBrand">${ic("feather", 13, 2)}Novel Agent</span>
+      <h2 class="stageTitle">开始一段新的创作</h2>
+      <p class="stageSub">描述你想推进的任务——起草场景、修订正文、推进大纲节点。Agent 会给出草稿与提议，经你审批后写入书稿档案。</p>
+      <div class="stageCtx" title="当前工作区与书稿状态">${ic("bookOpen", 13)}<b>${esc(state.ws)}</b><span class="dotSep">·</span>第 2 章 · 追逃段修订<span class="dotSep">·</span><span class="chip warn" style="padding:0 8px;">生成中</span></div>
+      <div class="stageComposer">
+        <div class="composerBox">
+          <div class="statusWrap" data-open="${state.genState !== "idle"}"><div class="statusInner">${genStatusHTML()}</div></div>
+          <div class="composerRow">
+            <textarea id="chatInput" rows="2" placeholder="描述这次想推进的任务… （Tab 引用 角色 / 大纲 / 正文）"></textarea>
+          </div>
+          <div class="modeRow" id="modeRow">${modeRowInner()}</div>
+        </div>
+        <div class="composerHint"><span><b>Enter</b> 发送</span><span><b>Shift+Enter</b> 换行</span><span>执行模式对整个会话生效</span></div>
+      </div>
+      <div class="stageExs">
+        ${STAGE_EXAMPLES.map(t => `<button class="stageEx" data-act="stageExample" data-id="${esc(t)}">${esc(t)}</button>`).join("")}
+      </div>
+      <div class="stageTips">
+        ${STAGE_TIPS.map(t => `<div class="stageTip">${ic(t.icon, 14)}<div><b>${t.name}</b><small>${t.desc}</small></div></div>`).join("")}
+      </div>
+      <div class="stageFoot">${ic("clock", 11)}会话在发送首条消息后才会创建，并出现在左侧目录</div>
+    </div>
+  </div>`;
+}
+
+/* 新建会话的时间线：无预设样例轮次，只有「第 1 轮」分隔 + 即时消息（发送/排队机制与示例会话共用） */
+function newConvTimelineHTML() {
+  return `
+    <div class="runDivider"><span>第 1 轮 · 新会话</span></div>
+    <div id="liveMsgs" style="display:flex;flex-direction:column;gap:16px;">${liveMsgs.join("")}</div>`;
+}
+
 function chatMainHTML() {
+  /* 「新会话」态：subHead 换为新建会话的标题，无示例会话的审批提示条与预设轮次 */
+  const isNew = state.convStage === "new";
+  const conv = isNew ? CONVS.find(c => c.active) : null;
+  const title = isNew ? (conv ? conv.title : "新的创作") : "《北河旧事》";
+  const kicker = isNew ? "新会话 · 今天" : "第 2 章 · 追逃段修订 · 第 4 轮";
   return `
     <div class="subHead">
-      <div class="subTitle"><b>《北河旧事》</b><span class="kicker">第 2 章 · 追逃段修订 · 第 4 轮</span></div>
+      <div class="subTitle"><b>${esc(title)}</b><span class="kicker">${esc(kicker)}</span></div>
       <div class="subActions">
         <button class="iconBtn dirToggleBtn${state.dirOpen ? " on" : ""}" data-act="insToggle" title="${state.dirOpen ? "收起内容目录" : "展开内容目录"}">${ic("listTree", 14)}</button>
         <button class="iconBtn" data-act="convPin" title="置顶会话">${ic("pin", 14)}</button>
         <button class="iconBtn" data-act="convMenu" title="更多">${ic("more", 14)}</button>
       </div>
     </div>
-    <div class="apAlertBar" id="apAlertBar" data-act="apModalOpen" title="打开审批弹窗" style="display:none;">
+    ${isNew ? "" : `<div class="apAlertBar" id="apAlertBar" data-act="apModalOpen" title="打开审批弹窗" style="display:none;">
       ${ic("hourglass", 15)}<b>审批挂起</b><span>· <span id="alertN">${pendingN()}</span> 项待决，会话已暂停——处理完继续</span>
       <span class="alertBtn">立即处理 ${ic("arrowRight", 11)}</span>
-    </div>
-    <div class="chatScroll" id="chatScroll"><div class="chatInner fresh">${chatTimelineHTML()}</div></div>
+    </div>`}
+    <div class="chatScroll" id="chatScroll"><div class="chatInner fresh">${isNew ? newConvTimelineHTML() : chatTimelineHTML()}</div></div>
     <div class="composer" data-gen="${state.genState}">
       <div class="composerInner">
         <div class="composerBox">
@@ -3939,7 +4022,9 @@ function contentSubHead() {
 
 function renderMain() {
   if (state.view === "chat") {
-    mainEl.innerHTML = chatMainHTML(); scrollChat(true); bindChatInput(); updateAlertBar();
+    /* 中转页（staging）：居中单输入 + 介绍；非消息流——首条消息发出后才进入会话（new） */
+    mainEl.innerHTML = state.convStage === "staging" ? stagingMainHTML() : chatMainHTML();
+    scrollChat(true); bindChatInput(); updateAlertBar();
     return;
   }
   if (state.view === "plan") {
@@ -5623,16 +5708,34 @@ document.addEventListener("click", (e) => {
     case "noop": break;
     case "copyChap": toast("已复制本章正文（演示）"); break;
     case "newConv": {
-      /* 新建会话：按钮内 spinner 等待，完成后向目录动态插入新行 */
-      if (el.disabled) break;
-      el.disabled = true;
-      el.innerHTML = `<span class="spinner"></span>正在创建…`;
-      setTimeout(() => {
-        convSeq += 1;
-        CONVS.unshift({ title: "新的创作 " + convSeq, meta: "空会话 · 刚刚", icon: "feather", group: "今天" });
-        renderSidebar();
-        toast("已开始新的创作");
-      }, 900);
+      /* 新建创作：先进中转页（居中单输入 + 介绍，非消息流）——首条消息发出时才创建会话入列 */
+      if (state.view !== "chat") { state.view = "chat"; renderTitlebar(); }
+      state.convStage = "staging";
+      CONVS.forEach(c => c.active = false);
+      resetLive();
+      renderSidebar(); renderMain();
+      break;
+    }
+    case "convSel": {
+      /* 会话行点击：切回对应会话的消息流（demo 仅有示例会话一支）；中转页点击行 = 放弃中转 */
+      const idx = Number(el.dataset.id);
+      if (!CONVS[idx] || CONVS[idx].active) break;
+      CONVS.forEach((c, i) => c.active = i === idx);
+      state.convStage = "sample";
+      resetLive();
+      if (state.view !== "chat") { state.view = "chat"; renderTitlebar(); }
+      renderSidebar(); renderMain();
+      break;
+    }
+    case "stageExample": {
+      /* 中转页示例指令 chip：填入输入框并聚焦（不代发，作者可改） */
+      const ta = $("chatInput");
+      if (ta) {
+        ta.value = el.dataset.id || "";
+        ta.dispatchEvent(new Event("input"));
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }
       break;
     }
   }
@@ -5906,6 +6009,24 @@ function clearQueue() {
 function msgUserHTML(text, refs = [], { anim = false } = {}) {
   return `<div class="msgUser"${anim ? ' style="animation: msg-enter var(--duration-base) var(--ease-out)"' : ""}>${refs && refs.length ? `<div class="msgRefs">${refChipsHTML(refs)}</div>` : ""}${text ? esc(text) : ""}</div>`;
 }
+/* 会话切换 / 进中转页：清空即时消息与排队，生成状态复位（幽灵项随重渲染带走） */
+function resetLive() {
+  queuedMsgs.length = 0;
+  liveMsgs.length = 0;
+  if (state.genState !== "idle") setGen("idle");
+}
+/* 中转页首条消息 → 此刻才创建会话：侧栏顶部入列（标题取指令前 14 字），切入该会话消息流 */
+function startNewConv(text) {
+  convSeq += 1;
+  const title = text.length > 14 ? text.slice(0, 14) + "…" : text;
+  CONVS.forEach(c => c.active = false);
+  CONVS.unshift({ title, meta: "1 条消息 · 刚刚", icon: "feather", group: "今天", active: true });
+  state.convStage = "new";
+  liveMsgs.push(msgUserHTML(text));
+  renderSidebar(); renderMain();
+  toast("会话已创建");
+  demoReply();
+}
 function sendMsg() {
   const ta = $("chatInput");
   const text = (ta ? ta.value : "").trim();
@@ -5923,6 +6044,8 @@ function sendMsg() {
   if (state.pendingMode && state.pendingMode !== state.mode) {
     state.mode = state.pendingMode; state.pendingMode = null; updateModeUI();
   }
+  /* 中转页首条消息 → 创建会话并入列（侧栏此前无新行） */
+  if (state.convStage === "staging") { startNewConv(text); return; }
   liveMsgs.push(msgUserHTML(text, refs));
   const live = $("liveMsgs");
   /* 插入项带内联入场（盖过 .chatInner.fresh 抑制；缓存不带，重渲染不重播） */
@@ -5952,6 +6075,11 @@ function demoReply(refs = []) {
     const live2 = $("liveMsgs");
     /* 插入项带内联入场（同 sendMsg：缓存不带，重渲染不重播） */
     if (live2) live2.insertAdjacentHTML("beforeend", reply.replace('<div class="msgAssistant">', '<div class="msgAssistant" style="animation: msg-enter var(--duration-base) var(--ease-out)">'));
+    /* 新建会话：回复落地后同步侧栏 meta（条数 = 即时消息数） */
+    if (state.convStage === "new") {
+      const cur = CONVS.find(c => c.active);
+      if (cur) { cur.meta = liveMsgs.length + " 条消息 · 刚刚"; renderSidebar(); }
+    }
     setGen("idle");
     scrollChat();
   }, 450);

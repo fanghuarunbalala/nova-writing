@@ -154,6 +154,52 @@ describe("ApplicationShell smoke", () => {
     expect(api.novel.outline.get).toHaveBeenCalled();
   });
 
+  it("opens the workspace onto the staging page with project-specific examples", async () => {
+    const api = buildApi();
+    api.novel.characters.list = vi.fn(async () => [
+      { id: "ch1", name: "沈砚", aliases: ["主角"], summary: "" },
+    ]);
+    const conversationCatalog = new ConversationCatalogStore({ api });
+    const novelOverview = new NovelOverviewStore({ api });
+    const storyOutlineTree = new StoryOutlineTreeStore({ api });
+    const manuscriptStructure = new ManuscriptStructureStore({ api });
+    const character = new CharacterStore({ api });
+    const location = new LocationStore({ api });
+    const schedule = new ScheduleStore({ novelOverview, outlineTree: storyOutlineTree, conversationCatalog });
+    const workspaceController = new FakeWorkspaceController({
+      revision: 1,
+      phase: "ready",
+      current: { id: "w1", label: "白昼计划" },
+      recent: [],
+    });
+    render(
+      <ApplicationShell
+        api={api}
+        mainViewRouter={new MainViewRouter()}
+        inspectorRouter={new InspectorRouter()}
+        workspaceController={workspaceController}
+        domainStores={{
+          conversationCatalog,
+          novelOverview,
+          storyOutlineTree,
+          manuscriptStructure,
+          character,
+          location,
+          schedule,
+          scheduleTodo: new ScheduleTodoStore(),
+          notifications: new NotificationStore(),
+          library: new LibraryStore({ api }),
+        }}
+        toastStore={new ToastStore()}
+      />,
+    );
+    // 打开工作区 = 落地新创作中转页（首条消息才建会话），不渲染消息流输入
+    expect(await screen.findByRole("textbox", { name: "新创作指令" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "对话输入" })).not.toBeInTheDocument();
+    // 示例跟随项目实况：真实角色名替换通用兜底文案
+    expect(await screen.findByRole("button", { name: "为沈砚完善角色档案" })).toBeInTheDocument();
+  });
+
   it("switches to content view and shows the outline unit detail", async () => {
     const user = userEvent.setup();
     await renderShell();

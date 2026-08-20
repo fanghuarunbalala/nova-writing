@@ -3,6 +3,7 @@
  */
 export * from "./AssistantMessage.js";
 export * from "./ChatEmptyState.js";
+export * from "./ChatStaging.js";
 export * from "./ComposerModeBar.js";
 export * from "./ConversationComposer.js";
 export * from "./ConversationList.js";

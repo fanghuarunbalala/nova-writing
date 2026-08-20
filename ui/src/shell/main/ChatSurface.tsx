@@ -6,17 +6,18 @@
  * （gui-performance-2 功能点五：流式发布只重渲染本子树，壳层零成本），
  * 发送经 sendUserMessage，时间线由 chatSurfaceMapper 映射（逐项缓存 + useMemo）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AskQuestionAnswer, AskingQueueItem, ConversationMode } from "@novel/core";
 import { debugLog, type ConversationProjectionErrorSnapshot } from "@novel/core/client";
 import { Info, ListTree, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
 import type { ToastKind } from "../../shared/state/ToastStore.js";
 import { ChatEmptyState } from "../../domains/conversation/components/ChatEmptyState.js";
+import { ChatStaging, type ChatStagingDraft } from "../../domains/conversation/components/ChatStaging.js";
 import {
   ConversationDialogs,
   type RenameTarget,
 } from "../../domains/conversation/components/ConversationDialogs.js";
-import { ConversationComposer } from "../../domains/conversation/components/ConversationComposer.js";
+import { ConversationComposer, type ComposerInput } from "../../domains/conversation/components/ConversationComposer.js";
 import { ConversationTimeline } from "../../domains/conversation/components/ConversationTimeline.js";
 import type { GenStatusProps } from "../../domains/conversation/components/GenStatus.js";
 import type { MessageReference } from "../../domains/conversation/components/MessageReference.js";
@@ -67,6 +68,17 @@ export interface ChatSurfaceProps {
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   /** 引用草稿 store（右栏拖入的实体引用按会话持久化；传给 composer 引用栏） */
   readonly composerDraft?: ComposerDraftStore;
+  /** 新创作中转页激活（壳层状态）：替代消息流的居中引导页（demo .stagePage） */
+  readonly staging?: boolean;
+  /** 中转页受控草稿（壳层持有：切视图不丢；创建失败留在中转页时文案仍在） */
+  readonly stagingDraft?: ChatStagingDraft;
+  readonly onStagingDraftChange?: (draft: ChatStagingDraft) => void;
+  /** 退出中转页（提交成功切消息流 / 取消返回）；壳层同时清草稿 */
+  readonly onStagingExit?: () => void;
+  /** 当前工作区标题（中转页上下文摘要卡） */
+  readonly workspaceLabel?: string;
+  /** 示例指令（壳层按当前项目角色/章节派生）；缺省用组件内置通用文案 */
+  readonly stagingExamples?: readonly string[];
 }
 
 export function ChatSurface({
@@ -87,9 +99,64 @@ export function ChatSurface({
   resolveReference,
   onNotify,
   composerDraft,
+  staging = false,
+  stagingDraft,
+  onStagingDraftChange,
+  onStagingExit,
+  workspaceLabel,
+  stagingExamples,
 }: ChatSurfaceProps) {
   const catalog = useExternalStore(conversationCatalog);
   const activeId = catalog.activeConversationId;
+  // 中转页首条消息接力：提交时暂存（text + mode），新会话 binding 激活后由
+  // ActiveChatSurface 对齐会话模式并经幽灵回显路径发出（见下方 relay effect）
+  const [pendingStagingSend, setPendingStagingSend] = useState<ChatStagingDraft | undefined>(
+    undefined,
+  );
+  const [stagingBusy, setStagingBusy] = useState(false);
+  const consumePendingStagingSend = useCallback(() => {
+    setPendingStagingSend(undefined);
+  }, []);
+
+  // 中转页提交 = 此刻才创建会话（首条消息前不拉起子进程）；创建失败留在中转页，草稿不丢
+  const handleStagingSubmit = useCallback(
+    (draft: ChatStagingDraft): void => {
+      setStagingBusy(true);
+      void conversationCatalog
+        .createConversation()
+        .then((id) => {
+          setStagingBusy(false);
+          if (id === "") {
+            onNotify?.("danger", "会话创建失败，请重试");
+            return;
+          }
+          setPendingStagingSend(draft);
+          onStagingExit?.();
+        })
+        .catch(() => {
+          setStagingBusy(false);
+          onNotify?.("danger", "会话创建失败，请重试");
+        });
+    },
+    [conversationCatalog, onNotify, onStagingExit],
+  );
+
+  if (staging) {
+    return (
+      <ChatStaging
+        draft={stagingDraft ?? { text: "", mode: "review" }}
+        onDraftChange={(next) => onStagingDraftChange?.(next)}
+        onSubmit={handleStagingSubmit}
+        onCancel={() => {
+          setStagingBusy(false);
+          onStagingExit?.();
+        }}
+        workspaceLabel={workspaceLabel}
+        submitting={stagingBusy}
+        examples={stagingExamples}
+      />
+    );
+  }
   if (activeId === undefined) {
     // 目录装载中不亮「开始创作」空态（首开/切换瞬间闪空），先给加载态
     if (catalog.phase === "loading") {
@@ -132,6 +199,8 @@ export function ChatSurface({
       resolveReference={resolveReference}
       onNotify={onNotify}
       composerDraft={composerDraft}
+      pendingStagingSend={pendingStagingSend}
+      onPendingStagingSendConsumed={consumePendingStagingSend}
     />
   );
 }
@@ -159,6 +228,9 @@ interface ActiveChatSurfaceProps {
   readonly resolveReference?: ReferenceResolver;
   readonly onNotify?: (kind: ToastKind, text: string) => void;
   readonly composerDraft?: ComposerDraftStore;
+  /** 中转页首条消息（新会话已创建）：binding 激活后对齐模式并发出，随后由上层清除 */
+  readonly pendingStagingSend: ChatStagingDraft | undefined;
+  readonly onPendingStagingSendConsumed: () => void;
 }
 
 function ActiveChatSurface({
@@ -183,6 +255,8 @@ function ActiveChatSurface({
   resolveReference,
   onNotify,
   composerDraft,
+  pendingStagingSend,
+  onPendingStagingSendConsumed,
 }: ActiveChatSurfaceProps) {
   const session = useActiveConversationSession(conversationBinding);
   const { snapshot, sendUserMessage, sendSystemControl, getConversationMode, resume } = session;
@@ -336,6 +410,95 @@ function ActiveChatSurface({
     status = { phase: "waiting", queuedCount };
   }
 
+  // 发送主路径（composer onSend 与中转页首条消息共用）：无条件乐观回显——
+  // 空闲发送 flight（「发送中」旋转图标，落定即止），生成/思考/审批中发送
+  // queued（「排队中」秒表，等上一 run 收口接续）；references（右栏拖入实体）
+  // 随幽灵回显并整体入队；失败按 id 回收幽灵并显性报错（不吞掉）。
+  const performSend = useCallback(
+    (input: ComposerInput): void => {
+      debugLog("[renderer] onSend 触发:", {
+        text: input.text.slice(0, 40),
+        references: input.references.map((reference) => `${reference.kind}:${reference.label}`),
+      });
+      const phase =
+        status?.phase === "generating" || status?.phase === "thinking" || status?.phase === "waiting"
+          ? "queued"
+          : "flight";
+      const ghostId = ++queuedSeqRef.current;
+      debugLog("[ghost] enqueue:", {
+        id: ghostId,
+        phase,
+        statusPhase: status?.phase ?? "none",
+        text: input.text.slice(0, 40),
+      });
+      setQueuedSends((current) => [
+        ...current,
+        { id: ghostId, phase, text: input.text, references: input.references, at: Date.now() },
+      ]);
+      void sendUserMessage(input)
+        .then((receipt) => {
+          debugLog("[renderer] send resolved:", JSON.stringify(receipt));
+          setSendError(undefined);
+          // 发送成功 = 会话有活动：本地刷新，驱动侧栏「今天」分组即时生效
+          catalog.touchActivity(conversationId);
+        })
+        .catch((err: unknown) => {
+          debugLog("[renderer] send rejected:", err);
+          debugLog("[ghost] recycle (send failed):", { id: ghostId, phase });
+          setQueuedSends((current) => current.filter((item) => item.id !== ghostId));
+          if (err instanceof Error && err.stack !== undefined) {
+            console.error("[renderer] stack:", err.stack.split("\n").slice(0, 6).join(" | "));
+          }
+          const errorText = describeSendError(err);
+          setSendError(errorText);
+          onNotify?.("danger", errorText);
+        });
+    },
+    [status?.phase, sendUserMessage, catalog, conversationId, onNotify],
+  );
+
+  // 中转页首条消息接力（首条消息才建会话）：新会话 binding 激活后，先把会话模式
+  // 对齐中转页所选（不同才发 mode.set），再经 performSend 发出。in-flight ref 防
+  // StrictMode 双调用重复发送；binding 失败/停止时显性报错，不静默丢消息。
+  const stagingRelayInFlightRef = useRef(false);
+  useEffect(() => {
+    if (pendingStagingSend === undefined) {
+      stagingRelayInFlightRef.current = false;
+      return;
+    }
+    if (stagingRelayInFlightRef.current) return;
+    if (snapshot?.state === "failed" || snapshot?.state === "stopped") {
+      stagingRelayInFlightRef.current = true;
+      onPendingStagingSendConsumed();
+      setSendError("会话打开失败，首条指令未发出");
+      onNotify?.("danger", "会话打开失败，首条指令未发出");
+      return;
+    }
+    if (snapshot?.state !== "active") return;
+    stagingRelayInFlightRef.current = true;
+    onPendingStagingSendConsumed();
+    const target = pendingStagingSend;
+    void (async () => {
+      try {
+        const current = await getConversationMode();
+        if (current !== target.mode) {
+          await sendSystemControl({ type: "mode.set", mode: target.mode });
+        }
+      } catch {
+        onNotify?.("danger", "模式设置失败，已按当前模式发送");
+      }
+      performSend({ text: target.text, references: [] });
+    })();
+  }, [
+    pendingStagingSend,
+    snapshot?.state,
+    getConversationMode,
+    sendSystemControl,
+    performSend,
+    onPendingStagingSendConsumed,
+    onNotify,
+  ]);
+
   // 挂起提示条：有待决且弹窗未开时常驻顶部（demo .apAlertBar）；
   // 消失走退场相位——先播 pending-out 再卸载（弹窗打开/全部处理完时让位不硬切）
   const showApprovalBar =
@@ -431,48 +594,8 @@ function ActiveChatSurface({
           });
         }}
         onSend={(input) => {
-          // 发送失败（会话进程崩溃/超时等）必须显性展示，不吞掉
-          debugLog("[renderer] onSend 触发:", {
-            text: input.text.slice(0, 40),
-            references: input.references.map((reference) => `${reference.kind}:${reference.label}`),
-          });
-          // 无条件乐观回显：空闲发送 flight（「发送中」旋转图标，落定即止）；
-          // 生成/思考/审批中发送 queued（「排队中」秒表，等上一 run 收口接续）。
-          const phase =
-            status?.phase === "generating" || status?.phase === "thinking" || status?.phase === "waiting"
-              ? "queued"
-              : "flight";
-          const ghostId = ++queuedSeqRef.current;
-          // 幽灵入队诊断：phase 判定依据 statusPhase（generating/waiting → queued，
-          // 空闲 → flight）。NOVEL_LOG_LEVEL=verbose 时输出（pnpm gui:debug 自带）。
-          debugLog("[ghost] enqueue:", {
-            id: ghostId,
-            phase,
-            statusPhase: status?.phase ?? "none",
-            text: input.text.slice(0, 40),
-          });
-          setQueuedSends((current) => [
-            ...current,
-            { id: ghostId, phase, text: input.text, references: input.references, at: Date.now() },
-          ]);
-          void sendUserMessage(input)
-            .then((receipt) => {
-              debugLog("[renderer] send resolved:", JSON.stringify(receipt));
-              setSendError(undefined);
-              // 发送成功 = 会话有活动：本地刷新，驱动侧栏「今天」分组即时生效
-              catalog.touchActivity(conversationId);
-            })
-            .catch((err: unknown) => {
-              debugLog("[renderer] send rejected:", err);
-              debugLog("[ghost] recycle (send failed):", { id: ghostId, phase });
-              setQueuedSends((current) => current.filter((item) => item.id !== ghostId));
-              if (err instanceof Error && err.stack !== undefined) {
-                console.error("[renderer] stack:", err.stack.split("\n").slice(0, 6).join(" | "));
-              }
-              const text = describeSendError(err);
-              setSendError(text);
-              onNotify?.("danger", text);
-            });
+          // 幽灵回显与失败回收统一在 performSend（与中转页首条消息共用一条发送路径）
+          performSend(input);
         }}
       />
       <ConversationDialogs

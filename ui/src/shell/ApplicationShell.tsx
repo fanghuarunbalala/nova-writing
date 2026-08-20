@@ -16,6 +16,7 @@ import {
   createApprovalIdNameResolver,
 } from "../domains/approval/approvalEntityResolver.js";
 import type { MessageReference } from "../domains/conversation/components/MessageReference.js";
+import type { ChatStagingDraft } from "../domains/conversation/components/ChatStaging.js";
 import {
   createDomainReferenceResolver,
   type ReferenceResolver,
@@ -176,6 +177,36 @@ export function ApplicationShell({
   const [locateReference, setLocateReference] = useState<
     { readonly kind: "chapter" | "paragraph"; readonly id: string; readonly nonce: number } | null
   >(null);
+  // 新创作中转页（demo 决议：首条消息才建会话）：壳层持有开关与草稿，
+  // 切换主视图（内容/计划/书库）草稿不丢；退出时统一清空。
+  const [staging, setStaging] = useState(false);
+  const [stagingDraft, setStagingDraft] = useState<ChatStagingDraft>({ text: "", mode: "review" });
+  const exitStaging = useCallback(() => {
+    setStaging(false);
+    setStagingDraft({ text: "", mode: "review" });
+  }, []);
+  /** 打开/切换工作区的落地动作：进中转页并清草稿（已在中转则仅清草稿重开） */
+  const enterStaging = useCallback(() => {
+    setStaging(true);
+    setStagingDraft({ text: "", mode: "review" });
+  }, []);
+  // 中转页示例指令数据源：角色 / 章节快照（变化稀疏，仅 load 与 invalidate 时发布）。
+  // 前两条随项目实况生成（真实角色名 + 最新章标题），数据未载齐时回退通用文案。
+  const characterSnapshot = useExternalStore(domainStores.character);
+  const manuscriptSnapshot = useExternalStore(domainStores.manuscriptStructure);
+  const stagingExamples = useMemo(() => {
+    const firstName = characterSnapshot.characters[0]?.name;
+    const chapters = manuscriptSnapshot.chapters;
+    const latestChapter = chapters.length > 0 ? chapters[chapters.length - 1] : undefined;
+    return Object.freeze([
+      firstName !== undefined ? `为${firstName}完善角色档案` : "为主角补充角色档案",
+      latestChapter !== undefined
+        ? `把「${latestChapter.title}」改写出两个版本`
+        : "把最近写完的一章改写出两个版本",
+      "梳理当前大纲，找出没有正文的单元",
+      "核对既有设定，找出前后矛盾",
+    ]);
+  }, [characterSnapshot, manuscriptSnapshot]);
   const workspaceId = workspace.current?.id;
 
   // 通知中心数据源（1/2）工作区切换：清空旧项目通知（跨项目不串）+ 记 system 通知；
@@ -379,8 +410,11 @@ export function ApplicationShell({
     );
   }, [catalogSnapshot.activeConversationId, firstUserMessage, domainStores]);
 
-  // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）
+  // 跨域副作用协调：workspace 变化时并行触发各域 load（spec 1.5.1）。
+  // 打开/切换工作区即落地新创作中转页（首条消息才建会话——上一工作区的
+  // 开书意图与草稿不跨项目保留）。
   useEffect(() => {
+    enterStaging();
     if (workspaceId === undefined) return;
     // 引用草稿跨项目清空（conversationId 各项目同号，不清会串项目）
     composerDraft.clearAll();
@@ -400,10 +434,11 @@ export function ApplicationShell({
     void character.loadWorkspace(workspaceId);
     void location.loadWorkspace(workspaceId);
     void library.loadWorkspace(workspaceId);
-  }, [composerDraft, domainStores, workspaceId]);
+  }, [composerDraft, domainStores, workspaceId, enterStaging]);
 
   // 进入对话视图默认展开内容目录（首次挂载同样生效）；用户手动收起后
-  // 本次停留内不再强制展开（离开再回来才恢复默认）。
+  // 本次停留内不再强制展开（离开再回来才恢复默认）。中转页期间不展开
+  //（极简居中布局，右栏让位；退出中转页回到消息流时不重复触发）。
   const prevViewStateRef = useRef<MainViewState | undefined>(undefined);
   useEffect(() => {
     const prev = prevViewStateRef.current;
@@ -411,11 +446,12 @@ export function ApplicationShell({
     if (
       mainView.state === "chat" &&
       prev !== "chat" &&
+      !staging &&
       inspectorRouter.getSnapshot().state.kind === "closed"
     ) {
       inspectorRouter.transition({ kind: "directory" });
     }
-  }, [mainView.state, inspectorRouter]);
+  }, [mainView.state, staging, inspectorRouter]);
 
   // 对话顶条「内容目录」开关：directory ↔ closed（原地切换，不重渲染对话流）
   const handleToggleDirectory = useCallback(() => {
@@ -426,18 +462,22 @@ export function ApplicationShell({
     }
   }, [inspectorRouter]);
 
+  // 开始新的创作：进中转页（demo 决议——首条消息提交才创建会话/拉起子进程），
+  // 此前侧栏不出现新会话行；草稿由壳层持有。
   const handleCreateConversation = useCallback(() => {
-    void domainStores.conversationCatalog.createConversation();
-  }, [domainStores]);
+    setStaging(true);
+    mainViewRouter.transition("chat");
+  }, [mainViewRouter]);
 
   // 侧栏宽度固定档位（决议 2：移除拖拽调宽），无本域逻辑。
 
   const handleSelectConversation = useCallback(
     (id: string) => {
+      exitStaging();
       domainStores.conversationCatalog.selectConversation(id);
       mainViewRouter.transition("chat");
     },
-    [domainStores, mainViewRouter],
+    [domainStores, mainViewRouter, exitStaging],
   );
 
   // 大纲单元：目录树选中即主区详情（PRD OL-1；不再开 inspector）。
@@ -787,10 +827,16 @@ export function ApplicationShell({
           onOpenCharacter={handleSelectCharacter}
           onOpenLocation={handleSelectLocation}
           approvalStore={approvalStore}
+          staging={staging}
+          stagingDraft={stagingDraft}
+          onStagingDraftChange={setStagingDraft}
+          onStagingExit={exitStaging}
+          workspaceLabel={workspace.current?.label}
+          stagingExamples={stagingExamples}
         />
         <InspectorHost
           inspectorRouter={inspectorRouter}
-          visible={mainView.state === "chat"}
+          visible={mainView.state === "chat" && !staging}
           conversationCatalog={domainStores.conversationCatalog}
           contentDirectory={contentDirectory}
           outlineTree={domainStores.storyOutlineTree}

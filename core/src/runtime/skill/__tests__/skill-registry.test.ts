@@ -126,6 +126,8 @@ describe("SkillRegistry", () => {
     expect(await registry.readBundledFile(record, "references/nope.md")).toBeUndefined();
     await expect(registry.readBundledFile(record, "../other/SKILL.md")).rejects.toThrowError(/逃逸/);
     await expect(registry.readBundledFile(record, "C:/x")).rejects.toThrowError(/逃逸/);
+    // POSIX 绝对路径（Linux 前置拒绝 / Windows 经 resolve 到其他根后被逃逸检查拒绝）
+    await expect(registry.readBundledFile(record, "/etc/passwd")).rejects.toThrowError(/逃逸/);
     await expect(registry.readBundledFile(record, "")).rejects.toThrowError(/非法/);
 
     // 超限截断：>512 KiB 附尾注

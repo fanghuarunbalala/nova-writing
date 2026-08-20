@@ -93,6 +93,12 @@ describe("createSkillTool", () => {
     expect(absolute).toBeInstanceOf(ToolError);
     expect(absolute.message).toContain("逃逸");
 
+    const posixAbsolute = await tool.handler
+      .execute(callOf("skill", { name: "suspense", path: "/etc/passwd" }))
+      .catch((e: unknown) => e as ToolError);
+    expect(posixAbsolute).toBeInstanceOf(ToolError);
+    expect(posixAbsolute.message).toContain("逃逸");
+
     await expect(
       tool.handler.execute(callOf("skill", { name: "suspense", path: "references/nope.md" })),
     ).rejects.toThrowError(/技能内文件不存在/);

@@ -7,7 +7,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { realpath } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 /** 技能来源层级 */
@@ -202,6 +202,12 @@ export class SkillRegistry {
   async readBundledFile(record: SkillRecord, path: string): Promise<string | undefined> {
     if (path.length === 0 || path.includes("\0") || path.length > PATH_MAX) {
       throw new Error(`非法的技能内路径: ${path}`);
+    }
+    // 绝对路径前置拒绝（跨平台确定性）：POSIX 宿主上 Windows 盘符样式（"C:/x"）会被
+    // resolve 当作相对段、逃逸检查抓不到，统一显式拒绝（仅校验输入形态，无安全影响——
+    // 该形态在 POSIX 下本就落在技能目录内）
+    if (isAbsolute(path) || /^[A-Za-z]:[\\/]/.test(path)) {
+      throw new Error(`路径逃逸技能目录: ${path}`);
     }
     const abs = resolve(record.dir, path);
     const rel = relative(record.dir, abs);

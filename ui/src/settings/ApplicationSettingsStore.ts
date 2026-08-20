@@ -11,12 +11,17 @@ export type SidebarMode = "expanded" | "collapsed";
 /** 右栏（内容目录）自定义宽度档位：与 InspectorHost.INSPECTOR_WIDTH 保持一致 */
 export const INSPECTOR_WIDTH_BOUNDS = { min: 320, max: 640 } as const;
 
+/** 左栏（上下文目录）自定义宽度档位：与 Sidebar.SIDEBAR_WIDTH 保持一致 */
+export const SIDEBAR_WIDTH_BOUNDS = { min: 200, max: 480 } as const;
+
 export interface ApplicationSettingsState {
   readonly sidebarMode?: SidebarMode;
   readonly modelProviders?: readonly ModelProviderSettings[];
   readonly activeModelProviderId?: string;
   /** 右栏自定义宽度 px（>1280 生效；undefined = 断点缺省） */
   readonly inspectorWidthPx?: number;
+  /** 左栏自定义宽度 px（>1280 生效；undefined = 断点缺省 272） */
+  readonly sidebarWidthPx?: number;
 }
 
 export interface ApplicationSettingsSnapshot {
@@ -25,6 +30,7 @@ export interface ApplicationSettingsSnapshot {
   readonly modelProviders: readonly ModelProviderSettings[];
   readonly activeModelProviderId?: string;
   readonly inspectorWidthPx?: number;
+  readonly sidebarWidthPx?: number;
 }
 
 export type ApplicationSettingsListener = () => void;
@@ -49,6 +55,9 @@ export class ApplicationSettingsStore {
       ...(initialState.inspectorWidthPx === undefined
         ? {}
         : { inspectorWidthPx: clampInspectorWidthPx(initialState.inspectorWidthPx) }),
+      ...(initialState.sidebarWidthPx === undefined
+        ? {}
+        : { sidebarWidthPx: clampSidebarWidthPx(initialState.sidebarWidthPx) }),
     });
   }
 
@@ -73,6 +82,16 @@ export class ApplicationSettingsStore {
     const snapshot = { ...this.snapshot };
     if (next === undefined) delete snapshot.inspectorWidthPx;
     else snapshot.inspectorWidthPx = next;
+    this.update(snapshot);
+  }
+
+  /** 左栏宽度：undefined = 复位断点缺省 272；越界值静默 clamp 到 [200, 480] */
+  setSidebarWidthPx(px: number | undefined): void {
+    const next = px === undefined ? undefined : clampSidebarWidthPx(px);
+    if (this.snapshot.sidebarWidthPx === next) return;
+    const snapshot = { ...this.snapshot };
+    if (next === undefined) delete snapshot.sidebarWidthPx;
+    else snapshot.sidebarWidthPx = next;
     this.update(snapshot);
   }
 
@@ -176,5 +195,13 @@ function clampInspectorWidthPx(px: number): number {
   return Math.max(
     INSPECTOR_WIDTH_BOUNDS.min,
     Math.min(INSPECTOR_WIDTH_BOUNDS.max, Math.round(px)),
+  );
+}
+
+function clampSidebarWidthPx(px: number): number {
+  if (!Number.isFinite(px)) return SIDEBAR_WIDTH_BOUNDS.min;
+  return Math.max(
+    SIDEBAR_WIDTH_BOUNDS.min,
+    Math.min(SIDEBAR_WIDTH_BOUNDS.max, Math.round(px)),
   );
 }

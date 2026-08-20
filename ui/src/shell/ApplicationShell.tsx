@@ -162,6 +162,17 @@ export function ApplicationShell({
     },
     [settingsStore],
   );
+  // 左栏自定义宽度（>1280 生效）：链路同右栏（初值取设置快照，变更写回）
+  const [sidebarWidthPx, setSidebarWidthPx] = useState<number | undefined>(
+    () => settingsStore?.getSnapshot().sidebarWidthPx,
+  );
+  const handleSidebarWidthChange = useCallback(
+    (px: number | undefined) => {
+      setSidebarWidthPx(px);
+      settingsStore?.setSidebarWidthPx(px);
+    },
+    [settingsStore],
+  );
   const mainView = useMainView(mainViewRouter);
   const inspectorRoute = useInspectorRoute(inspectorRouter);
   // 右栏内容目录（demo 方案 A v0.8）：tab / 手风琴 / 实体标签定位
@@ -764,6 +775,8 @@ export function ApplicationShell({
           onSelectLocation={handleSelectLocation}
           planTodoId={planTodoId}
           onSelectPlanTodo={handleSelectPlanTodo}
+          widthPx={sidebarWidthPx}
+          onWidthChange={handleSidebarWidthChange}
         />
         <MainArea
           api={api}

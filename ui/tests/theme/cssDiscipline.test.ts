@@ -6,7 +6,9 @@
  *
  * a) 模块 css 禁止颜色字面量（#hex / rgb(a) / hsl(a) / oklch）。
  *    行内 `/* @allow-color 理由 *\/` 豁免（同行为准，多行字面量必须提 token）。
- * b) [data-theme] 覆盖块只允许 --color-* / --shadow-*（三层模型执法）。
+ * b) [data-theme] 覆盖块只允许 --color-* / --shadow-* / --cursor-*
+ *    （三层模型执法；--cursor-* 为主题化拖拽光标 token，SVG data-uri
+ *    无法引用 CSS 变量，需逐主题固化色值）。
  * c) @keyframes 只允许定义在 shared/theme/animations.css，且名不重复
  *    （CSS Modules 会对模块内 animation 引用无条件 hash 重命名）。
  * d) 模块 css 的设计语言属性只允许 0/1px 字面量，其余必须走 var(--token)；
@@ -48,7 +50,7 @@ function stripInlineComment(line: string): string {
 }
 
 describe("css discipline", () => {
-  it("b) [data-theme] 覆盖块只允许 --color-* / --shadow-*", async () => {
+  it("b) [data-theme] 覆盖块只允许 --color-* / --shadow-* / --cursor-*", async () => {
     const files = await collectCss(root, /\.css$/);
     const violations: string[] = [];
     for (const file of files) {
@@ -78,9 +80,9 @@ describe("css discipline", () => {
         for (const line of block.split("\n")) {
           const t = line.trim();
           if (t.length === 0 || t.startsWith("/*") || t.startsWith("*")) continue; // 空行/注释合法
-          if (/^--(color|shadow)-[a-z0-9-]*\s*:/.test(t)) continue; // 色层/阴影 token 合法
+          if (/^--(color|shadow|cursor)-[a-z0-9-]*\s*:/.test(t)) continue; // 色层/阴影/光标 token 合法
           violations.push(
-            `${rel}:${baseLine} [data-theme] 块内 "${t.slice(0, 40)}" 违规（仅允许 --color-* / --shadow-*）`,
+            `${rel}:${baseLine} [data-theme] 块内 "${t.slice(0, 40)}" 违规（仅允许 --color-* / --shadow-* / --cursor-*）`,
           );
         }
         i = k + 1;

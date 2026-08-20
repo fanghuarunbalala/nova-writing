@@ -7,7 +7,8 @@
  *   L2 设计语言层 —— 字体栈 / 字号刻度 / 字重 / 间距 / 圆角 / 品牌渐变 / 时长缓动。
  *     只有改版或密度设置才变，同样不随 theme 变化。
  *   L3 语义色层 + 阴影 —— 唯一允许被 [data-theme] 覆盖块覆盖的层
- *     （覆盖块只允许 --color-* 与 --shadow-*，由 ui/tests/theme 纪律测试执法）。
+ *     （覆盖块只允许 --color-* / --shadow-* / --cursor-*（主题化拖拽光标），
+ *     由 ui/tests/theme 纪律测试执法）。
  *
  * 命名约定：
  *   - 数值型 token（--fs-12 / --space-13px / --fw-750 / --radius-10px）是原型
@@ -19,9 +20,10 @@
  */
 :root {
   /* ============ L1 结构常量（theme 不可覆盖；断点档位调节） ============
-     PRD 决议 2：侧栏/审批面板不再拖拽调宽，宽度为断点固定档位——
-     侧栏 >1280 = 272 / ≤1280 = 238；审批 >1280 = 376 / ≤1280 = 340，
-     ≤1080 审批转右缘覆盖抽屉（InspectorHost 媒体查询）。 */
+     宽度档位（决议 2 修订，对齐右栏 v0.8 恢复的拖宽）：侧栏 >1280 缺省
+     272 可拖宽 200–480 / ≤1280 固定 238；审批 >1280 缺省 376 可拖宽
+     320–640 / ≤1280 固定 340，≤1080 审批转右缘覆盖抽屉（InspectorHost
+     媒体查询）。 */
   --topbar-height:       56px;
   --subhead-height:      58px;
   --sidebar-width:       272px;
@@ -328,6 +330,15 @@
   --color-scrollbar-thumb: color-mix(in oklab, var(--color-fg) 15%, transparent);
   --color-scrollbar-thumb-hover: color-mix(in oklab, var(--color-fg) 26%, transparent);
 
+  /* 主题化拖拽光标（左右/上下双箭头 24×24，hotspot 12 12）：fill = 本主题
+     accent、stroke = 本主题 bg（双反差，浅色主题深箭头/暗色主题亮箭头）。
+     SVG data-uri 内无法引用 CSS 变量，色值按各主题 OKLCH 精确换算固化
+     （fill=accent oklch(55% 0.072 42)、stroke=bg oklch(97.9% 0.003 85)）；
+     逐主题覆盖，token 定义层不受 module css 颜色字面量纪律约束。
+     引用方：DragHandle / InspectorHost.gripWrap / Sidebar.gripWrap。 */
+  --cursor-col-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%23966350'%20stroke%3D'%23f9f8f6'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M6.5%208%202.5%2012%206.5%2016z'%2F%3E%3Cpath%20d%3D'M17.5%208%2021.5%2012%2017.5%2016z'%2F%3E%3Crect%20x%3D'6.5'%20y%3D'11.25'%20width%3D'11'%20height%3D'1.5'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, col-resize;
+  --cursor-row-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%23966350'%20stroke%3D'%23f9f8f6'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M8%206.5%2012%202.5%2016%206.5z'%2F%3E%3Cpath%20d%3D'M8%2017.5%2012%2021.5%2016%2017.5z'%2F%3E%3Crect%20x%3D'11.25'%20y%3D'6.5'%20width%3D'1.5'%20height%3D'11'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, row-resize;
+
   /* 阴影 */
   --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04),
               0 8px 24px rgba(40, 22, 10, 0.045);
@@ -341,9 +352,9 @@
 
 /* ============================================================
    多主题覆盖块（ThemeProvider 写 <html data-theme="...">）。
-   纪律：只允许 --color-* / --shadow-*（cssDiscipline 规则 b 执法）；
-   每块必须完整覆盖 :root 的「基色集合 + 全部阴影」（themePalettes 契约测试
-   执法）；语义混合 token（accent-9 等）在 :root 引用基色，挂 html 时自动
+   纪律：只允许 --color-* / --shadow-* / --cursor-*（cssDiscipline
+   规则 b 执法）；每块必须完整覆盖 :root 的「基色集合 + 全部阴影 +
+   拖拽光标」（themePalettes 契约测试执法）；语义混合 token（accent-9 等）在 :root 引用基色，挂 html 时自动
    重derive——挂 body 无效（:root 级已解析）。主题候选与对比度校验过程
    见 docs/design/theme-candidates-demo-2.html。
    暗色主题（墨夜/黛青）的 --color-on-accent 翻转为深墨（强调底提亮后白字对比度不足）。
@@ -377,6 +388,9 @@
   --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.35);
   --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
   --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
+  /* 拖拽光标：fill=accent oklch(68% 0.115 42)、stroke=bg oklch(21% 0.005 80) */
+  --cursor-col-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%23d47f5e'%20stroke%3D'%23191816'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M6.5%208%202.5%2012%206.5%2016z'%2F%3E%3Cpath%20d%3D'M17.5%208%2021.5%2012%2017.5%2016z'%2F%3E%3Crect%20x%3D'6.5'%20y%3D'11.25'%20width%3D'11'%20height%3D'1.5'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, col-resize;
+  --cursor-row-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%23d47f5e'%20stroke%3D'%23191816'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M8%206.5%2012%202.5%2016%206.5z'%2F%3E%3Cpath%20d%3D'M8%2017.5%2012%2021.5%2016%2017.5z'%2F%3E%3Crect%20x%3D'11.25'%20y%3D'6.5'%20width%3D'1.5'%20height%3D'11'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, row-resize;
 }
 
 /* ============ 黛青（冷调蓝黑夜底 · 青瓷强调；渐变换青蓝族） ============ */
@@ -407,6 +421,9 @@
   --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.36);
   --shadow-drawer: -18px 0 50px rgba(0, 0, 0, 0.5);
   --shadow-panel: 12px 0 30px rgba(0, 0, 0, 0.5);
+  /* 拖拽光标：fill=accent oklch(75% 0.1 195)、stroke=bg oklch(20% 0.013 235) */
+  --cursor-col-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%2353c2c1'%20stroke%3D'%2310171b'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M6.5%208%202.5%2012%206.5%2016z'%2F%3E%3Cpath%20d%3D'M17.5%208%2021.5%2012%2017.5%2016z'%2F%3E%3Crect%20x%3D'6.5'%20y%3D'11.25'%20width%3D'11'%20height%3D'1.5'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, col-resize;
+  --cursor-row-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%2353c2c1'%20stroke%3D'%2310171b'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M8%206.5%2012%202.5%2016%206.5z'%2F%3E%3Cpath%20d%3D'M8%2017.5%2012%2021.5%2016%2017.5z'%2F%3E%3Crect%20x%3D'11.25'%20y%3D'6.5'%20width%3D'1.5'%20height%3D'11'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, row-resize;
 }
 
 /* ============ 雪青（冷白瓷底 · 群青强调；渐变换蓝紫族） ============ */
@@ -437,4 +454,7 @@
   --shadow-xs: 0 1px 3px rgba(8, 12, 30, 0.09);
   --shadow-drawer: -18px 0 50px rgba(8, 12, 30, 0.2);
   --shadow-panel: 12px 0 30px rgba(8, 12, 30, 0.2);
+  /* 拖拽光标：fill=accent oklch(52% 0.1 262)、stroke=bg oklch(97.4% 0.004 240) */
+  --cursor-col-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%234868a2'%20stroke%3D'%23f4f7f9'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M6.5%208%202.5%2012%206.5%2016z'%2F%3E%3Cpath%20d%3D'M17.5%208%2021.5%2012%2017.5%2016z'%2F%3E%3Crect%20x%3D'6.5'%20y%3D'11.25'%20width%3D'11'%20height%3D'1.5'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, col-resize;
+  --cursor-row-resize: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cg%20fill%3D'%234868a2'%20stroke%3D'%23f4f7f9'%20stroke-width%3D'1'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M8%206.5%2012%202.5%2016%206.5z'%2F%3E%3Cpath%20d%3D'M8%2017.5%2012%2021.5%2016%2017.5z'%2F%3E%3Crect%20x%3D'11.25'%20y%3D'6.5'%20width%3D'1.5'%20height%3D'11'%20rx%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 12 12, row-resize;
 }

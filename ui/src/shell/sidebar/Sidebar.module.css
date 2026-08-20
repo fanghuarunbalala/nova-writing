@@ -3,7 +3,11 @@
  *
  * 折叠动画用 margin-left 负偏移（原型做法），比 width 过渡更平滑——
  * sidebar 内部布局不重排，仅整体滑出视野。过渡时长走 --duration-base。
- * 宽度固定档位（决议 2：无拖拽）：>1280 = 272（tokens 缺省）/ ≤1280 = 238。
+ * 宽度：全档位可拖拽调宽（inline --sidebar-current-w 优先）；缺省档随断点
+ * >1280 = 272（tokens 缺省）/ ≤1280 = 238。滚动由内层 .scroll 承载：把手是
+ * .sidebar 的 absolute 子节点，直接挂在 overflow 容器内会随内容滚走
+ * （InspectorHost .body 同构）；.sidebar 自身不可设 overflow（会把跨坐
+ * border-right 的把手热区裁掉一半）。
  */
 .sidebar {
   position: relative;
@@ -16,7 +20,6 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid var(--color-border);
-  overflow-y: auto;
   transition: margin-left var(--duration-base) var(--ease-in-out);
 }
 
@@ -25,7 +28,46 @@
   margin-left: calc(-1 * var(--sidebar-current-w));
 }
 
-/* ≤1280：侧栏收窄档（PRD RWD-2；>1280 缺省 272 见 tokens） */
+/* 目录滚动区（原 .sidebar 直接滚动的等价下放） */
+.scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* 拖拽调宽把手（右缘悬挂，跨坐 border-right；双击复位；DragHandle 自身透明，
+   hover 显示 accent 竖线——镜像 InspectorHost .gripWrap） */
+.gripWrap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(-1 * var(--space-4px));
+  z-index: var(--z-drag-handle);
+  width: 8px;
+  cursor: var(--cursor-col-resize, col-resize);
+}
+
+.gripWrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.gripWrap:hover::after,
+.gripWrap:focus-within::after,
+.gripWrap:has([data-dragging="true"])::after {
+  background: var(--color-accent);
+}
+
+/* ≤1280：缺省收窄档（PRD RWD-2；仅作无自定义宽度时的缺省，inline 变量优先） */
 @media (max-width: 1280px) {
   .sidebar {
     --sidebar-current-w: 238px;

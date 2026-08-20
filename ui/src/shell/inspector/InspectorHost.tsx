@@ -7,7 +7,8 @@
  * 路由状态保留——回到对话视图自动恢复。
  * 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起），
  * 开合切换 .open class 触发过渡（非条件渲染）。
- * 宽度固定档位（决议 2）：>1280 = 376 / ≤1280 = 340 / ≤1080 右缘覆盖抽屉。
+ * 宽度：>1080 可拖拽调宽（缺省 >1280 = 376 / 1081–1280 = 340，inline 优先；
+ * 决议 8 修订），≤1080 右缘覆盖抽屉（固定宽 + 把手隐藏）。
  * directory = 对话视图默认态（内容目录，demo 方案 A v0.8）；
  * 审批已弹窗化：审批交互走 ApprovalModal，不走 inspector。
  */
@@ -94,13 +95,14 @@ export const InspectorHost = memo(function InspectorHost({
   // 恒挂载：closed 时 aside 仍在 DOM（aria-hidden + inert + margin-right 收起）。
   const open = route.state.kind !== "closed" && visible;
 
-  // 窄档（≤1280）禁用自定义宽度与拖宽把手：断点档位优先（≤1080 抽屉同理）。
-  // jsdom 无 matchMedia → 缺省宽档。
+  // 抽屉档（≤1080）禁用自定义宽度与拖宽把手：右缘覆盖抽屉 transform 与
+  // 固定宽优先。1081–1280 段恢复拖宽：缺省 340（媒体查询），inline 优先。
+  // jsdom 无 matchMedia → 缺省非抽屉档。
   const [narrow, setNarrow] = useState(() =>
-    window.matchMedia?.("(max-width: 1280px)").matches ?? false,
+    window.matchMedia?.("(max-width: 1080px)").matches ?? false,
   );
   useEffect(() => {
-    const mql = window.matchMedia?.("(max-width: 1280px)");
+    const mql = window.matchMedia?.("(max-width: 1080px)");
     if (mql === undefined) return;
     const listener = (event: MediaQueryListEvent): void => setNarrow(event.matches);
     mql.addEventListener("change", listener);

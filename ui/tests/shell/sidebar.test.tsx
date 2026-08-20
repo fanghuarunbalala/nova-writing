@@ -1,8 +1,8 @@
 /**
- * sidebar 组件测试：上下文目录（PRD SB）——对话/内容/计划三态。
+ * sidebar 组件测试：上下文目录（PRD SB）——对话/内容/计划三态 + 左栏拖宽。
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Sidebar } from "../../src/shell/sidebar/Sidebar.js";
 import { SidebarSection } from "../../src/shell/sidebar/SidebarSection.js";
@@ -70,11 +70,11 @@ function makeStores() {
   };
 }
 
-function renderSidebar(
+function sidebarElement(
   stores: ReturnType<typeof makeStores>["stores"],
   props: Partial<Parameters<typeof Sidebar>[0]> = {},
 ) {
-  return render(
+  return (
     <Sidebar
       mode="expanded"
       view="chat"
@@ -100,8 +100,15 @@ function renderSidebar(
       approvalStore={stores.approvalStore}
       library={stores.library}
       {...props}
-    />,
+    />
   );
+}
+
+function renderSidebar(
+  stores: ReturnType<typeof makeStores>["stores"],
+  props: Partial<Parameters<typeof Sidebar>[0]> = {},
+) {
+  return render(sidebarElement(stores, props));
 }
 
 describe("Sidebar (context directory)", () => {
@@ -145,6 +152,52 @@ describe("Sidebar (context directory)", () => {
     expect(screen.getByText("暂无待审批")).toBeInTheDocument();
     expect(screen.getByText("自动化")).toBeInTheDocument();
     expect(screen.getByText("定时自动化编排 · 规划中")).toBeInTheDocument();
+  });
+
+  it("injects custom width and resets on grip double-click (左栏拖宽/复位)", () => {
+    const { stores } = makeStores();
+    const onWidthChange = vi.fn();
+    const { rerender } = renderSidebar(stores, { widthPx: 320, onWidthChange });
+    // 自定义宽度经 inline --sidebar-current-w 注入（jsdom 无 matchMedia → 视为宽档）
+    const aside = document.querySelector("aside") as HTMLElement;
+    expect(aside.style.getPropertyValue("--sidebar-current-w")).toBe("320px");
+    // 双击把手 → 复位回调（undefined = 断点缺省 272）
+    const grip = screen.getByRole("separator", { name: "拖拽调整目录宽度" });
+    grip.parentElement?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(onWidthChange).toHaveBeenCalledWith(undefined);
+    // 复位后（widthPx=undefined）不再注入 inline 宽度
+    rerender(sidebarElement(stores, { onWidthChange }));
+    expect(aside.style.getPropertyValue("--sidebar-current-w")).toBe("");
+  });
+
+  it("grip drag emits width deltas and clamps at bounds (200–480)", async () => {
+    const { stores } = makeStores();
+    const onWidthChange = vi.fn();
+    renderSidebar(stores, { onWidthChange });
+    const grip = screen.getByRole("separator", { name: "拖拽调整目录宽度" });
+    // 把手在右缘：右移 = 正 delta = 增宽（缺省 272 + 80 = 352）；
+    // DragHandle 的 move delta 经 rAF 节流后回调 → 等一帧以上再断言
+    fireEvent.pointerDown(grip, { button: 0, clientX: 100 });
+    fireEvent.pointerMove(window, { clientX: 180 });
+    await new Promise((resolve) => setTimeout(resolve, 32));
+    fireEvent.pointerUp(window);
+    expect(onWidthChange).toHaveBeenCalledWith(352);
+    // 越界 clamp：再拖 +5000 → 上限 480（widthPx 未回流仍按 272 起算）
+    fireEvent.pointerDown(grip, { button: 0, clientX: 180 });
+    fireEvent.pointerMove(window, { clientX: 5180 });
+    await new Promise((resolve) => setTimeout(resolve, 32));
+    fireEvent.pointerUp(window);
+    expect(onWidthChange).toHaveBeenLastCalledWith(480);
+  });
+
+  it("hides grip when collapsed or width control not provided", () => {
+    const { stores } = makeStores();
+    // 无 onWidthChange（宿主未接线拖宽）→ 不渲染把手
+    const { rerender } = renderSidebar(stores);
+    expect(screen.queryByRole("separator", { name: "拖拽调整目录宽度" })).not.toBeInTheDocument();
+    // 折叠态（负 margin 收起）同样不渲染，避免把手悬在主区上
+    rerender(sidebarElement(stores, { mode: "collapsed", onWidthChange: vi.fn() }));
+    expect(screen.queryByRole("separator", { name: "拖拽调整目录宽度" })).not.toBeInTheDocument();
   });
 });
 

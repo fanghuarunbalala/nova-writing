@@ -27,7 +27,7 @@
   bottom: 0;
   left: 0;
   width: 6px;
-  cursor: col-resize;
+  cursor: var(--cursor-col-resize, col-resize);
 }
 
 .horizontal::before {
@@ -41,7 +41,7 @@
   width: 100%;
   height: 6px;
   margin-top: -var(--space-3px);
-  cursor: row-resize;
+  cursor: var(--cursor-row-resize, row-resize);
 }
 
 .vertical::before {

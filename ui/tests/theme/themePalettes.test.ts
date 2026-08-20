@@ -1,9 +1,11 @@
 /**
  * 主题调色板契约测试：tokens.css 中每个 [data-theme] 覆盖块必须完整覆盖
- * 「:root 基色集合 + 全部阴影 token」（语义混合 token 引用基色、自动重derive，
- * 不在覆盖块内重定义）；块集合与 ThemeProvider 的 THEMES 枚举一致（paper 为
- * :root 默认、无覆盖块）。配色对比度在主题设计阶段离线校验（见
- * docs/design/theme-candidates-demo-2.html），此处只执法结构完整性。
+ * 「:root 基色集合 + 全部阴影 token + 拖拽光标 token」（语义混合 token 引用
+ * 基色、自动重derive，不在覆盖块内重定义）；块集合与 ThemeProvider 的
+ * THEMES 枚举一致（paper 为 :root 默认、无覆盖块）。配色对比度在主题设计
+ * 阶段离线校验（见 docs/design/theme-candidates-demo-2.html），此处只执法
+ * 结构完整性。光标 token 必须逐主题覆盖：暗色主题漏定义会回落到 :root 的
+ * 浅色光标（浅色箭头在亮底不可见）。
  */
 import { describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
@@ -28,9 +30,13 @@ const BASE_COLORS = [
 
 const SHADOWS = ["shadow-1", "shadow-2", "shadow-xs", "shadow-drawer", "shadow-panel"] as const;
 
+/** 主题化拖拽光标（SVG data-uri 固化色值，必须逐主题覆盖） */
+const CURSORS = ["cursor-col-resize", "cursor-row-resize"] as const;
+
 const REQUIRED = new Set<string>([
   ...BASE_COLORS.map((name) => `--color-${name}`),
   ...SHADOWS.map((name) => `--${name}`),
+  ...CURSORS.map((name) => `--${name}`),
 ]);
 
 function parseThemeBlocks(css: string): Map<string, Set<string>> {
@@ -54,7 +60,7 @@ describe("theme palettes contract", () => {
     expect([...blocks.keys()].sort()).toEqual([...expected].sort());
   });
 
-  it("each block overrides exactly the base color set + all shadows", () => {
+  it("each block overrides exactly the base color set + all shadows + cursors", () => {
     const violations: string[] = [];
     for (const [id, names] of blocks) {
       const missing = [...REQUIRED].filter((token) => !names.has(token));

@@ -7,9 +7,18 @@
  *             （大纲树 / 卷章目录 / 人物档案 / 地点档案）；
  *   plan    = 「安排」待办目录（总览 + 按标签分组）；
  *   library = 书库书单目录（书行 + 状态 chip + 导入入口）。
- * 宽度固定档位随断点（决议 2：移除拖拽调宽），显隐由 mode 控制（负 margin 收起）。
+ * 宽度：全窗口档位（≥ 最小窗 1080）可拖拽调宽 200–480、双击复位（决议 2
+ * 修订——对齐右栏 v0.8 恢复的拖宽）；缺省档随断点：>1280 = 272 / ≤1280 = 238；
+ * 显隐由 mode 控制（负 margin 收起）。
  */
-import { memo, useMemo, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { ChevronsDownUp, ChevronsUpDown, MapPin } from "lucide-react";
 import type { ConversationCatalogStore } from "../../domains/conversation/store/ConversationCatalogStore.js";
 import type { StoryOutlineTreeStore } from "../../domains/novel/outline/store/StoryOutlineTreeStore.js";
@@ -26,6 +35,7 @@ import type { ToastStore } from "../../shared/state/ToastStore.js";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
 import { useExternalStore } from "../../shared/state/useExternalStore.js";
 import { Icon, IconButton } from "../../shared/primitives/index.js";
+import { DragHandle } from "../../shared/primitives/DragHandle.js";
 import { StoryOutlineTree } from "../../domains/novel/outline/components/StoryOutlineTree.js";
 import type { ContentTab } from "../main/contentTab.js";
 import { ContentTabs } from "./sections/ContentTabs.js";
@@ -37,6 +47,17 @@ import { LibraryDirectory } from "./sections/LibraryDirectory.js";
 import { ConversationListSection } from "./sections/ConversationListSection.js";
 import { NewConversationSection } from "./sections/NewConversationSection.js";
 import styles from "./Sidebar.module.css";
+
+/** 拖拽调宽档位（200–480，双击复位 272 与 tokens 缺省一致） */
+export const SIDEBAR_WIDTH = {
+  min: 200,
+  max: 480,
+  default: 272,
+} as const;
+
+export function clampSidebarWidth(px: number): number {
+  return Math.max(SIDEBAR_WIDTH.min, Math.min(SIDEBAR_WIDTH.max, Math.round(px)));
+}
 
 export interface SidebarProps {
   readonly mode: "expanded" | "collapsed";
@@ -68,6 +89,11 @@ export interface SidebarProps {
   /* --- 计划视图 --- */
   readonly planTodoId: string | null;
   readonly onSelectPlanTodo: (id: string | null) => void;
+  /* --- 拖宽（>1280 生效） --- */
+  /** 自定义宽度 px（undefined = 断点缺省 272） */
+  readonly widthPx?: number;
+  /** 宽度变更（拖拽 delta 累计后的目标宽度；undefined = 双击复位） */
+  readonly onWidthChange?: (px: number | undefined) => void;
 }
 
 /** storyUnitId → 实现态（章行状态圆点派生用） */
@@ -108,12 +134,34 @@ export const Sidebar = memo(function Sidebar({
   onSelectLocation,
   planTodoId,
   onSelectPlanTodo,
+  widthPx,
+  onWidthChange,
 }: SidebarProps) {
   const catalogSnapshot = conversationCatalog.getSnapshot();
   const outlineSnapshot = useExternalStore(outlineTree);
   const manuscriptSnapshot = useExternalStore(manuscript);
   const characterSnapshot = useExternalStore(characters);
   const locationSnapshot = useExternalStore(locations);
+
+  // 拖宽：delta 累计到当前宽度（ref 防拖拽会话内闭包过期）；把手在右缘，
+  // 右移 = 正 delta = 增宽（与右栏左缘把手符号相反）。
+  // 全窗口档位（≥ 最小窗 1080）可拖宽：≤1280 的 238 仅为缺省档（CSS 媒体
+  // 查询），自定义宽度经 inline 变量优先于缺省——不设窄档门控。
+  const currentWidth = widthPx ?? SIDEBAR_WIDTH.default;
+  const widthRef = useRef(currentWidth);
+  widthRef.current = currentWidth;
+  const handleResize = useCallback(
+    (deltaPx: number) => {
+      onWidthChange?.(clampSidebarWidth(widthRef.current + deltaPx));
+    },
+    [onWidthChange],
+  );
+
+  const customWidthStyle =
+    widthPx !== undefined
+      ? ({ "--sidebar-current-w": `${clampSidebarWidth(widthPx)}px` } as CSSProperties)
+      : undefined;
+
   const realizationByUnit = useMemo(() => {
     const map = new Map<string, string>();
     collectRealization(outlineSnapshot.tree, map);
@@ -245,8 +293,27 @@ export const Sidebar = memo(function Sidebar({
       data-mode={mode}
       role="navigation"
       aria-label="侧栏"
+      style={customWidthStyle}
     >
-      {content}
+      {/* 滚动下放给 .scroll：把手是 .sidebar 的 absolute 子节点，若直接挂在
+          滚动容器内会随内容滚走（右栏 InspectorHost 同构） */}
+      <div className={styles.scroll}>{content}</div>
+      {onWidthChange !== undefined && mode === "expanded" ? (
+        // 双击复位 272；DragHandle 负责拖拽与 rAF 节流
+        <span
+          className={styles.gripWrap}
+          onDoubleClick={() => onWidthChange(undefined)}
+          title="拖拽调宽 · 双击复位"
+        >
+          <DragHandle
+            orientation="horizontal"
+            onResize={handleResize}
+            ariaLabel="拖拽调整目录宽度"
+            min={-SIDEBAR_WIDTH.max}
+            max={SIDEBAR_WIDTH.max}
+          />
+        </span>
+      ) : null}
     </aside>
   );
 });

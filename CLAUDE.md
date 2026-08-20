@@ -1,4 +1,4 @@
-# Novel Harness
+# Nova Writing
 
 网络小说辅助创作 harness。TypeScript + pnpm monorepo。
 

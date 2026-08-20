@@ -1,4 +1,4 @@
-# Novel Harness
+# Nova Writing
 
 > 和 AI 一起写小说的工作台：AI 负责推进，你负责品味。
 
@@ -6,8 +6,9 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Electron](https://img.shields.io/badge/Electron-43-9FEAF9?logo=electron&logoColor=9FEAF9)
 ![pnpm](https://img.shields.io/badge/pnpm-monorepo-F69220)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-**Novel Harness** 是一个面向中文网文的 AI 创作工作台（harness）：一个 Electron 桌面应用，把「AI 写作」从聊天框里捞出来，变成一套有数据库、有审批、有记忆的正经创作流程。
+**Nova Writing** 是一个面向中文网文的 AI 创作 harness——一个 Electron 桌面应用，把「AI 写作」从聊天框里捞出来，变成一套有数据库、有审批、有记忆的正经创作流程。它不是一键生成全文的 AI 写手，而是你和 AI 一起磨故事的创作台：AI 执笔，你审稿。
 
 > ⚠️ **当前是开发版**，正在快速迭代：界面、命令、配置随时会变。欢迎围观，暂不建议拿它存你的传世巨著（虽然数据库很稳）。
 
@@ -144,6 +145,12 @@ docs/                PRD、架构文档、开发规范
 - 👥 **teammate**——不止一个 AI：多个 agent 并行开工，像真正的创作组一样分工协作
 - ⏰ **定时自动化**——每天定时把草稿备好，你早上打开就是一份「待审清单」，review 完再去上班
 - ……以及一切让 AI 更像靠谱合作者、而不是随机文本发生器的功能
+
+---
+
+## 开源协议
+
+本项目以 [MIT](LICENSE) 协议开源：任何人可自由使用、修改、分发（含商用），唯一义务是保留版权声明。欢迎 fork、提 PR、拿它二次创作。
 
 ---
 

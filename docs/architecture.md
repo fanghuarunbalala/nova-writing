@@ -65,9 +65,21 @@
 各进程职责：
 - **novel-db 守护进程**：唯一 canonical 小说数据源。各进程经 WS 直连（全双工），变更广播（novel.changed）。
 - **ConversationManagerServer**：**conversation 的派生父进程（stdio 父子）**；conversation 目录（id/name/storeDir/status）+ id 分配 + spawn/terminate/崩溃恢复 + **消息调度**（sendMessageTo / send*RequestTo 转发）。不持有小说数据，不路由进度/事件。
-- **Zygote（Electron Main）**：派生 novel-db / manager 守护进程；凭据持有；renderer 桥接；**为 renderer 代读沙盒**。
-- **Conversation 进程**（root 或 teammate，同构）：统一 peer `{ manager, ui, novel }`；持久化沙盒自持；subagent 进程内派生。
+- **Zygote（Electron Main）**：派生 novel-db / manager 守护进程；凭据持有；renderer 桥接；**为 renderer 代读沙盒**；MCP 测试连接（`testMcpConnection` 临时连接，8s 超时）与 skills 目录扫描（`listSkills`）在此执行。
+- **Conversation 进程**（root 或 teammate，同构）：统一 peer `{ manager, ui, novel }`；持久化沙盒自持；subagent 进程内派生；**MCP 客户端与 SkillRegistry 在此装配**（见下）。
 - **subagent**：进程内 loop，无 peer、无独立持久化。
+- **MCP stdio 子进程**：conversation 子进程经 `@modelcontextprotocol/client` spawn 的外部工具服务器（stdio JSON-RPC）。生命周期：会话启动时 `McpConnectionManager` 并行连接（单台 8s 上限，须在向 manager register 报到前完成——spawner 报到超时 15s 自 spawn 起算）；单台失败记录跳过不阻断会话；连接成功的服务器工具包装为 `mcp__<server>__<tool>` ToolDef 经 `extraTools` 组外追加（非 trusted 默认 `requireApproval`）。退出清理：dev 路径 stdin end 先 `close()` 再退出；托管路径依赖 stdio EOF 契约（规范服务器在 stdin 关闭时自行退出），SDK 的 spawn 走 cross-spawn（Windows 的 `npx.cmd` 解析原生覆盖）。
+
+### 2.1 扩展面装配（Skills / MCP，工具面会话启动时确定）
+
+配置经 env 自 Zygote 下发（对齐 `NOVEL_RUNTIME_SETTINGS` 模式：启动 + `onMutated` 重写，下一个 spawn 的会话生效，运行中会话维持启动快照）：
+
+| env | 内容 | 消费方 |
+| --- | --- | --- |
+| `NOVEL_SKILLS_SETTINGS` | `{ appSkillsRoot, disabled[] }`（项目级 `<workspace>/skills` 由子进程派生） | 子进程 `SkillRegistry` 扫描装载 |
+| `NOVEL_MCP_SERVERS` | enabled 服务器配置 JSON 数组 | 子进程 `McpConnectionManager` 连接包装 |
+
+Skills：`SkillRegistry` 扫描两级目录（应用级 + 项目级，项目级同名覆盖），生效 = 发现且未禁用；`skill` 元工具（`runtime.skills` 组，只读免审）按名读取 SKILL.md 正文；技能索引（仅 name + description）经工具 `promptDetail.guidance` 由 `tool.guidance` 动态段渲染进 system prompt（渐进式披露：索引常驻、正文按需）。设计见 PRD `docs/PRD/mcp-skills-接入.md`。
 
 边界原则：
 1. 凭据只进 Main；

@@ -1,8 +1,8 @@
 # MCP 与 Skills 接入 PRD —— v0.1
 
-> 状态：⏳ 待敲定（定稿后改 ✅ 已定稿）
-> 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；技术设计 `docs/architecture.md`；对标参考 `docs/reference/claude-code/tools/MCPTool.md`、`DiscoverSkillsTool.md`
-> 对应 README 路线图「后续计划」中的 **MCP / Skills 系统接入** 一条
+> 状态：✅ 已定稿（M1–M5 已实施落地，见 §10；v0.1 评审时审批策略确认：MCP 默认过审、trusted 免审）
+> 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；技术设计 `docs/architecture.md` §2.1；对标参考 `docs/reference/claude-code/tools/MCPTool.md`、`DiscoverSkillsTool.md`
+> 对应 README 路线图「当前完成」中的 **Skills 技能系统 / MCP 工具接入** 两条
 
 ---
 
@@ -242,3 +242,13 @@ interface McpServerConfig {
 | M5 | 收尾：architecture.md 补 MCP 子进程拓扑；README 路线图状态更新；Windows stdio 实测 | `docs/` |
 
 每步一个 commit，core 侧先于 UI 侧（skills 先行验证「提示段 + 元工具」链路，MCP 复用同一装配缝）。
+
+## 10. 实施落地记录（v0.1 定稿后补）
+
+M1–M5 全部落地，与原稿的三处实施性偏差（功能语义不变）：
+
+1. **技能索引注入通道**：原稿 §8.2 的「`skills.index` 独立动态段」实现为 `skill` 工具的 `promptDetail.guidance`——由既有 `tool.guidance` 动态段每 provider call 渲染，效果等价（索引仅含 name + description、空清单省略），省去 DynamicPromptSectionInput 的新增注入缝。
+2. **MCP 连接时序约束**：子进程须在向 manager register 报到前完成 MCP 连接（spawner 报到超时 15s 自 spawn 起算），故连接为**并行**执行且单台超时压至 8s；超时服务器记失败缺席，不阻断会话。
+3. **stdio 孤儿清理**：dev/独立脚本路径 stdin end 时显式 `close()` 后退出；托管路径（CMS kill 子进程）依赖 MCP stdio 规范的服务器自杀契约（stdin EOF 退出）。Windows `npx.cmd` 解析由 SDK 内置 cross-spawn 原生覆盖（本机实测 spawn+握手+调用 558ms）。
+
+其余按原稿落地：审批默认（非 trusted 全量过审走 gateBatch）、`extraTools` 组外追加、`NOVEL_SKILLS_SETTINGS` / `NOVEL_MCP_SERVERS` env 下发、设置页「技能」「MCP 服务器」两分节。§7 开放问题保持开放（preview 投影 / env 体积 / per-agent 技能集留 v2；项目级 skills 目录已定为工作台根 `<工作台>/skills/`）。

@@ -47,8 +47,8 @@ const RHYTHM_LABEL: Record<string, string> = {
  * synopsis 覆盖区间脱敏（共享实现见 outlineStatus.formatSynopsisDisplay）：
  * 「（覆盖 <bookId>-pXXXXXX–pYYYYYY）」→「（覆盖正文 pXXXXXX–pYYYYYY）」。
  */
-function formatSynopsis(synopsis: string | undefined): string {
-	if (synopsis === undefined) return "—";
+function formatSynopsis(synopsis: string | null | undefined): string {
+	if (synopsis == null) return "—";
 	return formatSynopsisDisplay(synopsis);
 }
 

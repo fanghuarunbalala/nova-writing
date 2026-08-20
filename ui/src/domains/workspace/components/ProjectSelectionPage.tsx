@@ -8,7 +8,7 @@
  * 依次）；进入 opening 阶段时整页缩放模糊退场（welcome-leave），后续由 NovelApp 的
  * 启动编排接管（分步加载遮罩 → 工作台 boot-in）。
  */
-import { ArrowRight, FolderOpen, Plus } from "lucide-react";
+import { ArrowRight, FileUp, FolderOpen, Plus } from "lucide-react";
 import type { CSSProperties } from "react";
 import type {
   WorkspaceControllerSnapshot,
@@ -56,6 +56,8 @@ export interface ProjectSelectionPageProps {
   readonly onChoose: () => void;
   /** 新建项目（save 型对话框命名 → 建目录 → 打开）；与 onChoose 分开接线 */
   readonly onCreate: () => void;
+  /** 从文件导入创建项目（txt / zip → 预览确认 → 建目录导入 → 打开） */
+  readonly onImport?: () => void;
   readonly onOpenRecent: (workspaceId: string) => void;
   /** 重开新手引导向导（缺省隐藏入口） */
   readonly onOpenGuide?: () => void;
@@ -65,6 +67,7 @@ export function ProjectSelectionPage({
   snapshot,
   onChoose,
   onCreate,
+  onImport,
   onOpenRecent,
   onOpenGuide,
 }: ProjectSelectionPageProps) {
@@ -128,6 +131,18 @@ export function ProjectSelectionPage({
           >
             新建项目
           </Button>
+          {onImport !== undefined ? (
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              disabled={busy}
+              leadingIcon={<Icon icon={FileUp} size="sm" />}
+              onClick={onImport}
+            >
+              从文件导入…
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             size="lg"

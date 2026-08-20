@@ -50,6 +50,14 @@ import type {
 	ImportBookResult,
 	ParagraphManifestEntry,
 } from "../library/LibraryService.js";
+// 项目导入类型 type-only 引入（ImportTypes 无 node 依赖，browser-safe）
+import type {
+	ImportJobStatus,
+	ImportPlan,
+	ImportPreview,
+	ImportProgress,
+	ProjectImportCreateResult,
+} from "../import/ImportTypes.js";
 
 /** 会话子 API（目录 + 生命周期） */
 export interface ConversationApi {
@@ -272,13 +280,40 @@ export interface LibraryApi {
 	retryAnalysis(bookId: string): Promise<LibrarySpawnResult>;
 }
 
-/** 客户端门面：conversations + novel + approvals + askings + library 五域 */
+/**
+ * 项目导入子 API（欢迎页「从文件导入创建项目」）：确定性预览/落库 + ProjectImporter
+ * 后台解构派生 + 进度轮询。与书库（library）区分：内容直接落进新项目 novel.db。
+ * 宿主（Electron main）经 createProjectImportFace 组装注入；未装配时各方法抛
+ * invalid-request「项目导入服务未装配」。
+ */
+export interface ProjectImportApi {
+	/** 选择源文件（宿主原生对话框 txt/zip + 路径白名单登记；取消返回 null） */
+	pickImportFile(): Promise<{ sourcePath: string } | null>;
+	/** 预览（确定性解析：卷/章/字数 + zip 跳过文件列表；不落库） */
+	previewImport(sourcePath: string): Promise<ImportPreview>;
+	/**
+	 * 创建项目并导入（任务式）：save 对话框选位置 → 绑定空库 → **立即返回引用**；
+	 * 落库与解构派生在后台执行，终态（stats / conversationId / spawnSkipped / error）
+	 * 经 createProgress 轮询获取——长耗时操作不占 RPC 请求（kkrpc 默认 30s 超时）。
+	 * canceled=true = 用户在位置对话框取消（无副作用）
+	 */
+	createProjectFromImport(input: { sourcePath: string; plan: ImportPlan }): Promise<ProjectImportCreateResult>;
+	/** 当前项目导入解构进度（无导入记录 → status=none；UI 3s 轮询读面） */
+	importProgress(): Promise<ImportProgress>;
+	/** 创建任务状态（running 阶段进度 / 终态产物；无任务 = null；UI 动画轮询读面） */
+	createProgress(): Promise<ImportJobStatus | null>;
+	/** 重试解构（复用既有确定性产物，置 analyzing 后派生新会话） */
+	retryImportAnalysis(): Promise<{ conversationId: string }>;
+}
+
+/** 客户端门面：conversations + novel + approvals + askings + library + projectImport 六域 */
 export interface NovelApiClient {
 	readonly conversations: ConversationApi;
 	readonly novel: NovelContentApi;
 	readonly approvals: ApprovalApi;
 	readonly askings: AskingApi;
 	readonly library: LibraryApi;
+	readonly projectImport: ProjectImportApi;
 }
 
 /** 门面构造依赖（注入两域 handle） */
@@ -305,6 +340,8 @@ export interface NovelApiClientOptions {
 	) => Promise<ProjectedEvent[]>;
 	/** 书库面注入（内存测试用；renderer 经 wrap 不经此构造） */
 	library?: LibraryApi;
+	/** 项目导入面注入（内存测试用；renderer 经 wrap 不经此构造） */
+	projectImport?: ProjectImportApi;
 }
 
 /** 书库未装配降级实现（各方法抛 invalid-request；对齐 LibraryRead 工具降级模式） */
@@ -328,13 +365,29 @@ function createUnavailableLibrary(): LibraryApi {
 	};
 }
 
+/** 项目导入未装配降级实现（各方法抛 invalid-request） */
+function createUnavailableProjectImport(): ProjectImportApi {
+	const unavailable = (method: string): Promise<never> =>
+		Promise.reject(
+			new RPCError({ code: "invalid-request" }, `项目导入服务未装配（projectImport.${method} 不可用）`),
+		);
+	return {
+		pickImportFile: () => unavailable("pickImportFile"),
+		previewImport: () => unavailable("previewImport"),
+		createProjectFromImport: () => unavailable("createProjectFromImport"),
+		importProgress: () => unavailable("importProgress"),
+		createProgress: () => unavailable("createProgress"),
+		retryImportAnalysis: () => unavailable("retryImportAnalysis"),
+	};
+}
+
 /**
  * 创建客户端门面
  * @param options manager + novel handle + 可选 history 注入
  * @returns NovelApiClient
  */
 export function createNovelApiClient(options: NovelApiClientOptions): NovelApiClient {
-	const { manager, novel, history, projectedHistory, library } = options;
+	const { manager, novel, history, projectedHistory, library, projectImport } = options;
 	return {
 		conversations: {
 			list: () => manager.list(),
@@ -398,6 +451,8 @@ export function createNovelApiClient(options: NovelApiClientOptions): NovelApiCl
 		},
 		// 书库面：宿主装配注入；缺省 = 未装配降级（browser/内存测试）
 		library: library ?? createUnavailableLibrary(),
+		// 项目导入面：同上
+		projectImport: projectImport ?? createUnavailableProjectImport(),
 	};
 }
 
@@ -423,6 +478,11 @@ export interface NovelApiServerOptions {
 	 * 缺省 = 未装配降级（各方法抛 invalid-request「书库服务未装配」）。
 	 */
 	library?: LibraryApi;
+	/**
+	 * 项目导入面（宿主经 createProjectImportFace 组装注入：预览/创建/进度/重试）。
+	 * 缺省 = 未装配降级。
+	 */
+	projectImport?: ProjectImportApi;
 }
 
 /**
@@ -567,6 +627,8 @@ export function createNovelApiServer(options: NovelApiServerOptions): NovelApiCl
 		// 书库面：宿主注入的 LibraryApi 直挂 + LIB_* 业务错误归一（LibraryError.code →
 		// lib-* RPCError code；renderer 按 code 分支提示）；未装配 = 降级实现
 		library: wrapLibraryWithErrorNormalize(options.library),
+		// 项目导入面：宿主注入的 ProjectImportApi 直挂 + 错误归一（消息面向用户）
+		projectImport: wrapProjectImportWithErrorNormalize(options.projectImport),
 	};
 }
 
@@ -595,5 +657,26 @@ function wrapLibraryWithErrorNormalize(impl: LibraryApi | undefined): LibraryApi
 		pickBookFile: () => wrap(face.pickBookFile),
 		importBook: (input) => wrap(() => face.importBook(input)),
 		retryAnalysis: (bookId) => wrap(() => face.retryAnalysis(bookId)),
+	};
+}
+
+/** 项目导入面包装：逐方法归一错误 */
+function wrapProjectImportWithErrorNormalize(impl: ProjectImportApi | undefined): ProjectImportApi {
+	const face = impl ?? createUnavailableProjectImport();
+	const wrap = async <T>(run: () => Promise<T>): Promise<T> => {
+		try {
+			return await run();
+		} catch (err) {
+			if (err instanceof RPCError) throw err;
+			throw toRPCError(err, "project-import");
+		}
+	};
+	return {
+		pickImportFile: () => wrap(face.pickImportFile),
+		previewImport: (sourcePath) => wrap(() => face.previewImport(sourcePath)),
+		createProjectFromImport: (input) => wrap(() => face.createProjectFromImport(input)),
+		importProgress: () => wrap(face.importProgress),
+		createProgress: () => wrap(face.createProgress),
+		retryImportAnalysis: () => wrap(face.retryImportAnalysis),
 	};
 }

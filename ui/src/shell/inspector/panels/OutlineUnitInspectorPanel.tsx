@@ -213,7 +213,7 @@ export function OutlineUnitInspectorPanel({
         <p className={styles.cardP}>{coreUnit?.intent ?? "（尚未填写——这个单元要达成什么）"}</p>
         <div className={styles.sectionHead}>梗概</div>
         <p className={styles.cardP}>
-          {coreUnit?.synopsis !== undefined && coreUnit.synopsis !== ""
+          {coreUnit?.synopsis != null && coreUnit.synopsis !== ""
             ? formatSynopsisDisplay(coreUnit.synopsis)
             : "（尚未填写情节梗概）"}
         </p>

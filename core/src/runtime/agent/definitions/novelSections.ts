@@ -29,6 +29,8 @@ import {
   novelBookAnalystIdentitySection,
   novelBookAnalystProcessSection,
   novelBookAnalystArtifactsSection,
+  novelProjectImporterIdentitySection,
+  novelProjectImporterProcessSection,
 } from "../../prompt/sections/novel.js";
 import {
   novelStoryAppealSection,
@@ -37,7 +39,7 @@ import {
   novelPublicationStandardSection,
 } from "../../prompt/sections/novelStandards.js";
 
-/** novel 域段注册表（id@version；24 段：main 9 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3） */
+/** novel 域段注册表（id@version；26 段：main 9 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3 + project-importer 2） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -71,4 +73,7 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   novelBookAnalystIdentitySection,
   novelBookAnalystProcessSection,
   novelBookAnalystArtifactsSection,
+  // ProjectImporter 专属段（项目导入解构：欢迎页「从文件导入创建项目」）
+  novelProjectImporterIdentitySection,
+  novelProjectImporterProcessSection,
 ]);

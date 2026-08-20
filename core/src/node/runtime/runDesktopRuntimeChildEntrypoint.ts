@@ -26,7 +26,7 @@ import type { Logger } from "../../log/Logger.js";
 import { SubagentRuntime } from "../../conversation/server/SubagentRuntime.js";
 import { InMemoryNovelStore } from "../../novel/InMemoryNovelStore.js";
 import { NovelHandle } from "../../novel/client/NovelHandle.js";
-import { createProvider } from "../../runtime/provider/Provider.js";
+import { createProvider, type Provider } from "../../runtime/provider/Provider.js";
 import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
 import { ProviderCallDebugger } from "../../runtime/debug/ProviderCallDebugger.js";
 import {
@@ -62,6 +62,10 @@ import {
 	buildBookAnalystAgent,
 	BOOK_ANALYST_AGENT_TYPE,
 } from "../../runtime/agent/BookAnalystAgent.js";
+import {
+	PROJECT_IMPORTER_AGENT_TYPE,
+	projectImporterAgentDefinition,
+} from "../../runtime/agent/definitions/ProjectImporterAgentDefinition.js";
 import { SqliteNovelStore } from "../../novel/SqliteNovelStore.js";
 import { LibraryService } from "../../library/LibraryService.js";
 import { bookDbPath } from "../../library/LibraryPaths.js";
@@ -267,9 +271,17 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 解构后台会话：工作区=书库根、任务载荷 task.json 驱动自动开跑、bypass 模式
 	const agentType = process.env.NOVEL_AGENT_TYPE ?? "novel";
 	const isAnalyst = agentType === BOOK_ANALYST_AGENT_TYPE;
+	const isImporter = agentType === PROJECT_IMPORTER_AGENT_TYPE;
 	const analystTask = isAnalyst ? readAnalystTask(process.env.NOVEL_ANALYST_TASK) : undefined;
 	if (isAnalyst && analystTask === undefined) {
 		writeCrashTrace("CRASH analyst task payload missing（NOVEL_ANALYST_TASK 未注入或损坏）");
+		process.exit(1);
+	}
+	// ProjectImporter = 项目导入解构后台会话：工作区=项目根（novel 同款 env）、任务载荷
+	// task.json 驱动自动开跑、bypass 模式；写面为当前项目 novel.db（经 WS，进度实时可见）
+	const importerTask = isImporter ? readImporterTask(process.env.NOVEL_ANALYST_TASK) : undefined;
+	if (isImporter && importerTask === undefined) {
+		writeCrashTrace("CRASH importer task payload missing（NOVEL_ANALYST_TASK 未注入或损坏）");
 		process.exit(1);
 	}
 	const workspace = isAnalyst
@@ -279,20 +291,33 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 非法/缺省整体回落 NOVEL_PROVIDER_* env 默认
 	const runtimeSettings = parseRuntimeSettingsEnv(process.env[RUNTIME_SETTINGS_ENV]);
 	const novelRuntime = runtimeSettings?.agents.novel;
+	// ProjectImporter 走独立采样面（设置页可覆盖；缺省 thinking=low，与 BookAnalyst 同
+	// 依据——抽取型任务 high 只加延迟）
+	const importerRuntime = runtimeSettings?.agents.ProjectImporter;
 	// 采样：runtime 优先，其次 NOVEL_PROVIDER_* env。默认 8192/high
 	// ——reasoning 模型的思考 token 计入 max_completion_tokens 预算，上限过低会被
 	// 思考独占导致空回复/截断（finish_reason=length）
 	// BookAnalyst 例外：不经 runtimeSettings（那是创作 agent 的配置面），独立 env +
 	// 缺省 low（抽取型任务；off 实测 leaf 变薄且会编造 id，high 只加延迟）
 	const sampling: AgentRunConfig["sampling"] = {
-		model: isAnalyst
-			? (process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash")
-			: (novelRuntime?.model ?? process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash"),
-		maxTokens: novelRuntime?.maxTokens ?? readPositiveIntEnv(PROVIDER_MAX_TOKENS_ENV) ?? 8192,
-		thinking: isAnalyst
-			? (readThinkingLevelEnv(ANALYST_THINKING_ENV) ?? "low")
-			: (novelRuntime?.thinking ?? readThinkingLevelEnv(PROVIDER_THINKING_ENV) ?? "high"),
-		...(novelRuntime?.temperature !== undefined ? { temperature: novelRuntime.temperature } : {}),
+		model: isImporter
+			? (importerRuntime?.model ?? process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash")
+			: isAnalyst
+				? (process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash")
+				: (novelRuntime?.model ?? process.env.NOVEL_PROVIDER_MODEL ?? "deepseek-v4-flash"),
+		maxTokens: isImporter
+			? (importerRuntime?.maxTokens ?? readPositiveIntEnv(PROVIDER_MAX_TOKENS_ENV) ?? 8192)
+			: (novelRuntime?.maxTokens ?? readPositiveIntEnv(PROVIDER_MAX_TOKENS_ENV) ?? 8192),
+		thinking: isImporter
+			? (importerRuntime?.thinking ?? readThinkingLevelEnv(ANALYST_THINKING_ENV) ?? "low")
+			: isAnalyst
+				? (readThinkingLevelEnv(ANALYST_THINKING_ENV) ?? "low")
+				: (novelRuntime?.thinking ?? readThinkingLevelEnv(PROVIDER_THINKING_ENV) ?? "high"),
+		...(isImporter && importerRuntime?.temperature !== undefined
+			? { temperature: importerRuntime.temperature }
+			: !isImporter && novelRuntime?.temperature !== undefined
+				? { temperature: novelRuntime.temperature }
+				: {}),
 	};
 
 	// novel-db：经 kkrpc/ws 连接 main 的 NovelDbWsServer（协议定稿 transport；token 走 subprotocol）。
@@ -324,6 +349,12 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			mutate: (m: NovelMutation) => store.mutate(m),
 			mutateBatch: (ms: readonly NovelMutation[]) => store.mutateBatch(ms),
 		} as unknown as NovelHandle;
+	}
+	// ProjectImporter 章卷一致守卫：handle 层拒绝卷/章/段落写（publication.* / paragraph.*）。
+	// novel.entities 的 NovelWrite 是 kind 分发通用工具（工具名级 deny 挡不住 kind），
+	// 在 handle 收口为确定性双保险——写库面只剩 outline.*/character.*/location.*
+	if (isImporter) {
+		novelHandle = guardImporterHandle(novelHandle);
 	}
 
 	// journal：storedir（manager 分配，经 env 传入）可用时建立 + open（恢复 seq）
@@ -389,8 +420,16 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		};
 	}
 
-	// provider 配置（novel 运行参数优先，缺省 env 默认；main 与 subagent builder 共享兜底）
-	const providerConfig = novelRuntime !== undefined
+	// provider 配置（novel 运行参数优先，缺省 env 默认；main 与 subagent builder 共享兜底）。
+	// ProjectImporter 会话：连接配置优先取自己的 runtime 条目（设置页可为它独立配 profile；
+	// 否则回落 novel 档 / env——模型与连接同源，避免模型取 importer 档而连接取 novel 档）
+	const providerConfig = isImporter && importerRuntime !== undefined
+		? {
+				type: importerRuntime.provider,
+				...(importerRuntime.baseUrl !== undefined ? { baseUrl: importerRuntime.baseUrl } : {}),
+				apiKey: importerRuntime.apiKey,
+			}
+		: novelRuntime !== undefined
 		? {
 				type: novelRuntime.provider,
 				...(novelRuntime.baseUrl !== undefined ? { baseUrl: novelRuntime.baseUrl } : {}),
@@ -410,6 +449,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			...info.capabilities,
 		});
 	}
+	// 注：后台会话的请求超时/限次重试修复暂缓——先经 provider.call.* 观测日志锁定
+	// 「首调用悬挂」根因（见下方 wrapProviderWithLogging），确认后再上行为变更
 	const provider = createProvider({ id: "default", ...providerConfig }, modelInfoRegistry);
 	/** runtime 条目 → provider 连接配置（条目缺省回落 env 默认连接） */
 	const runtimeProviderConfig = (rt: ResolvedAgentConnection | undefined) =>
@@ -473,9 +514,9 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	};
 
 	// subagent 任务编排：builder 每任务新建 provider（流式累积状态不可跨 loop 共享）。
-	// BookAnalyst 不委托子代理（delegation disabled）——不装配编排；
+	// BookAnalyst / ProjectImporter 不委托子代理（delegation disabled）——不装配编排；
 	// 运行参数存在时：Explore/Compose 各自走解析后的连接与采样（如 Explore → Fast 档）
-	const subagentRuntime = isAnalyst
+	const subagentRuntime = isAnalyst || isImporter
 		? undefined
 		: new SubagentRuntime({
 				sampling,
@@ -571,6 +612,19 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	if (providerDebugEnabled) {
 		logger?.info("child.provider_debug", { baseDir: providerDebugBaseDir });
 	}
+	// 后台会话根因诊断（零行为变化）：① 记录实际生效的 provider 连接（type/baseUrl/密钥在位）；
+	// ② 包装 provider 输出调用全生命周期日志（start/first_delta/done/error + 耗时）——端点停滞时
+	// openai SDK 默认静默重试不产生任何应用日志，此包装让「首调用悬挂」的卡层与最终结局可见
+	if (isImporter || isAnalyst) {
+		logger?.info("child.background.provider_config", {
+			agentType,
+			type: providerConfig.type,
+			baseUrl: providerConfig.baseUrl,
+			hasApiKey: providerConfig.apiKey !== undefined,
+		});
+	}
+	const loopProvider: Provider =
+		isImporter || isAnalyst ? wrapProviderWithLogging(provider, () => logger) : provider;
 
 	// ① compose 状态与服务：状态实例先 hydrate（state.jsonl 重放）再装配——
 	// 顺序保证：nudge 策略构造（buildNovelAgent 内）时 latch 已 seed（重启不误发上升沿）
@@ -617,7 +671,7 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const loop = isAnalyst
 		? buildBookAnalystAgent({
 				libraryRoot: workspace,
-				provider,
+				provider: loopProvider,
 				store: analystStore as SqliteNovelStore,
 				conversationId,
 				listeners: journal !== undefined ? [journalListener(journal)] : undefined,
@@ -627,20 +681,27 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 				debugger: createCallDebugger?.("main"),
 			})
 		: buildNovelAgent({
-		workspace,
-		provider,
-		handle: novelHandle,
-		conversationId,
+			workspace,
+			provider: loopProvider,
+			handle: novelHandle,
+			// ProjectImporter：novel 装配 + 派生定义（仅换 prompt 与工具面；后台无人值守，
+			// definition 已裁掉 ask/compose 组且 delegation disabled）
+			...(isImporter ? { definition: projectImporterAgentDefinition } : {}),
+			conversationId,
 		listeners: journal !== undefined ? [journalListener(journal)] : undefined,
 		runMessages,
 		resumeRuns,
 		resumeSeq,
-		requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
-		requestAsk: (req) => holder.conv!.sendAskingQuestionRequest(req),
-		resumePendingDecider,
-		logger,
-		debugger: createCallDebugger?.("main"),
-		subagent: subagentRuntime !== undefined ? { spawner: subagentRuntime } : undefined,
+			requestApproval: (req) => holder.conv!.sendApprovalRequest(req),
+			requestAsk: (req) => holder.conv!.sendAskingQuestionRequest(req),
+			resumePendingDecider,
+			logger,
+			debugger: createCallDebugger?.("main"),
+			// ProjectImporter delegation disabled：subagent 工具对空白名单抛错，不装配
+			subagent:
+				!isImporter && subagentRuntime !== undefined
+					? { spawner: subagentRuntime }
+					: undefined,
 		// 压缩阈值（设置页 RuntimeSettings.compaction；缺省项用策略默认值）
 		...(runtimeSettings?.compaction !== undefined
 			? { compact: runtimeSettings.compaction }
@@ -664,6 +725,14 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
 		todoStore: new InMemoryConversationTodoStore(),
 	});
+	// ProjectImporter 里程碑日志（下次「报到超时被 kill」时定位卡点：装配完成→注册→自驱动）
+	if (isImporter) {
+		logger?.info("child.importer.assembled", {
+			conversationId,
+			workspace,
+			taskLoaded: importerTask !== undefined,
+		});
+	}
 
 	const managerWait: ManagerWaitChannel | undefined =
 		cmsApi !== undefined
@@ -684,8 +753,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		composeService,
 		stateJournal,
 		subagentRuntime,
-		// BookAnalyst 恒 bypass（后台无人应答审批；canonical 写自动放行 + 免审批文件工具）
-		initialMode: isAnalyst ? "bypass" : readPersistedMode(storedir),
+		// BookAnalyst / ProjectImporter 恒 bypass（后台无人应答审批；canonical 写自动放行）
+		initialMode: isAnalyst || isImporter ? "bypass" : readPersistedMode(storedir),
 		onModeChanged: (mode) => persistMode(storedir, mode),
 		logger,
 		// 事件火线 ZeroMQ 广播（gui-performance-2 功能点八）：每会话一个 PUB，
@@ -709,6 +778,9 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			name: conversationId,
 			storeDir: storedir ?? "",
 		});
+		if (isImporter) {
+			logger?.info("child.importer.registered", { conversationId });
+		}
 	} else {
 		// 无 manager WS（独立脚本/dev）：stdin end 退出兜底
 		process.stdin.on("end", () => process.exit(0));
@@ -738,6 +810,20 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			logger?.info("child.analyst.autodrive", {
 				conversationId,
 				bookId: analystTask.bookId,
+				receipt: String(JSON.stringify(receipt)).slice(0, 120),
+			});
+		}
+		if (cmsApi === undefined) {
+			setInterval(() => {}, 3_600_000);
+		}
+	}
+	// ProjectImporter 自动驱动：语义同上（任务载荷驱动、重启续跑优先、冒烟心跳驻留）
+	if (isImporter && importerTask !== undefined) {
+		if (runMessages === undefined || runMessages.length === 0) {
+			const prompt = importerTaskPrompt(importerTask);
+			const receipt = await holder.conv!.sendUserMessage({ text: prompt });
+			logger?.info("child.importer.autodrive", {
+				conversationId,
 				receipt: String(JSON.stringify(receipt)).slice(0, 120),
 			});
 		}
@@ -788,4 +874,138 @@ function analystTaskPrompt(task: AnalystTaskPayload): string {
 		"- 步骤：Read <bookId>/book.meta.json 与 <bookId>/paragraphs/manifest.jsonl → TodoWrite 建全书计划 → 按 manifest 顺序逐批 Read 分段文件 → 增量产出大纲（幕级 story_unit：时间/地点/人物/事件 + paragraph id 区间）、人物卡、地点卡 → 维护 analysis/style.md 与 analysis/excerpts.md → 收尾自查后把 book.meta.json 的 status 置为「已完成」。",
 		"- 引用正文一律写 paragraph id；完成后输出一段简报（章数/幕数/人物数/产物路径）即可，无作者交互。",
 	].join("\n");
+}
+
+/** ProjectImporter 任务载荷（task.json；项目导入门面经 spawner 落盘） */
+interface ImporterTaskPayload {
+	/** 源文件名（简报用） */
+	sourceName?: string;
+	/** 章数（简报用） */
+	chapters?: number;
+	/** 分批总数（简报用） */
+	batches?: number;
+}
+
+/**
+ * 读 ProjectImporter 任务载荷（NOVEL_ANALYST_TASK 指向 task.json；字段全部可选）
+ * @param envValue env 值（路径）
+ * @returns 载荷（env 缺失/损坏 → undefined）
+ */
+function readImporterTask(envValue: string | undefined): ImporterTaskPayload | undefined {
+	if (envValue === undefined || envValue.trim() === "") return undefined;
+	try {
+		const parsed = JSON.parse(readFileSync(envValue, "utf8")) as Record<string, unknown>;
+		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+		return {
+			...(typeof parsed.sourceName === "string" ? { sourceName: parsed.sourceName } : {}),
+			...(typeof parsed.chapters === "number" ? { chapters: parsed.chapters } : {}),
+			...(typeof parsed.batches === "number" ? { batches: parsed.batches } : {}),
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * 构造导入解构 run 的首条任务消息
+ * @param task 任务载荷
+ * @returns 任务指令文本
+ */
+function importerTaskPrompt(task: ImporterTaskPayload): string {
+	const brief = [
+		task.sourceName !== undefined ? `（源文件：${task.sourceName}）` : "",
+		task.chapters !== undefined || task.batches !== undefined
+			? `（约 ${task.chapters ?? "?"} 章 / ${task.batches ?? "?"} 批）`
+			: "",
+	].join("");
+	return [
+		"【导入解构任务】",
+		`- 导入产物位于工作区 .novel/import/${brief}`,
+		"- 步骤：Read .novel/import/import.json 与 .novel/import/paragraphs/manifest.jsonl → TodoWrite 建全书推进计划 → 按 manifest 顺序分大轮 Read 分段文件 → 增量产出大纲（全书→幕→场景 story unit，全部已实现，synopsis 末尾附「（覆盖 imp-bXXXXXX–imp-bYYYYYY）」）、人物卡、地点卡 → 收尾自查后把 .novel/import/import.json 的 status 置为 \"analyzed\"。",
+		"- 硬约束：卷/章/段落与正文由宿主确定性导入，一律只读——不得创建/修改/删除卷、章、段落。",
+		"- 完成后输出一段简报（章数/幕数/场景数/人物数/地点数）即可，无作者交互。",
+	].join("\n");
+}
+
+/**
+ * 后台会话 provider 观测包装（零行为变化）：调用 start（模型）/ first_delta（首字节耗时）/
+ * done（总耗时+结束原因）/ error（标准化错误名+消息+HTTP 状态）全程留痕。
+ * 诊断「首个 provider 调用悬挂」类问题——SDK 静默重试期间应用侧无任何日志，
+ * 此包装保证卡层与最终结局（含最终错误）可见。
+ * @param inner 原始 provider
+ * @param loggerOf 惰性取 logger（包装创建早于 logger 初始化）
+ * @returns 同接口包装实例
+ */
+function wrapProviderWithLogging(inner: Provider, loggerOf: () => Logger | undefined): Provider {
+	return {
+		call: async (call, onDelta) => {
+			const log = loggerOf();
+			const model = call.sampling.model;
+			const startedAt = Date.now();
+			log?.info("provider.call.start", { model });
+			let sawDelta = false;
+			try {
+				const result = await inner.call(call, (delta) => {
+					if (!sawDelta) {
+						sawDelta = true;
+						log?.info("provider.call.first_delta", {
+							model,
+							elapsedMs: Date.now() - startedAt,
+						});
+					}
+					onDelta?.(delta);
+				});
+				log?.info("provider.call.done", {
+					model,
+					elapsedMs: Date.now() - startedAt,
+					finishReason: result.finishReason,
+					...(result.usage !== undefined
+						? { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens }
+						: {}),
+				});
+				return result;
+			} catch (err) {
+				const status = (err as { status?: unknown }).status;
+				log?.error("provider.call.error", {
+					model,
+					elapsedMs: Date.now() - startedAt,
+					name: err instanceof Error ? err.name : String(err),
+					message: err instanceof Error ? err.message : String(err),
+					...(typeof status === "number" ? { status } : {}),
+				});
+				throw err;
+			}
+		},
+		getModelInfo: (model) => inner.getModelInfo(model),
+	};
+}
+
+/**
+ * ProjectImporter 写面守卫：拒绝卷/章/段落变更（publication.* / paragraph.*）。
+ * 章卷一致性硬约束的确定性双保险（prompt 之外）——agent 写库面只剩
+ * outline.storyUnit.* / character.* / location.*
+ * @param handle 原始 novel handle
+ * @returns 守卫后的 handle
+ */
+function guardImporterHandle(handle: NovelHandle): NovelHandle {
+	const assertWritable = (ms: readonly NovelMutation[]): void => {
+		for (const m of ms) {
+			if (m.op.startsWith("publication.") || m.op.startsWith("paragraph.")) {
+				throw new Error(
+					`导入解构会话禁止改动卷/章/段落（${m.op}）——结构与正文以宿主确定性导入为准`,
+				);
+			}
+		}
+	};
+	return {
+		query: (q: NovelQuery) => handle.query(q),
+		mutate: (m: NovelMutation) => {
+			assertWritable([m]);
+			return handle.mutate(m);
+		},
+		mutateBatch: (ms: readonly NovelMutation[]) => {
+			assertWritable(ms);
+			return handle.mutateBatch(ms);
+		},
+	} as unknown as NovelHandle;
 }

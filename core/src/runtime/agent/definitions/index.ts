@@ -7,7 +7,7 @@ import type { AgentDefinition } from "../AgentDefinition.js";
 import type { SubagentCatalogEntry } from "../../tool/definitions/subagent.js";
 import { novelExplorerAgentDefinition } from "./NovelExplorerAgentDefinition.js";
 import { novelComposeAgentDefinition } from "./NovelComposeAgentDefinition.js";
-// BookAnalyst 独立后台 Agent（不进 NOVEL_SUBAGENT_DEFINITIONS——非 subagent）
+// BookAnalyst / ProjectImporter 独立后台 Agent（不进 NOVEL_SUBAGENT_DEFINITIONS——非 subagent）
 
 /** AgentDefinition → 目录条目（agentType/label/description + tools.allow） */
 function subagentCatalogEntryOf(definition: AgentDefinition): SubagentCatalogEntry {
@@ -29,6 +29,7 @@ export const NOVEL_SUBAGENT_DEFINITIONS: readonly SubagentCatalogEntry[] = Objec
 
 export * from "./NovelAgentDefinition.js";
 export * from "./BookAnalystAgentDefinition.js";
+export * from "./ProjectImporterAgentDefinition.js";
 export * from "./NovelExplorerAgentDefinition.js";
 export * from "./NovelComposeAgentDefinition.js";
 export * from "./novelSections.js";

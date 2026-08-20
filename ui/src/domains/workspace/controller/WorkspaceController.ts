@@ -191,6 +191,17 @@ export class WorkspaceController {
     });
   }
 
+  /**
+   * 打开指定引用（「从文件导入创建项目」等流程拿到引用后进入常规打开编排：
+   * opening → 分步加载 → 工作台）。
+   * Opens an explicit workspace reference (e.g. after import-to-create-project).
+   */
+  openDirect(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView | undefined> {
+    return this.runExclusive(async () =>
+      this.openReference(captureWorkspaceReference(reference)),
+    );
+  }
+
   closeCurrent(): Promise<boolean> {
     return this.runExclusive(async () => {
       if (this.snapshot.current === undefined) return true;

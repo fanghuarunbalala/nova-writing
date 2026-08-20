@@ -13,6 +13,8 @@ export interface ProviderConfig {
   apiKey?: string;
   /** 单次请求超时（毫秒），缺省用全局默认 */
   timeoutMs?: number;
+  /** SDK 层失败重试次数（正整数才下发；缺省用 SDK 默认——openai 为 2 次静默重试） */
+  maxRetries?: number;
 }
 
 /** effort 档位（映射目标） */

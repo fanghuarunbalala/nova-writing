@@ -788,9 +788,11 @@ function toStoryUnit(row: Row): StoryUnit {
 		parentId: (row.parent_id as string | null) ?? undefined,
 		orderKey: row.order_key as string,
 		title: row.title as string,
-		intent: row.intent as string | undefined,
-		synopsis: row.synopsis as string | undefined,
-		scope: row.scope as StoryUnit["scope"],
+		// 可空列读归一：SQLite NULL → undefined（裸断言会把 null 透传到 UI，
+		// `synopsis.replace` 类调用对 null 崩——导入锚点单元等无 synopsis 场景必现）
+		intent: (row.intent as string | null) ?? undefined,
+		synopsis: (row.synopsis as string | null) ?? undefined,
+		scope: (row.scope as StoryUnit["scope"] | null) ?? undefined,
 		planningStatus: row.planning_status as StoryUnit["planningStatus"],
 		realizationStatus: row.realization_status as StoryUnit["realizationStatus"],
 		blockState: row.block_state ? (JSON.parse(row.block_state as string) as StoryUnit["blockState"]) : undefined,
@@ -804,9 +806,10 @@ function toEntity(row: Row): Character & Location {
 		entityVersion: row.entity_version as number,
 		name: row.name as string,
 		aliases: JSON.parse(row.aliases as string) as readonly string[],
-		summary: row.summary as string | undefined,
-		initialState: row.initial_state as string | undefined,
-		authorNotes: row.author_notes as string | undefined,
+		// 可空列读归一（同 toStoryUnit）
+		summary: (row.summary as string | null) ?? undefined,
+		initialState: (row.initial_state as string | null) ?? undefined,
+		authorNotes: (row.author_notes as string | null) ?? undefined,
 		createdAt: row.created_at as string,
 		updatedAt: row.updated_at as string,
 	} as Character & Location;

@@ -9,6 +9,7 @@ import { StoryOutlineTreeProjection } from "../../../src/domains/novel/outline/p
 import { StoryOutlineTreeStore } from "../../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { StoryOutlineTree } from "../../../src/domains/novel/outline/components/StoryOutlineTree.js";
 import { StoryOutlineTreeLegend } from "../../../src/domains/novel/outline/components/StoryOutlineTreeLegend.js";
+import { formatSynopsisDisplay } from "../../../src/domains/novel/outline/outlineStatus.js";
 import { OutlineUnitInspectorPanel } from "../../../src/shell/inspector/panels/OutlineUnitInspectorPanel.js";
 import { StatusChip } from "../../../src/shared/primitives/StatusChip.js";
 
@@ -307,5 +308,18 @@ describe("OutlineUnitInspectorPanel 单元段落卡", () => {
     // 空态：引导到对话写入
     rerender(view([]));
     expect(screen.getByText(/暂无段落/)).toBeInTheDocument();
+  });
+});
+
+describe("formatSynopsisDisplay（null 安全与标记脱敏）", () => {
+  it("null / undefined 不抛错返回空串（可空列 null 读回的渲染回归）", () => {
+    expect(formatSynopsisDisplay(null)).toBe("");
+    expect(formatSynopsisDisplay(undefined)).toBe("");
+  });
+
+  it("项目导入 imp-b 批次标记脱敏显示", () => {
+    expect(formatSynopsisDisplay("开端（覆盖 imp-b000001–imp-b000003）")).toBe(
+      "开端（覆盖正文 批次 000001–000003）",
+    );
   });
 });

@@ -88,6 +88,33 @@ describe("ProjectSelectionPage", () => {
     expect(onOpenRecent).toHaveBeenCalledWith("ws-1");
   });
 
+  it("shows the import action only when wired and fires onImport", async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn();
+    // 未接线：不渲染导入入口
+    const { rerender } = render(
+      <ProjectSelectionPage
+        snapshot={snapshot()}
+        onChoose={vi.fn()}
+        onCreate={vi.fn()}
+        onOpenRecent={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /从文件导入/ })).not.toBeInTheDocument();
+    // 接线：按钮出现并回调
+    rerender(
+      <ProjectSelectionPage
+        snapshot={snapshot()}
+        onChoose={vi.fn()}
+        onCreate={vi.fn()}
+        onImport={onImport}
+        onOpenRecent={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /从文件导入/ }));
+    expect(onImport).toHaveBeenCalledTimes(1);
+  });
+
   it("shows empty hint, error banner and busy states", () => {
     const { rerender } = render(
       <ProjectSelectionPage

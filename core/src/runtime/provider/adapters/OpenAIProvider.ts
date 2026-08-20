@@ -43,9 +43,14 @@ export class OpenAIProvider extends BaseProvider {
       apiKey: this.config.apiKey,
       baseURL: this.config.baseUrl,
     });
-    const options: { signal?: AbortSignal; timeout?: number } = { signal: call.signal };
+    const options: { signal?: AbortSignal; timeout?: number; maxRetries?: number } = {
+      signal: call.signal,
+    };
     if (this.config.timeoutMs !== undefined) {
       options.timeout = this.config.timeoutMs; // 仅显式配置时传（openai SDK 要求正整数）
+    }
+    if (this.config.maxRetries !== undefined && Number.isInteger(this.config.maxRetries) && this.config.maxRetries >= 0) {
+      options.maxRetries = this.config.maxRetries;
     }
     const stream = await client.chat.completions.create(this.buildRequest(call), options);
     for await (const chunk of stream) {

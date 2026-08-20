@@ -105,10 +105,11 @@
 前置：Node ≥ 22，pnpm（`corepack enable` 即可）。
 
 ```bash
-pnpm install      # 安装依赖
-pnpm build        # 构建 core → ui → gui
-pnpm gui:release  # 启动桌面应用
-pnpm gui:debug    # 同上，verbose 日志 + 调试模式
+pnpm install            # 安装依赖
+pnpm build              # 全新构建（先清空 dist，再 core → ui → gui）
+pnpm build:incremental  # 增量构建（不清空，快）
+pnpm gui:release        # 启动桌面应用
+pnpm gui:debug          # 同上，verbose 日志 + 调试模式
 ```
 
 模型配置二选一：

@@ -1,6 +1,5 @@
 # Nova Writing：A Novel Writing agent harness
 
-> Novel writing agent harness
 
 ![status](https://img.shields.io/badge/status-%E5%BC%80%E5%8F%91%E4%B8%AD%C2%B7%E5%BF%AB%E9%80%9F%E8%BF%AD%E4%BB%A3-orange)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)

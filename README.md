@@ -58,6 +58,8 @@
 | <img src="docs/assets/demo-maintext.png" width="400" alt="内容 · 正文"> | <img src="docs/assets/demo-characters.png" width="400" alt="内容 · 人物档案"> |
 | <sub>章节正文——组织 / 发布单位，按断章节奏组织。</sub> | <sub>人物、地点档案，实体详情与状态变更在此维护。</sub> |
 
+目前支持四种主题色：宣纸白 / 墨夜 / 黛青 / 雪青，可在设置的外观页切换。
+
 | 宣纸白 | 墨夜 | 黛青 | 雪青 |
 | --- | --- | --- | --- |
 | <img src="docs/assets/theme-1.png" width="190" alt="宣纸白"> | <img src="docs/assets/theme-2.png" width="190" alt="墨夜"> | <img src="docs/assets/theme-3.png" width="190" alt="黛青"> | <img src="docs/assets/theme-4.png" width="190" alt="雪青"> |

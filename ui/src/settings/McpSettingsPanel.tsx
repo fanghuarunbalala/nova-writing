@@ -1,6 +1,6 @@
 /** MCP 服务器设置面板：服务器卡片（启停/信任/编辑/删除）+ draft 表单（增改 + 测试连接 + 工具预览）。 */
 import { useCallback, useEffect, useState } from "react";
-import { Check, Plug, PlugZap, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Check, Plug, PlugZap, RotateCcw, Trash2, X } from "lucide-react";
 import type { McpServerConfig, McpServerInput, McpTestResult } from "@novel/core";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 
@@ -174,18 +174,6 @@ export function McpSettingsPanel({ configuration }: McpSettingsPanelProps) {
           <h3>MCP 服务器</h3>
           <p>外部工具接入（Model Context Protocol）· 变更对新会话生效。</p>
         </div>
-        <button
-          className="novel-set-btn"
-          disabled={busy || draft.id !== undefined}
-          onClick={() => {
-            setDraft(emptyDraft());
-            setTestResult(undefined);
-          }}
-          type="button"
-        >
-          <Plus size={12} aria-hidden />
-          新增
-        </button>
       </header>
 
       <p className="novel-set-hint">
@@ -372,6 +360,21 @@ export function McpSettingsPanel({ configuration }: McpSettingsPanelProps) {
           信任（免审批）
         </label>
         <span style={{ flex: 1 }} />
+        {draft.id !== undefined ? (
+          <button
+            className="novel-set-btn"
+            disabled={busy || testing}
+            onClick={() => {
+              setDraft(emptyDraft());
+              setTestResult(undefined);
+              setStatus("已取消编辑");
+            }}
+            type="button"
+          >
+            <X size={12} aria-hidden />
+            取消编辑
+          </button>
+        ) : null}
         {configuration.testMcp !== undefined ? (
           <button className="novel-set-btn" disabled={busy || testing} onClick={() => void testDraft()} type="button">
             <PlugZap size={12} aria-hidden />
@@ -383,6 +386,11 @@ export function McpSettingsPanel({ configuration }: McpSettingsPanelProps) {
           {busy ? "保存中…" : "保存"}
         </button>
       </div>
+
+      <p className="novel-set-hint">
+        stdio 示例：命令 <code>npx</code>，参数 <code>-y @modelcontextprotocol/server-memory</code>（npx
+        = 临时下载并运行该 npm 包）；http 示例：<code>https://mcp.example.com/mcp</code>。
+      </p>
 
       {testResult?.ok === true ? (
         <div className="novel-set-section">

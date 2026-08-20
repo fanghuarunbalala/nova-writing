@@ -81,7 +81,7 @@ export function SettingsDialog({
               data-active={activeSectionId === "skills"}
               onClick={() => setActiveSectionId("skills")}
             >
-              技能
+              Skill
             </button>
           ) : null}
           {configuration !== undefined ? (
@@ -91,7 +91,7 @@ export function SettingsDialog({
               data-active={activeSectionId === "mcp"}
               onClick={() => setActiveSectionId("mcp")}
             >
-              MCP 服务器
+              MCP
             </button>
           ) : null}
           <button

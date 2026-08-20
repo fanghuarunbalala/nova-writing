@@ -49,7 +49,7 @@ import {
   type LoopEvent,
   type RunContext,
 } from "@novel/core";
-import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
+import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator, seedBuiltinSkills } from "@novel/core/node";
 import {
   DesktopDesignFileService,
   DesktopDesignIpcController,
@@ -76,6 +76,8 @@ const rendererHtml = existsSync(join(baseDir, "minimal.html"))
   ? join(baseDir, "minimal.html")
   : join(baseDir, "..", "minimal", "minimal.html");
 const childScript = join(baseDir, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
+/** 内置技能根（gui/resources/builtin-skills；启动时预装到 userData/skills，已存在跳过） */
+const builtinSkillsRoot = join(baseDir, "..", "..", "..", "gui", "resources", "builtin-skills");
 const IPC_CHANNEL = "novel-rpc";
 const CONFIG_CHANNEL = "config-rpc";
 const WORKSPACE_CHANNEL = "workspace-rpc";
@@ -415,6 +417,20 @@ async function main(): Promise<void> {
     },
   });
   await configStore.load();
+  // 内置技能预装（builtin-skills → userData/skills；目标已存在跳过——用户编辑/删除优先，
+  // 不覆盖不复活）。须在 applySkillsEnv 之前：首次启动先落盘再进 env/清单
+  const builtinSeeded = await seedBuiltinSkills(
+    builtinSkillsRoot,
+    join(app.getPath("userData"), "skills"),
+  );
+  if (builtinSeeded.some((s) => s.seeded)) {
+    infoLog(
+      `[main] builtin skills seeded: ${builtinSeeded
+        .filter((s) => s.seeded)
+        .map((s) => s.name)
+        .join(",")}`,
+    );
+  }
   // provider 运行形态（启动时快照，会话期间不变）：holder 先建、ConfigServer 闭包引用，
   // applyRuntimeEnv 之后赋值——renderer 首次 getRuntimeStatus 远晚于启动完成，值已定型。
   // 设置页据此提示回显模式（provider 修改需重启生效；spawner 在启动时一次决定不补建）

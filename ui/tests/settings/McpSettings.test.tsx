@@ -49,7 +49,7 @@ function openPanel(client: ApplicationConfigurationClient): void {
       onDismiss={() => {}}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "MCP 服务器" }));
+  fireEvent.click(screen.getByRole("button", { name: "MCP" }));
 }
 
 describe("McpSettings", () => {
@@ -134,5 +134,35 @@ describe("McpSettings", () => {
     await waitFor(() => {
       expect(client.mutate).toHaveBeenCalledWith({ op: "mcp.remove", serverId: "srv_1" });
     });
+  });
+
+  it("edit enters edit mode with 取消编辑; cancelling returns to add mode", async () => {
+    const client = makeClient();
+    openPanel(client);
+    await screen.findByText("天气查询");
+
+    // 添加态：无「取消编辑」，表单标题为「添加服务器」
+    expect(screen.queryByRole("button", { name: /取消编辑/ })).toBeNull();
+    expect(screen.getByText("添加服务器")).toBeDefined();
+
+    // 编辑进入编辑态：表单载入原值 + 出现「取消编辑」
+    fireEvent.click(screen.getByRole("button", { name: /编辑/ }));
+    expect(screen.getByText("编辑服务器")).toBeDefined();
+    expect((screen.getByLabelText("MCP 服务器名称") as HTMLInputElement).value).toBe("天气查询");
+    expect((screen.getByLabelText("MCP stdio 命令") as HTMLInputElement).value).toBe("npx");
+
+    // 取消编辑回到添加态（表单清空）
+    fireEvent.click(screen.getByRole("button", { name: /取消编辑/ }));
+    expect(screen.getByText("添加服务器")).toBeDefined();
+    expect((screen.getByLabelText("MCP 服务器名称") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("button", { name: /取消编辑/ })).toBeNull();
+  });
+
+  it("shows the connection template hint (stdio npx / http url examples)", async () => {
+    const client = makeClient();
+    openPanel(client);
+    await screen.findByText("天气查询");
+    expect(screen.getByText(/-y @modelcontextprotocol\/server-memory/)).toBeDefined();
+    expect(screen.getByText(/https:\/\/mcp\.example\.com\/mcp/)).toBeDefined();
   });
 });

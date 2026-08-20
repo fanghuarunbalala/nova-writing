@@ -65,7 +65,7 @@ describe("SkillsSettings", () => {
         onDismiss={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "技能" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skill" }));
 
     // 分组展示：生效中 + 已禁用（「已禁用」同时出现在分组标题与卡片标签，取多处匹配）
     expect(await screen.findByText("生效中")).toBeDefined();
@@ -96,7 +96,7 @@ describe("SkillsSettings", () => {
         onDismiss={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "技能" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skill" }));
 
     expect((await screen.findAllByText("未发现技能包")).length).toBeGreaterThan(0);
     expect(screen.getByDisplayValue("/app/skills")).toBeDefined();
@@ -118,7 +118,7 @@ describe("SkillsSettings", () => {
         onDismiss={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "技能" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skill" }));
     expect(await screen.findByText(/技能系统未装配/)).toBeDefined();
   });
 });

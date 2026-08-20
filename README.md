@@ -45,15 +45,18 @@
 
 | 审批清单 | AskUserQuestions 提问补充信息 |
 | --- | --- |
-| <img src="docs/assets/demo-approval.png" width="400" alt="审批清单"><br><sub>AI 的写库操作按轮汇总成审批清单——左清单右详情，可逐条批准、全部批准或稍后处理。</sub> | <img src="docs/assets/demo-ask.png" width="400" alt="AskUserQuestions 提问补充信息"><br><sub>AI 主动向你提问、采集创意——提问卡阻塞等待你的答案，创意只由你定。</sub> |
+| <img src="docs/assets/demo-approval.png" width="400" alt="审批清单"> | <img src="docs/assets/demo-ask.png" width="400" alt="AskUserQuestions 提问补充信息"> |
+| <sub>AI 的写库操作按轮汇总成审批清单——左清单右详情，可逐条批准、全部批准或稍后处理。</sub> | <sub>AI 主动向你提问、采集创意——提问卡阻塞等待你的答案，创意只由你定。</sub> |
 
 | 对话主界面 | 内容 · 大纲 |
 | --- | --- |
-| <img src="docs/assets/demo-chat.png" width="400" alt="对话主界面"><br><sub>与 Agent 对话推进剧情；右侧内容目录中的人物、地点等实体可拖入输入框，作为引用交给 Agent。</sub> | <img src="docs/assets/demo-outline.png" width="400" alt="内容 · 大纲"><br><sub>大纲是叙事单位——故事核的树状组织，查询大纲即可获取相关事实源。</sub> |
+| <img src="docs/assets/demo-chat.png" width="400" alt="对话主界面"> | <img src="docs/assets/demo-outline.png" width="400" alt="内容 · 大纲"> |
+| <sub>与 Agent 对话推进剧情；右侧内容目录中的人物、地点等实体可拖入输入框，作为引用交给 Agent。</sub> | <sub>大纲是叙事单位——故事核的树状组织，查询大纲即可获取相关事实源。</sub> |
 
 | 内容 · 正文 | 内容 · 人物档案 |
 | --- | --- |
-| <img src="docs/assets/demo-maintext.png" width="400" alt="内容 · 正文"><br><sub>章节正文——组织 / 发布单位，按你的断章节奏组织。</sub> | <img src="docs/assets/demo-characters.png" width="400" alt="内容 · 人物档案"><br><sub>人物、地点档案——实体详情与状态变更在此维护。</sub> |
+| <img src="docs/assets/demo-maintext.png" width="400" alt="内容 · 正文"> | <img src="docs/assets/demo-characters.png" width="400" alt="内容 · 人物档案"> |
+| <sub>章节正文——组织 / 发布单位，按你的断章节奏组织。</sub> | <sub>人物、地点档案——实体详情与状态变更在此维护。</sub> |
 
 | 宣纸白 | 墨夜 | 黛青 | 雪青 |
 | --- | --- | --- | --- |

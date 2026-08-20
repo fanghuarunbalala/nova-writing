@@ -55,10 +55,9 @@
 | --- | --- |
 | ![内容 · 正文](docs/assets/demo-maintext.png) | ![内容 · 人物档案](docs/assets/demo-characters.png) |
 
-| 四种主题样式（宣纸白 / 墨夜 / 黛青 / 雪青） |
-| --- |
-| ![主题样式](docs/assets/theme-1.png) ![主题样式](docs/assets/theme-2.png) |
-| ![主题样式](docs/assets/theme-3.png) ![主题样式](docs/assets/theme-4.png) |
+| 宣纸白 | 墨夜 | 黛青 | 雪青 |
+| --- | --- | --- | --- |
+| ![主题样式](docs/assets/theme-1.png) | ![主题样式](docs/assets/theme-2.png) | ![主题样式](docs/assets/theme-3.png) | ![主题样式](docs/assets/theme-4.png) |
 
 ## 快速开始
 

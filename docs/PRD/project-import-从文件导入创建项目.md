@@ -1,7 +1,8 @@
-# project-import-从文件导入创建项目 PRD —— v0.2.2
+# project-import-从文件导入创建项目 PRD —— v0.2.3
 
 > 状态：⏳ 待作者确认（确认后改 ✅ 已定稿）
 > 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；书库全景 [`library-完本解构.md`](./library-完本解构.md)（本功能与其刻意区分，见 §2）；域概念边界 [`../development/域模型规范.md`](../development/域模型规范.md）
+> v0.2.3 变更：**修「解构进度恒零」真根因**——任务式导入完成后 `openDirect → workspaceApi.open → rebindWorkspace(同一 storeDir) → manager.rescope`，而 rescope 无条件 terminate 全部会话，刚派生、正在首次模型调用中的 ProjectImporter 被当场 SIGTERM（journal 停在 557 字节任务提示、status 永远 analyzing；此前「端点停滞」假说作废——全部卡死样本均为被杀）。修复：`rebindWorkspace` 对同一 storeDir 且库仍打开时幂等短路（不关库不 rescope）；PR #18 的「本进程持锁同项目幂等」不覆盖导入路径（bindFreshWorkspace 未持锁）。合并 origin/main（多实例/打开位置选择/MCP-Skills）时同步落地。
 > v0.2.2 变更：**修「解构进度恒零/一直进行中」**——磁盘实证根因：模型端点偶发停滞时 provider 请求悬挂（OpenAIProvider 未配超时 → openai SDK 默认单次 10 分钟 × 静默重试 2 次 ≈ 最长 30 分钟无日志无进度，journal 停在第 1 行）。修复：后台会话（ProjectImporter / BookAnalyst）provider 配 `timeoutMs=5 分钟 + maxRetries=1`（最坏 10 分钟内出结果、错误可见）；`ImportProgress` 新增 `stalled`（analyzing 且 journal / import.json 超 10 分钟无更新），进度浮标显示「疑似卡住」并提供重试（覆盖端点停滞与应用中途关闭两种中断）。附记：实证 agent 以正斜杠路径 Read、双信号在正常会话下可用（正常样本 42 次 Read 推进至第 7 轮）。
 > v0.2 变更：导入耗时操作（zip 解压/大文本解析/分批文件写/段落落库）全部移入独立后台子进程执行（`core/scripts/project-import-worker.mjs` + `ImportProcessRunner`，desktop-child 同款部署模式）——修复大文件导入时主进程事件循环被堵死、整个应用无响应的问题；预览与落库阶段进度经 `projectImport.createProgress` 轮询，导入对话框新增阶段文案 + 进度条动画。
 > v0.2.1 变更：**创建改为任务式**——`createProjectFromImport` 启动即返回引用（kkrpc 默认 30s 请求超时容不下分钟级落库，长 RPC 必超时），终态（统计/解构会话/失败原因）经 `createProgress` 轮询取；`previewImport` 在 UI 侧按调用加长超时（`withCallOptions` 5 分钟，全局默认不动）；补全链路诊断日志（worker spawn/阶段/stderr 转发、解构会话派生/注册/失败、子进程装配与注册里程碑、ProcessSpawner 报到超时 kill 留痕）——「conversation 异常退出 (SIGTERM)」类问题可据此定位卡点。附修：SqliteNovelStore 可空可选列（story_unit 的 intent/synopsis/scope、character/location 的 summary 等）读回 null 透传致大纲渲染崩溃（`synopsis.replace` 黑屏）——读路径统一归一为 undefined，UI 展示层同步 null 安全（存量 bug，导入锚点单元无 synopsis 必现）。

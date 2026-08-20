@@ -1039,9 +1039,17 @@ async function main(): Promise<void> {
     }
   };
 
+  /** 当前已绑定的 storeDir（与 currentNovelStore 配对；rebindWorkspace 幂等短路判定用） */
+  let currentStoreDir: string | undefined;
+
   /** 数据库与会话目录随 workspace 重绑：关旧库 → 开新库（<storeDir>/novel.db）→ manager rescope；
-   *  storeDir undefined（关闭工作区）= 全部清空回空态。open 返回前完成，渲染端随后 refetch 即新数据 */
+   *  storeDir undefined（关闭工作区）= 全部清空回空态。open 返回前完成，渲染端随后 refetch 即新数据。
+   *  同 storeDir 且库仍打开 = 幂等重开直接返回——rescope 会无条件 terminate 全部会话，
+   *  「导入创建 → openDirect 同项目」若重复 rebind 会把刚派生的 ProjectImporter 解构会话当场杀掉 */
   const rebindWorkspace = async (storeDir: string | undefined): Promise<void> => {
+    if (storeDir !== undefined && storeDir === currentStoreDir && currentNovelStore !== undefined) {
+      return;
+    }
     try {
       currentNovelStore?.close();
     } catch (e) {
@@ -1049,10 +1057,12 @@ async function main(): Promise<void> {
     }
     currentNovelStore = undefined;
     currentJournalDir = undefined;
+    currentStoreDir = undefined;
     if (storeDir !== undefined) {
       currentJournalDir = join(storeDir, "conversations");
       mkdirSync(currentJournalDir, { recursive: true });
       currentNovelStore = new SqliteNovelStore(join(storeDir, "novel.db"));
+      currentStoreDir = storeDir;
     }
     await manager.rescope(currentJournalDir);
   };

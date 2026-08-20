@@ -176,3 +176,56 @@ describe("NovelApp launch routing", () => {
     expect(screen.getByText("Novel")).toBeInTheDocument();
   });
 });
+
+describe("NovelApp 首启引导门控（跨实例标记端口）", () => {
+  const WIZARD_TITLE = "欢迎使用 Novel Harness";
+  const ONBOARDING_KEY = "novel.onboarding.v1";
+
+  function buildConfigurationClient() {
+    return {
+      load: vi.fn(async () => ({ profiles: [], credentials: {}, defaults: {} })),
+      mutate: vi.fn(async () => undefined),
+      runtimeStatus: vi.fn(async () => ({ providerLive: false })),
+    } as never;
+  }
+
+  function renderApp(onboardingPort?: {
+    isCompleted(): Promise<boolean>;
+    markCompleted(): Promise<void>;
+  }) {
+    const { controller } = buildController();
+    return render(
+      <NovelApp
+        api={buildApi()}
+        platform={platform}
+        workspaceController={controller}
+        configurationClient={buildConfigurationClient()}
+        {...(onboardingPort !== undefined ? { onboardingPort } : {})}
+      />,
+    );
+  }
+
+  it("端口报告已完成 → 不弹引导（多实例下第二实例不再重复弹）", async () => {
+    localStorage.removeItem(ONBOARDING_KEY);
+    renderApp({ isCompleted: async () => true, markCompleted: async () => undefined });
+    await screen.findByText("把一桩旧事，写成一本新书。");
+    expect(screen.queryByText(WIZARD_TITLE)).not.toBeInTheDocument();
+  });
+
+  it("端口未完成但 localStorage 已完成 → 迁移补写主进程标记，不弹", async () => {
+    localStorage.setItem(ONBOARDING_KEY, "done");
+    const markCompleted = vi.fn(async () => undefined);
+    renderApp({ isCompleted: async () => false, markCompleted });
+    await screen.findByText("把一桩旧事，写成一本新书。");
+    await waitFor(() => expect(markCompleted).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(WIZARD_TITLE)).not.toBeInTheDocument();
+    localStorage.removeItem(ONBOARDING_KEY);
+  });
+
+  it("端口未完成且无任何标记 → 弹引导", async () => {
+    localStorage.removeItem(ONBOARDING_KEY);
+    renderApp({ isCompleted: async () => false, markCompleted: async () => undefined });
+    expect(await screen.findByText(WIZARD_TITLE)).toBeInTheDocument();
+    localStorage.removeItem(ONBOARDING_KEY);
+  });
+});

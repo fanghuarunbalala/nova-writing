@@ -34,6 +34,12 @@ describe("config 域", () => {
 		const after = await handle.get();
 		expect(after.credentials.deepseek).toBeUndefined();
 
+		// test 往返（无密钥分支：不触网，验证 RPC expose 接线）
+		expect(await handle.test({ provider: "openai" })).toEqual({
+			ok: false,
+			error: "缺少 API 密钥——请填写密钥或提供凭据引用",
+		});
+
 		handle.dispose();
 		await server.close();
 	});

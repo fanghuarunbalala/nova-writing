@@ -8,12 +8,19 @@
  * platform/commandSource/configurationClient 保留在 props 表面（组合层契约）；
  * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入（Phase B）。
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 import type { ApplicationCommandSource } from "../command/index.js";
 import {
+  completeOnboarding,
+  hasCompletedOnboarding,
+  OnboardingWizard,
+} from "../onboarding/index.js";
+import {
   ApplicationSettingsStore,
+  ConfigurationStatusContext,
+  isModelConfigured,
   SettingsDialog,
   type ApplicationConfigurationClient,
 } from "../settings/index.js";
@@ -135,10 +142,48 @@ function NovelAppReady({
   const workspaceSnapshot: WorkspaceControllerSnapshot = useExternalStore(workspaceAdapter);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  // 模型配置状态（回声模式判定）：无 configurationClient 的宿主恒视为已配置
+  const [modelConfigured, setModelConfigured] = useState(true);
+  // 书库视图（试验功能，NOVEL_LIBRARY=1 才开启）：向导按此决定是否介绍
+  const libraryEnabled = platform.capabilities.library === true;
   // 启动时刷新最近项目（持久化来源），供选择页展示；不自动打开任何 Workspace。
   useEffect(() => {
     void workspaceController.refresh();
   }, [workspaceController]);
+  // 首启新手引导：有配置客户端（桌面宿主）且无完成标记时弹向导
+  useEffect(() => {
+    if (configurationClient !== undefined && !hasCompletedOnboarding()) {
+      setGuideOpen(true);
+    }
+  }, [configurationClient]);
+  const refreshModelConfigured = useCallback(async () => {
+    if (configurationClient === undefined) return;
+    try {
+      setModelConfigured(isModelConfigured(await configurationClient.load()));
+    } catch {
+      // 读取失败：维持当前状态
+    }
+  }, [configurationClient]);
+  useEffect(() => {
+    void refreshModelConfigured();
+  }, [refreshModelConfigured]);
+  const openGuide = useCallback(() => setGuideOpen(true), []);
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const configurationStatus = useMemo(
+    () => ({ modelConfigured, openGuide, openSettings }),
+    [modelConfigured, openGuide, openSettings],
+  );
+  const dismissSettings = useCallback(() => {
+    setSettingsOpen(false);
+    void refreshModelConfigured();
+  }, [refreshModelConfigured]);
+  // 向导关闭（完成 / 跳过 / ESC / X）统一写完成标记并刷新配置状态
+  const dismissGuide = useCallback(() => {
+    setGuideOpen(false);
+    completeOnboarding();
+    void refreshModelConfigured();
+  }, [refreshModelConfigured]);
 
   return (
     <NovelAppProvider
@@ -149,71 +194,89 @@ function NovelAppReady({
       commandSource={commandSource}
       configurationClient={configurationClient}
     >
-      {workspaceSnapshot.current === undefined ? (
-        <ProjectSelectionPage
-          snapshot={workspaceSnapshot}
-          onChoose={() => {
-            void workspaceController.chooseAndOpen();
-          }}
-          onCreate={() => {
-            void workspaceController.createAndOpen();
-          }}
-          onOpenRecent={(workspaceId) => {
-            void workspaceController.openRecent(workspaceId);
-          }}
-        />
-      ) : (
-        <ApplicationShell
-          api={api}
-          logger={logger}
-          platform={platform}
-          mainViewRouter={mainViewRouter}
-          inspectorRouter={inspectorRouter}
-          workspaceController={workspaceController}
-          domainStores={domainStores}
-          toastStore={toastStore}
-          settingsStore={settingsStore}
-          configurationClient={configurationClient}
-          commandSource={commandSource}
-          extensions={extensions}
-          windowChrome={windowChrome}
-          launchPhase={launchSnapshot.phase}
-          onOpenWorkspace={() => setWorkspaceOpen(true)}
-          onOpenSettings={() => setSettingsOpen(true)}
-          overlays={
-            <>
-              <WorkspaceSelectionDialog
-                open={workspaceOpen}
-                snapshot={workspaceSnapshot}
-                onChoose={() => {
-                  void workspaceController.chooseAndOpen();
-                  setWorkspaceOpen(false);
-                }}
-                onOpenRecent={(workspaceId) => {
-                  void workspaceController.openRecent(workspaceId);
-                  setWorkspaceOpen(false);
-                }}
-                onCloseWorkspace={() => {
-                  void workspaceController.closeCurrent();
-                  setWorkspaceOpen(false);
-                }}
-                onDismiss={() => setWorkspaceOpen(false)}
-              />
-              <SettingsDialog
-                open={settingsOpen}
-                store={settingsStore}
-                sections={extensions?.settingsSections}
-                configuration={configurationClient}
-                onDismiss={() => setSettingsOpen(false)}
-              />
-              {overlays}
-            </>
-          }
-        />
-      )}
-      {launchSnapshot.phase !== "idle" ? (
-        <LaunchOverlay snapshot={launchSnapshot} />
-      ) : null}
+      <ConfigurationStatusContext.Provider value={configurationStatus}>
+        {workspaceSnapshot.current === undefined ? (
+          <>
+            <ProjectSelectionPage
+              snapshot={workspaceSnapshot}
+              onChoose={() => {
+                void workspaceController.chooseAndOpen();
+              }}
+              onCreate={() => {
+                void workspaceController.createAndOpen();
+              }}
+              onOpenRecent={(workspaceId) => {
+                void workspaceController.openRecent(workspaceId);
+              }}
+              onOpenGuide={openGuide}
+            />
+            <OnboardingWizard
+              open={guideOpen}
+              configuration={configurationClient}
+              libraryEnabled={libraryEnabled}
+              onDismiss={dismissGuide}
+            />
+          </>
+        ) : (
+          <ApplicationShell
+            api={api}
+            logger={logger}
+            platform={platform}
+            mainViewRouter={mainViewRouter}
+            inspectorRouter={inspectorRouter}
+            workspaceController={workspaceController}
+            domainStores={domainStores}
+            toastStore={toastStore}
+            settingsStore={settingsStore}
+            configurationClient={configurationClient}
+            commandSource={commandSource}
+            extensions={extensions}
+            windowChrome={windowChrome}
+            launchPhase={launchSnapshot.phase}
+            onOpenWorkspace={() => setWorkspaceOpen(true)}
+            onOpenSettings={openSettings}
+            onOpenGuide={openGuide}
+            overlays={
+              <>
+                <WorkspaceSelectionDialog
+                  open={workspaceOpen}
+                  snapshot={workspaceSnapshot}
+                  onChoose={() => {
+                    void workspaceController.chooseAndOpen();
+                    setWorkspaceOpen(false);
+                  }}
+                  onOpenRecent={(workspaceId) => {
+                    void workspaceController.openRecent(workspaceId);
+                    setWorkspaceOpen(false);
+                  }}
+                  onCloseWorkspace={() => {
+                    void workspaceController.closeCurrent();
+                    setWorkspaceOpen(false);
+                  }}
+                  onDismiss={() => setWorkspaceOpen(false)}
+                />
+                <SettingsDialog
+                  open={settingsOpen}
+                  store={settingsStore}
+                  sections={extensions?.settingsSections}
+                  configuration={configurationClient}
+                  onDismiss={dismissSettings}
+                />
+                <OnboardingWizard
+                  open={guideOpen}
+                  configuration={configurationClient}
+                  libraryEnabled={libraryEnabled}
+                  onDismiss={dismissGuide}
+                />
+                {overlays}
+              </>
+            }
+          />
+        )}
+        {launchSnapshot.phase !== "idle" ? (
+          <LaunchOverlay snapshot={launchSnapshot} />
+        ) : null}
+      </ConfigurationStatusContext.Provider>
     </NovelAppProvider>
   );
 }

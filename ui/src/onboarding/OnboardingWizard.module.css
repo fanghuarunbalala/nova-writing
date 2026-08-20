@@ -1,0 +1,315 @@
+/**
+ * OnboardingWizard 视觉：进度圆点 / footer 导航 / 欢迎特性网格 /
+ * 预设快捷卡 / 已配置状态卡 / 测试连接行 / 使用说明分区。
+ * 表单字段复用全局 settings.css 的 novel-set-* 类；颜色只走语义 token。
+ */
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.dot[data-active="true"] {
+  background: var(--color-accent);
+}
+
+.progressLabel {
+  margin-left: var(--space-2px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+}
+
+.footerNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* ---- 欢迎步 ---- */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 var(--space-2);
+  text-align: center;
+}
+
+.welcome .kicker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+.welcome h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-heavy);
+  color: var(--color-fg);
+}
+
+.welcome > p {
+  max-width: 460px;
+  margin: 0 auto;
+  font-family: var(--font-kai);
+  font-size: var(--fs-13);
+  line-height: 1.7;
+  color: var(--color-muted);
+}
+
+.featureList {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  max-width: 480px;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+.featureList li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.featureList strong {
+  display: block;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.featureList li span:not(.featureIcon) {
+  font-size: var(--fs-meta);
+  color: var(--color-muted);
+}
+
+.featureIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+}
+
+.welcomeNote {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+}
+
+/* ---- 配置步 ---- */
+
+.presetGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.presetCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2px);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.presetCard strong {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.presetCard span {
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+}
+
+.presetCard[data-selected="true"] {
+  border-color: var(--color-accent-45);
+  background: var(--color-accent-8-surface);
+}
+
+.configuredCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2px);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  background: var(--color-success-bg);
+}
+
+.configuredCard strong {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--color-success);
+}
+
+.configuredCard span {
+  font-size: var(--fs-meta);
+  color: var(--color-muted);
+}
+
+.configuredCard small {
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+}
+
+.configuredCard[data-ready="false"] {
+  border-color: var(--color-warn);
+  background: var(--color-warn-bg);
+}
+
+.configuredCard[data-ready="false"] strong {
+  color: var(--color-warn);
+}
+
+.noticeCard {
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  font-size: var(--fs-13);
+}
+
+/* novel-set-hint 的单行保护：向导弹窗（lg）比设置弹窗（xl）窄，
+   长提示会折成多行——限定单行 + 省略号兜底（文案已控制在单行内） */
+.hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.testRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.testOk {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2px);
+  color: var(--color-success);
+  font-size: var(--fs-meta);
+}
+
+.testFail {
+  color: var(--color-danger);
+  font-size: var(--fs-meta);
+}
+
+/* ---- 使用说明步 ---- */
+
+.guideSection h4 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2px);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.guideSection h4 svg {
+  color: var(--color-accent-ink);
+}
+
+.guideSection p {
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: 1.7;
+  color: var(--color-muted);
+}
+
+.viewList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+.viewList li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.viewList div {
+  display: flex;
+  flex-direction: column;
+}
+
+.viewList strong {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.viewList div > span {
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+
+.viewIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-9);
+  color: var(--color-accent-ink);
+}

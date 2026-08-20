@@ -10,7 +10,7 @@ import { expose, wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
 import type { Logger, ProjectedEvent } from "@novel/core";
-import type { ConfigApi, ConfigMutation } from "@novel/core";
+import type { ConfigApi, ConfigMutation, ConnectionTestInput } from "@novel/core";
 import { emitApprovalsChanged, emitAskingsChanged, emitNovelChanged } from "@novel/ui";
 import {
   NovelApp,
@@ -64,6 +64,7 @@ const configApi = wrap<ConfigApi>(configTransport);
 const configurationClient = {
   load: () => configApi.get(),
   mutate: (m: ConfigMutation) => configApi.mutate(m),
+  test: (input: ConnectionTestInput) => configApi.test(input),
 };
 
 interface WorkspaceSessionDto {

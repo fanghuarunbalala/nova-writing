@@ -100,6 +100,8 @@ export interface ApplicationShellProps {
   readonly launchPhase?: LaunchPhase;
   readonly onOpenWorkspace?: () => void;
   readonly onOpenSettings?: () => void;
+  /** 新手引导（TopBar 帮助图标；缺省隐藏） */
+  readonly onOpenGuide?: () => void;
   readonly overlays?: ReactNode;
   /** 窗口控制（PRD WC；桌面宿主经 preload 桥注入） */
   readonly windowChrome?: WindowChromeProps;
@@ -120,6 +122,7 @@ export function ApplicationShell({
   launchPhase,
   onOpenWorkspace,
   onOpenSettings,
+  onOpenGuide,
   overlays,
   platform,
   windowChrome,
@@ -643,6 +646,7 @@ export function ApplicationShell({
   }, [mainView.state, libraryEnabled, mainViewRouter]);
   const handleShellOpenWorkspace = useCallback(() => onOpenWorkspace?.(), [onOpenWorkspace]);
   const handleShellOpenSettings = useCallback(() => onOpenSettings?.(), [onOpenSettings]);
+  const handleShellOpenGuide = useCallback(() => onOpenGuide?.(), [onOpenGuide]);
   // 通知条目激活：goto.view 切主视图；审批类额外唤起审批弹窗
   const handleNotificationActivate = useCallback(
     (item: NotificationItem) => {
@@ -687,6 +691,7 @@ export function ApplicationShell({
         libraryEnabled={libraryEnabled}
         onOpenWorkspace={handleShellOpenWorkspace}
         onOpenSettings={handleShellOpenSettings}
+        onOpenGuide={handleShellOpenGuide}
         notifications={domainStores.notifications}
         onNotificationActivate={handleNotificationActivate}
         extensions={extensions}

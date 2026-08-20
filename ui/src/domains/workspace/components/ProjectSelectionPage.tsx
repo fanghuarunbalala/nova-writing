@@ -57,6 +57,8 @@ export interface ProjectSelectionPageProps {
   /** 新建项目（save 型对话框命名 → 建目录 → 打开）；与 onChoose 分开接线 */
   readonly onCreate: () => void;
   readonly onOpenRecent: (workspaceId: string) => void;
+  /** 重开新手引导向导（缺省隐藏入口） */
+  readonly onOpenGuide?: () => void;
 }
 
 export function ProjectSelectionPage({
@@ -64,6 +66,7 @@ export function ProjectSelectionPage({
   onChoose,
   onCreate,
   onOpenRecent,
+  onOpenGuide,
 }: ProjectSelectionPageProps) {
   const busy =
     snapshot.phase === "loading" ||
@@ -140,6 +143,11 @@ export function ProjectSelectionPage({
           <p className={styles.error} role="status">
             {snapshot.error.message}
           </p>
+        ) : null}
+        {onOpenGuide !== undefined ? (
+          <button type="button" className={styles.guideLink} onClick={onOpenGuide}>
+            查看新手引导
+          </button>
         ) : null}
       </div>
     </div>

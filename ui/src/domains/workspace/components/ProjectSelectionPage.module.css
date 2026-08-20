@@ -188,3 +188,18 @@
   font-size: var(--fs-meta);
   animation: var(--anim-view-in) 0.3s var(--ease-out);
 }
+
+.guideLink {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+  text-decoration: underline dotted;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.guideLink:hover {
+  color: var(--color-accent-ink);
+}

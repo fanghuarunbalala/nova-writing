@@ -1,12 +1,18 @@
 /**
  * ConfigHandle：UI / zygote 持有的 config 客户端（wrap 侧）。
- * get/mutate 经 call 归一错误。
+ * get/mutate/test 经 call 归一错误。
  */
 
 import { dispose, wrap } from "kkrpc";
 import type { RPCMessage, Transport } from "kkrpc";
 import { call } from "../../rpc/call.js";
-import type { ConfigApi, ConfigMutation, ConfigSnapshot } from "../contract.js";
+import type {
+	ConfigApi,
+	ConfigMutation,
+	ConfigSnapshot,
+	ConnectionTestInput,
+	ConnectionTestResult,
+} from "../contract.js";
 
 /** config 客户端 handle */
 export class ConfigHandle {
@@ -33,6 +39,15 @@ export class ConfigHandle {
 	 */
 	async mutate(m: ConfigMutation): Promise<void> {
 		return call(() => this.api.mutate(m), { peer: "config" });
+	}
+
+	/**
+	 * 测试模型服务连通性（轻量 GET /models：验证 baseUrl 可达 + 密钥有效）
+	 * @param input 测试输入（apiKey 直传或 credentialRef 引用已存凭据）
+	 * @returns 测试结果（失败附中文原因）
+	 */
+	async test(input: ConnectionTestInput): Promise<ConnectionTestResult> {
+		return call(() => this.api.test(input), { peer: "config" });
 	}
 
 	/** 释放 handle（断开通道） */

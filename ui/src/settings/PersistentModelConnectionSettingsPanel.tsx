@@ -1,6 +1,6 @@
 /** Persists Model Profiles (provider/model/baseUrl/credential/capabilities) and the default model. */
 import { useEffect, useState, type FormEvent } from "react";
-import { Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, PlugZap, Plus, Trash2 } from "lucide-react";
 // 运行时值必须走 browser-safe 的 /client 出口（根入口会拖入 zeromq 等 node 依赖 → renderer 白屏）
 import { ModelInfoRegistry } from "@novel/core/client";
 import type {
@@ -93,6 +93,7 @@ export function PersistentModelConnectionSettingsPanel({
   const [draft, setDraft] = useState<ProfileDraft>();
   const [status, setStatus] = useState("正在读取配置…");
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -147,6 +148,27 @@ export function PersistentModelConnectionSettingsPanel({
       setStatus(`保存失败：${getErrorCode(error)}`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** 测试连接：密钥留空时用已存凭据（credentialRef 经 server 侧解密） */
+  async function testDraft(): Promise<void> {
+    if (draft === undefined || !isDraftValid(draft) || configuration.test === undefined) return;
+    setTesting(true);
+    setStatus("正在测试连接…");
+    try {
+      const result = await configuration.test({
+        provider: draft.provider,
+        ...(draft.baseUrl.trim() === "" ? {} : { baseUrl: draft.baseUrl.trim() }),
+        ...(draft.apiKey.length > 0
+          ? { apiKey: draft.apiKey.trim() }
+          : { credentialRef: draft.credentialRef }),
+      });
+      setStatus(result.ok ? "连接正常 ✓" : `连接失败：${result.error}`);
+    } catch {
+      setStatus("测试请求失败（无法连接配置服务）");
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -478,6 +500,17 @@ export function PersistentModelConnectionSettingsPanel({
                   </div>
                 ) : null}
                 <div className="novel-save-bar">
+                  {configuration.test !== undefined ? (
+                    <button
+                      className="novel-set-btn"
+                      disabled={testing || saving || !isDraftValid(draft)}
+                      onClick={() => void testDraft()}
+                      type="button"
+                    >
+                      <PlugZap size={12} aria-hidden />
+                      {testing ? "测试中…" : "测试连接"}
+                    </button>
+                  ) : null}
                   <button className="novel-set-btn primary" disabled={saving || !isDraftValid(draft)} type="submit">
                     <Check size={12} aria-hidden />
                     {saving ? "保存中…" : "保存"}

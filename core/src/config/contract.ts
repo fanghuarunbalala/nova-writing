@@ -110,6 +110,23 @@ export type ConfigMutation =
 	| { op: "credential.save"; ref: CredentialRef; secret: string }
 	| { op: "credential.delete"; ref: CredentialRef }
 
+/** 连接测试输入：apiKey 直传（引导向导场景）或 credentialRef 引用已存凭据（设置页场景；apiKey 优先） */
+export interface ConnectionTestInput {
+	/** provider 种类 */
+	provider: ProviderType
+	/** baseUrl（缺省用 provider 默认） */
+	baseUrl?: string
+	/** 明文密钥（待验证；只在 server 进程内使用，不落盘不回传） */
+	apiKey?: string
+	/** 已存凭据引用（server 侧经 store.resolveSecret 解密） */
+	credentialRef?: CredentialRef
+}
+
+/** 连接测试结果（失败附中文原因，不含密钥等敏感内容） */
+export type ConnectionTestResult =
+	| { ok: true }
+	| { ok: false; error: string }
+
 /** config 对外 API（client wrap / server expose 共用） */
 export interface ConfigApi {
 	/**
@@ -122,4 +139,10 @@ export interface ConfigApi {
 	 * @param m 变更
 	 */
 	mutate(m: ConfigMutation): Promise<void>
+	/**
+	 * 测试模型服务连通性（轻量 GET /models：验证 baseUrl 可达 + 密钥有效）
+	 * @param input 测试输入（apiKey 直传或 credentialRef 引用已存凭据）
+	 * @returns 测试结果（失败附中文原因）
+	 */
+	test(input: ConnectionTestInput): Promise<ConnectionTestResult>
 }

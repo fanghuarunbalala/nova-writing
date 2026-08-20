@@ -114,7 +114,7 @@ pnpm gui:debug          # 同上，verbose 日志 + 调试模式
 
 模型配置二选一：
 
-- 应用内 **设置 → Model Provider**（推荐）：支持多 profile，凭据加密存储；
+- **首启引导向导**（推荐）：首次启动自动弹出，预设 DeepSeek / 通义千问 Qwen / Kimi / OpenAI / Anthropic 等快捷卡，支持一键测试连接；之后可在 应用内 **设置 → 模型** 管理多 profile，凭据加密存储；
 - 环境变量：`NOVEL_PROVIDER_TYPE`（`openai` / `anthropic`）、`NOVEL_PROVIDER_BASE_URL`、`NOVEL_PROVIDER_API_KEY`、`NOVEL_PROVIDER_MODEL`。
 
 目前没有安装包，需要从源码构建——毕竟还在快速迭代，装出去的版本一天一个样。

@@ -1,6 +1,44 @@
 /**
- * ChatEmptyState 视觉：虚线卡片 + accent 圆托图标 + 示例指令 chips。
+ * ChatEmptyState 视觉：虚线卡片 + accent 圆托图标 + 示例指令 chips +
+ * 模型未配置（回声模式）警示横幅。
  */
+.configWarning {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-bottom: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-warn-40);
+  border-radius: var(--radius-md);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-size: var(--fs-12);
+}
+
+.configActions {
+  display: inline-flex;
+  gap: var(--space-3);
+}
+
+.configActions button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  color: var(--color-accent-ink);
+  text-decoration: underline;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.configActions button:hover {
+  color: var(--color-accent);
+}
+
 .empty {
   display: flex;
   flex-direction: column;

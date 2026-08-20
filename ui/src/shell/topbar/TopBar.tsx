@@ -8,7 +8,7 @@
  * TopBarMenuSlot 渲染 extensions.titleBar 注入的桌面专属内容（spec 4.2）。
  */
 import { memo } from "react";
-import { ChevronDown, FolderOpen, PanelLeft, Settings } from "lucide-react";
+import { ChevronDown, CircleHelp, FolderOpen, PanelLeft, Settings } from "lucide-react";
 import { Icon } from "../../shared/primitives/Icon.js";
 import { IconButton } from "../../shared/primitives/IconButton.js";
 import type { MainViewState } from "../../shared/routing/MainViewRouter.js";
@@ -34,6 +34,8 @@ export interface TopBarProps {
   readonly libraryEnabled?: boolean;
   readonly onOpenWorkspace: () => void;
   readonly onOpenSettings: () => void;
+  /** 新手引导（顶栏帮助图标；缺省隐藏） */
+  readonly onOpenGuide?: () => void;
   /** 通知中心（demo 铃铛）：传入即在「打开工作区」与「设置」之间渲染 */
   readonly notifications?: NotificationStore;
   readonly onNotificationActivate?: (item: NotificationItem) => void;
@@ -53,6 +55,7 @@ export const TopBar = memo(function TopBar({
   libraryEnabled,
   onOpenWorkspace,
   onOpenSettings,
+  onOpenGuide,
   notifications,
   onNotificationActivate,
   extensions,
@@ -103,6 +106,11 @@ export const TopBar = memo(function TopBar({
             onActivate={onNotificationActivate}
             onOpenSettings={onOpenSettings}
           />
+        ) : null}
+        {onOpenGuide !== undefined ? (
+          <IconButton label="新手引导" size="sm" onClick={onOpenGuide}>
+            <Icon icon={CircleHelp} size="sm" />
+          </IconButton>
         ) : null}
         <IconButton label="设置" size="sm" onClick={onOpenSettings}>
           <Icon icon={Settings} size="sm" />

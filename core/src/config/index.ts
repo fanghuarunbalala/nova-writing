@@ -3,6 +3,7 @@
 export * from "./contract.js";
 export * from "./store.js";
 export * from "./runtimeSettings.js";
+export * from "./connectionTest.js";
 export * from "./CredentialCipher.js";
 export * from "./InMemoryConfigStore.js";
 export * from "./client/ConfigHandle.js";

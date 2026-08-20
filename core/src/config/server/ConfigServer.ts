@@ -1,11 +1,12 @@
 /**
  * ConfigServer：config 进程的 RPC server（expose 侧）。
- * expose { get, mutate }；存储经 ConfigStore 注入。
+ * expose { get, mutate, test }；存储经 ConfigStore 注入。
  */
 
 import { expose, type ExposedController } from "kkrpc";
 import type { RPCMessage, Transport } from "kkrpc";
 import type { ConfigApi } from "../contract.js";
+import { testConnection } from "../connectionTest.js";
 import type { ConfigStore } from "../store.js";
 
 /** config RPC server */
@@ -28,6 +29,7 @@ export class ConfigServer {
 		const api: ConfigApi = {
 			get: () => this.store.get(),
 			mutate: (m) => this.store.mutate(m),
+			test: (input) => testConnection(this.store, input),
 		};
 		this.controller = expose(api, transport);
 	}

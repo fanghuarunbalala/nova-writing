@@ -2,8 +2,10 @@
  * ChatEmptyState
  *
  * 无对话时的引导空态：kicker + 图标 + 标题 + 说明 + 示例指令 chips + 新建动作。
+ * 模型服务未配置（回声模式）时顶部追加警示横幅，直达设置 / 新手引导。
  */
-import { Feather, Plus } from "lucide-react";
+import { Feather, Plus, TriangleAlert } from "lucide-react";
+import { useConfigurationStatus } from "../../../settings/ConfigurationStatusContext.js";
 import { Button } from "../../../shared/primitives/Button.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import styles from "./ChatEmptyState.module.css";
@@ -20,8 +22,23 @@ const EXAMPLES: readonly string[] = [
 ];
 
 export function ChatEmptyState({ onCreate }: ChatEmptyStateProps) {
+  const { modelConfigured, openGuide, openSettings } = useConfigurationStatus();
   return (
     <div className={styles.empty}>
+      {!modelConfigured ? (
+        <div className={styles.configWarning} role="status">
+          <Icon icon={TriangleAlert} size="sm" />
+          <span>尚未配置模型服务——当前为回声模式（不调用大模型）</span>
+          <span className={styles.configActions}>
+            <button type="button" onClick={openSettings}>
+              去配置
+            </button>
+            <button type="button" onClick={openGuide}>
+              查看引导
+            </button>
+          </span>
+        </div>
+      ) : null}
       <span className={styles.kicker}>Novel Agent</span>
       <span className={styles.iconWrap} aria-hidden="true">
         <Icon icon={Feather} size="lg" />

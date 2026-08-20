@@ -3,12 +3,13 @@
  */
 
 import type {
-	ConfigMutation,
-	ConfigSnapshot,
-	CredentialRef,
-	CredentialStatus,
-	ModelProfile,
-	RuntimeSettings,
+  ConfigMutation,
+  ConfigSnapshot,
+  CredentialRef,
+  CredentialStatus,
+  McpServerConfig,
+  ModelProfile,
+  RuntimeSettings,
 } from "./contract.js";
 import {
   removeProfileReferences,
@@ -16,6 +17,7 @@ import {
   validateRuntimeSettings,
 } from "./runtimeSettings.js";
 import { validateSkillsDisabled } from "./skillsSettings.js";
+import { validateMcpServerInput } from "./mcpSettings.js";
 import type { ConfigStore } from "./store.js";
 
 /** 内存版 config 存储（profile Map + 凭据 Map） */
@@ -25,6 +27,7 @@ export class InMemoryConfigStore implements ConfigStore {
   private readonly credentials = new Map<CredentialRef, string>();
   private runtime?: RuntimeSettings;
   private skillsDisabled?: string[];
+  private mcpServers: McpServerConfig[] = [];
 
 	/** 读取配置快照 */
 	async get(): Promise<ConfigSnapshot> {
@@ -36,6 +39,7 @@ export class InMemoryConfigStore implements ConfigStore {
 			credentials: Object.freeze(credentials),
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
 			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
+			...(this.mcpServers.length > 0 ? { mcpServers: Object.freeze([...this.mcpServers]) } : {}),
 			diagnostics: { logLevel: "info" },
 		};
 	}
@@ -71,6 +75,16 @@ export class InMemoryConfigStore implements ConfigStore {
 			}
 			case "skills.setDisabled": {
 				this.skillsDisabled = validateSkillsDisabled([...m.names]);
+				break;
+			}
+			case "mcp.upsert": {
+				validateMcpServerInput(m.server);
+				const next: McpServerConfig = { id: m.serverId, ...m.server };
+				this.mcpServers = [...this.mcpServers.filter((s) => s.id !== m.serverId), next];
+				break;
+			}
+			case "mcp.remove": {
+				this.mcpServers = this.mcpServers.filter((s) => s.id !== m.serverId);
 				break;
 			}
 			case "credential.save": {

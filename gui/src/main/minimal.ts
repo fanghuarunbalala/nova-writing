@@ -40,6 +40,8 @@ import {
   serializeSkillsEnv,
   listSkills,
   PROJECT_SKILLS_DIR_NAME,
+  serializeMcpEnv,
+  testMcpConnection,
   createConsoleLogger,
   infoLog,
   type LLMessage,
@@ -227,6 +229,20 @@ async function applySkillsEnv(
   });
 }
 
+/**
+ * MCP 服务器解析为 NOVEL_MCP_SERVERS env（仅 enabled 项；子进程 spawn 时连接）。
+ * 同 onMutated 重写语义。
+ */
+async function applyMcpEnv(configStore: NodeApplicationConfigStore): Promise<void> {
+  const snapshot = await configStore.get();
+  const servers = [...(snapshot.mcpServers ?? [])];
+  if (servers.length === 0) {
+    delete process.env.NOVEL_MCP_SERVERS;
+    return;
+  }
+  process.env.NOVEL_MCP_SERVERS = serializeMcpEnv(servers);
+}
+
 /** manager：providerLive（启动时凭据已解析）spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
 function createManager(
   conversationsRoot: () => string | undefined,
@@ -393,6 +409,9 @@ async function main(): Promise<void> {
       applySkillsEnv(configStore, join(app.getPath("userData"), "skills")).catch((e) => {
         infoLog(`[main] skills env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
       });
+      applyMcpEnv(configStore).catch((e) => {
+        infoLog(`[main] mcp env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
     },
   });
   await configStore.load();
@@ -416,6 +435,8 @@ async function main(): Promise<void> {
         disabled: [...(snapshot.skillsDisabled ?? [])],
       });
     },
+    // MCP 测试连接（main 进程临时连接：initialize + tools/list，8s 超时）
+    testMcp: (input) => testMcpConnection(input),
   });
 
   // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*） +
@@ -423,6 +444,7 @@ async function main(): Promise<void> {
   // 设置页保存后经 onMutated 重写，对新 spawn 的对话生效（运行中对话维持启动时快照）。
   await applyRuntimeEnv(configStore);
   await applySkillsEnv(configStore, join(app.getPath("userData"), "skills"));
+  await applyMcpEnv(configStore);
   providerLive = process.env.NOVEL_PROVIDER_API_KEY !== undefined;
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）

@@ -60,6 +60,8 @@ import {
 	parseSkillsEnv,
 	resolveSkillDirs,
 } from "../../runtime/skill/skillsEnv.js";
+import { McpConnectionManager } from "../../runtime/mcp/McpConnectionManager.js";
+import { MCP_SERVERS_ENV, parseMcpEnv } from "../../runtime/mcp/mcpEnv.js";
 import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
@@ -627,6 +629,23 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 书库只读服务（novel 主 Agent 的 library.read 组）：main 分支暂不接入（避免污染主
 	// agent 工具面）；开发在 book-analyst 分支恢复该装配（NOVEL_LIBRARY_ROOT 注入时构造）
 
+	// MCP 服务器（NOVEL_MCP_SERVERS：main 序列化的 enabled 项；BookAnalyst 不接）。
+	// 并行连接（单台 8s 上限），失败逐台记录跳过不阻断会话；工具面装配期定死。
+	// 注意须在 cmsApi.register 之前完成——spawner 报到超时 15s 自 spawn 起算
+	const mcpManager = new McpConnectionManager({ logger });
+	const mcpServers = isAnalyst ? undefined : parseMcpEnv(process.env[MCP_SERVERS_ENV]);
+	const mcpConnected =
+		mcpServers !== undefined
+			? await mcpManager.connectAll(mcpServers)
+			: { tools: [] as never[], failures: [] as never[] };
+	for (const failure of mcpConnected.failures) {
+		logger?.warn("child.mcp_connect_failed", {
+			conversationId,
+			server: failure.server.name,
+			error: failure.error,
+		});
+	}
+
 	// agentType 分发：BookAnalyst = 书库完本解构后台装配（书库根沙盒 + 该书 book.db
 	// 读写 + bypass + journal 恢复；无 compose/ask/subagent）；否则 novel 主 Agent。
 	const loop = isAnalyst
@@ -680,6 +699,8 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			todoStore: new InMemoryConversationTodoStore(),
 			// 技能注册表（runtime.skills 组；空目录=无技能，工具正确回「不存在」）
 			skills: { registry: skillRegistry },
+			// MCP 包装工具（组外追加；连接失败的服务器自然缺席）
+			...(mcpConnected.tools.length > 0 ? { extraTools: mcpConnected.tools } : {}),
 		});
 
 	const managerWait: ManagerWaitChannel | undefined =
@@ -727,8 +748,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			storeDir: storedir ?? "",
 		});
 	} else {
-		// 无 manager WS（独立脚本/dev）：stdin end 退出兜底
-		process.stdin.on("end", () => process.exit(0));
+		// 无 manager WS（独立脚本/dev）：stdin end 关 MCP 连接后退出兜底
+		process.stdin.on("end", () => {
+			void mcpManager.close().finally(() => process.exit(0));
+		});
 	}
 
 	// 暂停点续跑：仅当恢复消息中存在缺 tool 结果的 toolCall 才补完收口——

@@ -8,6 +8,7 @@
 import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
+import type { ToolDef } from "../tool/ToolDef.js";
 import type { NovelConstraintsProvider, CaseGuideProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AutoCompactPolicy } from "../compact/definitions/auto-compact.js";
@@ -97,6 +98,11 @@ export interface NovelAgentOptions {
   todoStore?: ConversationTodoStore;
   /** 技能注册表（runtime.skills 组 skill；缺省=未装配降级。宿主构造并 load 后注入） */
   skills?: { registry: SkillRegistry };
+  /**
+   * 组外追加工具（装配期与 subagent 三工具同批注入 dispatcher 与 toolSchemes）：
+   * MCP 包装工具等宿主派生工具面。命名需避开内置工具（mcp__ 前缀）。
+   */
+  extraTools?: readonly ToolDef[];
   /** 书库服务（library.read 组）：main 暂不接入（定义已移除该组）；book-analyst 分支恢复 */
   library?: { deps: LibraryReadDeps };
   /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
@@ -188,6 +194,10 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
         allowedAgentTypes: definition.delegation.allowedAgentTypes,
       }),
     );
+  }
+  // 组外追加工具（MCP 包装工具等）：与 subagent 同批，装配期定死
+  if (opts.extraTools !== undefined) {
+    capability.toolDefs.push(...opts.extraTools);
   }
   const dispatcher = new MapToolDispatcher(capability.toolDefs);
   return new AgentLoop({

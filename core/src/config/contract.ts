@@ -76,6 +76,48 @@ export interface CompactionSettings {
 	summaryMaxTokens?: number
 }
 
+/** MCP 服务器 stdio 传输配置（本地子进程 JSON-RPC） */
+export interface McpStdioTransportConfig {
+	type: "stdio"
+	/** 可执行命令（须在 PATH 上，如 npx / node） */
+	command: string
+	/** 命令行参数 */
+	args: readonly string[]
+	/** 附加环境变量（合入子进程 env） */
+	env?: Readonly<Record<string, string>>
+}
+
+/** MCP 服务器 HTTP 传输配置（Streamable HTTP 远程服务器） */
+export interface McpHttpTransportConfig {
+	type: "http"
+	/** 服务器 URL（http/https） */
+	url: string
+	/** 附加请求头（如鉴权） */
+	headers?: Readonly<Record<string, string>>
+}
+
+/** MCP 服务器连接配置（设置页管理；工具命名 mcp__<server>__<tool>） */
+export interface McpServerConfig {
+	/** 服务器 id */
+	id: string
+	/** 展示名（sanitize 后作工具名前缀） */
+	name: string
+	/** 传输配置 */
+	transport: McpStdioTransportConfig | McpHttpTransportConfig
+	/** 启用（禁用不进会话工具面） */
+	enabled: boolean
+	/** 信任（true = 工具调用免审批；false = 默认进审批清单） */
+	trusted: boolean
+}
+
+/** MCP 服务器 upsert 输入（不含 id，id 由调用方给定） */
+export type McpServerInput = Omit<McpServerConfig, "id">
+
+/** MCP 连接测试结果（成功附工具清单预览；失败附中文原因） */
+export type McpTestResult =
+	| { ok: true; toolCount: number; tools: readonly { name: string; description?: string }[] }
+	| { ok: false; error: string }
+
 /** Agent 运行参数（档位 + 全局默认采样 + 按 Agent 覆盖 + 压缩阈值） */
 export interface RuntimeSettings {
 	/** Fast 档位绑定的 profile id（Agent 覆盖可用 "fast" 引用；缺省 = 默认 profile） */
@@ -100,6 +142,8 @@ export interface ConfigSnapshot {
 	runtime?: RuntimeSettings
 	/** 禁用技能名单（Agent Skills；缺省全启用） */
 	skillsDisabled?: readonly string[]
+	/** MCP 服务器列表（缺省无） */
+	mcpServers?: readonly McpServerConfig[]
 	/** 诊断 */
 	diagnostics: { logLevel: string }
 }
@@ -111,6 +155,8 @@ export type ConfigMutation =
 	| { op: "model.setDefault"; profileId: string }
 	| { op: "runtime.set"; runtime: RuntimeSettings }
 	| { op: "skills.setDisabled"; names: readonly string[] }
+	| { op: "mcp.upsert"; serverId: string; server: McpServerInput }
+	| { op: "mcp.remove"; serverId: string }
 	| { op: "credential.save"; ref: CredentialRef; secret: string }
 	| { op: "credential.delete"; ref: CredentialRef }
 
@@ -165,4 +211,11 @@ export interface ConfigApi {
 	 * @returns 技能清单（含生效/禁用状态与目录路径）
 	 */
 	skillsList?(): Promise<SkillsListResult>
+	/**
+	 * 测试 MCP 服务器连通性（initialize + tools/list；成功附工具清单预览）。
+	 * 可选：宿主注入实现；未注入时方法不存在，设置页隐藏测试按钮。
+	 * @param input 服务器配置（无需先保存）
+	 * @returns 测试结果（失败附中文原因）
+	 */
+	testMcp?(input: McpServerInput): Promise<McpTestResult>
 }

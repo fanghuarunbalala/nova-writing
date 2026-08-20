@@ -1,15 +1,17 @@
 /**
  * GuideStep
  *
- * 引导向导第 3 步：静态图文使用说明——打开项目 / 四大视图 /
- * 右栏与实体引用 / 模型与个性化（完成动作由向导 footer 的「开始创作」承担）。
+ * 引导向导第 3 步：静态图文使用说明——打开项目 / 大纲与章节的区别 /
+ * 四大视图 / 右栏与实体引用 / 模型与个性化（完成动作由向导 footer 的「开始创作」承担）。
  */
 import {
   BookOpen,
   Calendar,
   FileText,
   FolderOpen,
+  Layers,
   Library,
+  ListTree,
   MessageSquare,
   PanelRight,
   Settings,
@@ -44,6 +46,32 @@ export function GuideStep({ libraryEnabled }: GuideStepProps) {
         <p>
           在项目选择页选择或新建一个小说项目文件夹；大纲、正文、档案与对话记录都保存在本地。
         </p>
+      </section>
+      <section className={styles.guideSection}>
+        <h4>
+          <Icon icon={ListTree} size="sm" /> 大纲与章节
+        </h4>
+        <p>大纲是叙事单位，章节是组织 / 发布单位——两套独立的结构，正文与大纲不必一一对应。</p>
+        <ul className={styles.viewList}>
+          <li>
+            <span className={styles.viewIcon} aria-hidden="true">
+              <Icon icon={ListTree} size="sm" />
+            </span>
+            <div>
+              <strong>大纲 · 叙事单位</strong>
+              <span>创作基于故事核——大纲由故事核组成（时间、地点、人物、事件、状态变更），查询大纲即可获取事实源。</span>
+            </div>
+          </li>
+          <li>
+            <span className={styles.viewIcon} aria-hidden="true">
+              <Icon icon={Layers} size="sm" />
+            </span>
+            <div>
+              <strong>章节 · 组织 / 发布单位</strong>
+              <span>一个章节可能包含一个、多个甚至半个故事核，断章由你决定——按发布节奏断章，不受大纲结构约束。</span>
+            </div>
+          </li>
+        </ul>
       </section>
       <section className={styles.guideSection}>
         <h4>

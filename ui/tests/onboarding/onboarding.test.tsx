@@ -104,11 +104,14 @@ describe("OnboardingWizard", () => {
 });
 
 describe("GuideStep（书库门控）", () => {
-  it("默认不介绍书库；libraryEnabled 时展示第四视图", () => {
+  it("默认不介绍书库；libraryEnabled 时展示第四视图；常驻大纲与章节区别说明", () => {
     const { unmount } = render(<GuideStep />);
     expect(screen.getByText("三大视图")).toBeInTheDocument();
     expect(screen.queryByText("四大视图")).not.toBeInTheDocument();
     expect(screen.queryByText("导入参考书，自动解析大纲 / 人物 / 地点 / 风格。")).not.toBeInTheDocument();
+    expect(screen.getByText("大纲与章节")).toBeInTheDocument();
+    expect(screen.getByText("大纲 · 叙事单位")).toBeInTheDocument();
+    expect(screen.getByText("章节 · 组织 / 发布单位")).toBeInTheDocument();
     unmount();
 
     render(<GuideStep libraryEnabled />);

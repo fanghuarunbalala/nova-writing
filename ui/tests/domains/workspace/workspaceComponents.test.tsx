@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProjectSelectionPage } from "../../../src/domains/workspace/components/ProjectSelectionPage.js";
+import { WorkspaceSelectionDialog } from "../../../src/domains/workspace/components/WorkspaceSelectionDialog.js";
 import { WorkspaceFooting } from "../../../src/domains/workspace/components/WorkspaceFooting.js";
 import { WorkspaceLabel } from "../../../src/domains/workspace/components/WorkspaceLabel.js";
 import { WorkspaceRevisionMeta } from "../../../src/domains/workspace/components/WorkspaceRevisionMeta.js";
@@ -141,5 +142,89 @@ describe("ProjectSelectionPage", () => {
     expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "打开其他项目…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /白昼计划/ })).toBeDisabled();
+  });
+});
+
+describe("WorkspaceSelectionDialog（打开位置选择）", () => {
+  const dialogSnapshot = (overrides = {}) => ({
+    revision: 1,
+    phase: "ready",
+    current: { id: "ws-1", label: "在写" },
+    recent: [
+      {
+        id: "ws-2",
+        label: "第二本",
+        lastOpenedAt: new Date().toISOString(),
+        rootPath: "D:\\books\\第二本",
+      },
+    ],
+    ...overrides,
+  });
+
+  const renderDialog = (overrides: Partial<Parameters<typeof WorkspaceSelectionDialog>[0]> = {}) =>
+    render(
+      <WorkspaceSelectionDialog
+        open
+        snapshot={dialogSnapshot()}
+        onPick={vi.fn(async () => undefined)}
+        onOpen={vi.fn()}
+        onOpenInNewWindow={vi.fn()}
+        onCloseWorkspace={vi.fn()}
+        onDismiss={vi.fn()}
+        {...overrides}
+      />,
+    );
+
+  it("选定目录后出现打开位置面板：新窗口派发、当前窗口不动、面板收起", async () => {
+    const user = userEvent.setup();
+    const onPick = vi.fn(async () => ({ referenceId: "D:\\books\\第三本", label: "第三本" }));
+    const onOpen = vi.fn();
+    const onOpenInNewWindow = vi.fn();
+    renderDialog({ onPick, onOpen, onOpenInNewWindow });
+
+    await user.click(screen.getByRole("button", { name: "打开项目文件夹…" }));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/打开《第三本》/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/当前窗口打开会结束本项目全部运行中的对话/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "在新窗口打开" }));
+    expect(onOpenInNewWindow).toHaveBeenCalledWith({
+      referenceId: "D:\\books\\第三本",
+      label: "第三本",
+    });
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(screen.queryByText(/打开《第三本》/)).not.toBeInTheDocument();
+  });
+
+  it("最近项点击进入面板；在当前窗口打开触发 onOpen；取消清面板不回调", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const onOpenInNewWindow = vi.fn();
+    renderDialog({ onOpen, onOpenInNewWindow });
+
+    await user.click(screen.getByRole("button", { name: /第二本/ }));
+    expect(screen.getByText(/打开《第二本》/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "在当前窗口打开" }));
+    expect(onOpen).toHaveBeenCalledWith({ referenceId: "ws-2", label: "第二本" });
+    expect(onOpenInNewWindow).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /第二本/ }));
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByText(/打开《第二本》/)).not.toBeInTheDocument();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpenInNewWindow).not.toHaveBeenCalled();
+  });
+
+  it("最近列表默认过滤当前项目（id 与 rootPath 双匹配），过滤后空态提示其他文案", () => {
+    renderDialog({
+      snapshot: dialogSnapshot({
+        current: { id: "ws-2", label: "第二本", rootPath: "D:\\books\\第二本" },
+      }),
+    });
+    // recent 仅第二本（= 当前项目）→ 列表不显示，空态文案区分"无其他可切换"
+    expect(screen.queryByRole("button", { name: /第二本/ })).not.toBeInTheDocument();
+    expect(screen.getByText("没有其他可切换的项目")).toBeInTheDocument();
   });
 });

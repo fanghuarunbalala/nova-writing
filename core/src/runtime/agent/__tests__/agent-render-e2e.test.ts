@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildNovelAgent } from "../NovelAgent.js";
+import { SkillRegistry } from "../../skill/SkillRegistry.js";
 import type { Provider } from "../../provider/Provider.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 
@@ -104,5 +108,46 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(toolSection).toContain("- available tools: TodoWrite");
     // Write 的 policy 优先级行（名单行后原样一行）
     expect(toolSection).toContain("改已有文件用 Edit，禁止 Write 覆盖做小改动");
+  });
+
+  it("skill.index 全链路：skills 注册表 → system prompt 含技能索引（tool.guidance 后、正文不进）；无 skills 时整段省略", async () => {
+    const root = await mkdtemp(join(tmpdir(), "novel-render-skills-"));
+    const skillDir = join(root, "suspense");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      "---\nname: suspense\ndescription: 悬疑伏笔写作技法\n---\n# 正文说明（不得进入索引）\n",
+      "utf8",
+    );
+    const registry = new SkillRegistry({
+      dirs: [{ root, source: "project" }],
+      disabled: ["banned"],
+    });
+    await registry.load();
+
+    const loop = buildNovelAgent({
+      workspace: "/ws",
+      provider,
+      handle: handle as NovelHandle,
+      conversationId: "conv-1",
+      skills: { registry },
+    });
+    await loop.run("hi", { sampling: { model: "gpt-5" } });
+    const prompt = (loop as unknown as { context: { systemPrompt: string } }).context.systemPrompt;
+    // 索引块渲染：清单 + 使用指引；正文与 frontmatter 不进
+    expect(prompt).toContain("# 技能（Skills）");
+    expect(prompt).toContain("- suspense — 悬疑伏笔写作技法");
+    expect(prompt).not.toContain("# 正文说明");
+    // 段序：skill.index 在 tool.policy（# Using Tools）之后
+    expect(prompt.indexOf("# 技能（Skills）")).toBeGreaterThan(prompt.indexOf("# Using Tools"));
+    await rm(root, { recursive: true, force: true });
+
+    // 无 skills：整段省略
+    const bare = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
+    await bare.run("hi", { sampling: { model: "gpt-5" } });
+    const barePrompt = (bare as unknown as { context: { systemPrompt: string } }).context.systemPrompt;
+    expect(barePrompt).not.toContain("# 技能（Skills）");
+    // 工具名单仍含 skill 元工具（装配期降级存在）
+    expect(barePrompt).toContain("skill");
   });
 });

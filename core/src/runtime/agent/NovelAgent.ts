@@ -8,6 +8,7 @@
 import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
+import type { ToolDef } from "../tool/ToolDef.js";
 import type { NovelConstraintsProvider, CaseGuideProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AutoCompactPolicy } from "../compact/definitions/auto-compact.js";
@@ -44,6 +45,7 @@ import type {
 } from "../../conversation/contract/types/index.js";
 import type { AskUserChannel } from "../tool/definitions/askUser.js";
 import type { LibraryReadDeps } from "../tool/definitions/library.js";
+import type { SkillRegistry } from "../skill/SkillRegistry.js";
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
@@ -94,6 +96,13 @@ export interface NovelAgentOptions {
   composeSparseEveryCalls?: number;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
   todoStore?: ConversationTodoStore;
+  /** 技能注册表（runtime.skills 组 skill；缺省=未装配降级。宿主构造并 load 后注入） */
+  skills?: { registry: SkillRegistry };
+  /**
+   * 组外追加工具（装配期与 subagent 三工具同批注入 dispatcher 与 toolSchemes）：
+   * MCP 包装工具等宿主派生工具面。命名需避开内置工具（mcp__ 前缀）。
+   */
+  extraTools?: readonly ToolDef[];
   /** 书库服务（library.read 组）：main 暂不接入（定义已移除该组）；book-analyst 分支恢复 */
   library?: { deps: LibraryReadDeps };
   /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
@@ -164,6 +173,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       ...(opts.requestAsk !== undefined
         ? { ask: { channel: opts.requestAsk, conversationId: opts.conversationId ?? "" } }
         : {}),
+      ...(opts.skills !== undefined ? { skills: opts.skills } : {}),
       ...(opts.library !== undefined ? { library: opts.library } : {}),
     }),
     nudgeCatalog,
@@ -185,6 +195,21 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       }),
     );
   }
+  // 组外追加工具（MCP 包装工具等）：与 subagent 同批，装配期定死
+  if (opts.extraTools !== undefined) {
+    capability.toolDefs.push(...opts.extraTools);
+  }
+  // 技能索引快照（skill.index 动态段数据源）：装配期从生效清单派生一次，
+  // 会话期静态（registry 已 load 完成后调用）
+  const skillsIndex =
+    opts.skills !== undefined && opts.skills.registry.effective().length > 0
+      ? {
+          entries: opts.skills.registry.effective().map((s) => ({
+            name: s.name,
+            description: s.description,
+          })),
+        }
+      : undefined;
   const dispatcher = new MapToolDispatcher(capability.toolDefs);
   return new AgentLoop({
     workspace: opts.workspace,
@@ -204,6 +229,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     platform: opts.platform,
     novelConstraintsProvider: opts.novelConstraintsProvider,
     caseGuideProvider: opts.caseGuideProvider,
+    skillsIndex,
     composeState,
     beforeProviderCall: opts.beforeProviderCall,
   });

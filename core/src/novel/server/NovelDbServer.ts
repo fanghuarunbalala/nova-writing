@@ -22,7 +22,7 @@ export class NovelDbServer {
 
 	/**
 	 * @param store 存储实现（内存先行，sqlite 下阶段）
-	 * @param publisher 事件发布器（进程启动时 bind 到 NOVEL_EVENTS_ADDR）
+	 * @param publisher 事件发布器（进程启动时 bind 到 novelEventsAddr() 派生地址）
 	 */
 	constructor(store: NovelStore, publisher: EventPublisher) {
 		this.store = store;

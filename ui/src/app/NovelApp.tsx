@@ -62,6 +62,13 @@ import {
 import type { WindowChromeProps } from "../shell/topbar/WindowControls.js";
 import { NovelAppProvider } from "./NovelAppProvider.js";
 
+/** 引导完成标记端口：localStorage 在多实例共享 userData 下互不可见，桌面宿主以
+ * 主进程文件持久化实现（isCompleted 读判定 / markCompleted 写完成） */
+export interface OnboardingStatusPort {
+  isCompleted(): Promise<boolean>;
+  markCompleted(): Promise<void>;
+}
+
 export interface NovelAppProps {
   readonly api: NovelApiClient;
   readonly platform: FrontendPlatform;
@@ -69,6 +76,8 @@ export interface NovelAppProps {
   readonly commandSource?: ApplicationCommandSource;
   readonly configurationClient?: ApplicationConfigurationClient;
   readonly workspaceController?: WorkspaceController;
+  /** 引导完成标记端口（桌面宿主经主进程文件持久化，跨实例一致可见）；缺省回退 localStorage */
+  readonly onboardingPort?: OnboardingStatusPort;
   /** 第一方扩展点；不传时用 emptyNovelUiExtensions（spec 4.0.1） */
   readonly extensions?: NovelUiExtensions;
   /** 宿主追加的 overlay 节点（与默认 overlays 一并渲染进 OverlaysHost） */
@@ -103,6 +112,7 @@ function NovelAppReady({
   commandSource,
   configurationClient,
   workspaceController,
+  onboardingPort,
   extensions,
   overlays,
   windowChrome,
@@ -189,12 +199,35 @@ function NovelAppReady({
   useEffect(() => {
     void workspaceController.refresh();
   }, [workspaceController]);
-  // 首启新手引导：有配置客户端（桌面宿主）且无完成标记时弹向导
+  // "新窗口打开"派生的启动上下文（他实例 spawn 本实例时注入）：refresh 后自动打开该项目
+  // （runExclusive 串行，先刷新最近列表再开；无上下文静默跳过，取出即清防 StrictMode 双跑）
   useEffect(() => {
-    if (configurationClient !== undefined && !hasCompletedOnboarding()) {
-      setGuideOpen(true);
-    }
-  }, [configurationClient]);
+    void workspaceController.openStartupWorkspace();
+  }, [workspaceController]);
+  // 首启新手引导：有配置客户端（桌面宿主）且未完成时弹向导。完成标记优先主进程文件
+  // （跨实例一致可见），localStorage 仅作回退与一次性迁移源
+  useEffect(() => {
+    if (configurationClient === undefined) return;
+    let cancelled = false;
+    void (async () => {
+      if (onboardingPort !== undefined) {
+        try {
+          if (await onboardingPort.isCompleted()) return;
+          if (hasCompletedOnboarding()) {
+            // 旧版 localStorage 标记迁移：补写主进程文件后不再弹
+            await onboardingPort.markCompleted();
+            return;
+          }
+        } catch {
+          // 端口异常：回退 localStorage 判定（下方）
+        }
+      }
+      if (!cancelled && !hasCompletedOnboarding()) setGuideOpen(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [configurationClient, onboardingPort]);
   const refreshModelConfigured = useCallback(async () => {
     if (configurationClient === undefined) return;
     try {
@@ -216,12 +249,16 @@ function NovelAppReady({
     setSettingsOpen(false);
     void refreshModelConfigured();
   }, [refreshModelConfigured]);
-  // 向导关闭（完成 / 跳过 / ESC / X）统一写完成标记并刷新配置状态
+  // 向导关闭（完成 / 跳过 / ESC / X）统一写完成标记（localStorage + 主进程文件双写）
+  // 并刷新配置状态
   const dismissGuide = useCallback(() => {
     setGuideOpen(false);
     completeOnboarding();
+    onboardingPort?.markCompleted().catch(() => {
+      // 标记落盘失败：localStorage 仍在（同实例不重弹；跨实例由下次迁移兜底）
+    });
     void refreshModelConfigured();
-  }, [refreshModelConfigured]);
+  }, [onboardingPort, refreshModelConfigured]);
 
   return (
     <NovelAppProvider
@@ -298,13 +335,20 @@ function NovelAppReady({
                 <WorkspaceSelectionDialog
                   open={workspaceOpen}
                   snapshot={workspaceSnapshot}
-                  onChoose={() => {
-                    void workspaceController.chooseAndOpen();
-                    setWorkspaceOpen(false);
+                  onPick={() => workspaceController.pickWorkspaceReference()}
+                  onOpen={(reference) => {
+                    // 成功（含"已在当前窗口打开"幂等成功）才收起对话框；
+                    // 失败保持打开，错误区显示主进程透传文案（如双开提示）
+                    void workspaceController.open(reference).then((session) => {
+                      if (session !== undefined) setWorkspaceOpen(false);
+                    });
                   }}
-                  onOpenRecent={(workspaceId) => {
-                    void workspaceController.openRecent(workspaceId);
-                    setWorkspaceOpen(false);
+                  onOpenInNewWindow={(reference) => {
+                    // 已派发或"已打开"短路（主进程已弹窗告知并置前持有窗口）才收起；
+                    // 校验失败保持打开显示错误
+                    void workspaceController.openInNewWindow(reference).then((dispatched) => {
+                      if (dispatched) setWorkspaceOpen(false);
+                    });
                   }}
                   onCloseWorkspace={() => {
                     void workspaceController.closeCurrent();

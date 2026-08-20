@@ -46,6 +46,9 @@ export class SqliteNovelStore implements NovelStore {
 			options?.readOnly === true
 				? new DatabaseSync(dbPath, { readOnly: true })
 				: new DatabaseSync(dbPath);
+		// 并发写等待：多 GUI 实例共享书库 book.db（WAL，单写者）时，
+		// 写锁竞争等待重试（≤3s）而非直接抛 SQLITE_BUSY
+		this.db.exec("PRAGMA busy_timeout=3000;");
 		this.outline = { id: "outline_1", novelId: "novel_1" } as StoryOutline;
 		if (options?.readOnly !== true) this.migrate();
 	}

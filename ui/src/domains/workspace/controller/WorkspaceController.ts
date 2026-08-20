@@ -49,6 +49,10 @@ export interface WorkspaceSessionPort {
   listRecent(): Promise<readonly WorkspaceSessionView[]>;
   open(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView>;
   close(): Promise<void>;
+  /** 在新 GUI 实例（独立进程/窗口）中打开工作区，当前窗口保持不动；宿主未提供时报不可用 */
+  openInNewWindow?(reference: WorkspaceReferenceView): Promise<void>;
+  /** 取出宿主派发的启动项目（他实例"新窗口打开"spawn 本实例时注入）；取出即清，仅一次 */
+  takeStartupWorkspace?(): Promise<WorkspaceReferenceView | undefined>;
 }
 
 export interface WorkspaceControllerOptions {
@@ -192,14 +196,96 @@ export class WorkspaceController {
   }
 
   /**
-   * 打开指定引用（「从文件导入创建项目」等流程拿到引用后进入常规打开编排：
-   * opening → 分步加载 → 工作台）。
-   * Opens an explicit workspace reference (e.g. after import-to-create-project).
+   * 打开指定引用（「从文件导入创建项目」等流程拿到引用后进入常规打开编排；
+   * 语义同 open，保留独立命名入口）。
    */
   openDirect(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView | undefined> {
-    return this.runExclusive(async () =>
-      this.openReference(captureWorkspaceReference(reference)),
-    );
+    return this.open(reference);
+  }
+
+  /** 仅选择目录（不打开）：切换对话框"先选定项目、再选打开位置"的第一步 */
+  pickWorkspaceReference(): Promise<WorkspaceReferenceView | undefined> {
+    return this.runExclusive(async () => {
+      this.publish({ phase: "selecting" });
+      this.logger.info("workspace_controller.pick_started");
+      let reference: WorkspaceReferenceView | undefined;
+      try {
+        reference = captureOptionalWorkspaceReference(await this.picker.pickWorkspace());
+      } catch {
+        this.reject(
+          "WORKSPACE_SELECTION_UNAVAILABLE",
+          false,
+          "当前客户端尚未连接 Workspace 选择服务",
+        );
+        return undefined;
+      }
+      // 选定与取消都回落相位（选定时打开位置面板可交互；取消静默回原状态）
+      this.publish({ phase: this.snapshot.current === undefined ? "idle" : "ready" });
+      if (reference === undefined) {
+        this.logger.debug("workspace_controller.pick_cancelled");
+      }
+      return reference;
+    });
+  }
+
+  /** 当前窗口打开（对话框选定"当前窗口"后调用；切换会结束当前项目运行中的对话） */
+  open(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView | undefined> {
+    return this.runExclusive(() => this.openReference(reference));
+  }
+
+  /**
+   * 在新 GUI 实例中打开（当前窗口保持不动）：派发后由新实例走完整 open 流程
+   * （含同项目双开锁与焦点回切）。
+   * @returns 是否派发成功
+   */
+  openInNewWindow(reference: WorkspaceReferenceView): Promise<boolean> {
+    return this.runExclusive(async () => {
+      if (this.sessions.openInNewWindow === undefined) {
+        this.reject(
+          "WORKSPACE_NEW_WINDOW_UNAVAILABLE",
+          false,
+          "当前客户端尚未连接 Workspace 新窗口打开服务",
+        );
+        return false;
+      }
+      this.logger.info("workspace_controller.open_in_new_window_started");
+      try {
+        await this.sessions.openInNewWindow(captureWorkspaceReference(reference));
+        this.logger.info("workspace_controller.open_in_new_window_dispatched");
+        return true;
+      } catch (error) {
+        this.reject(
+          "WORKSPACE_NEW_WINDOW_FAILED",
+          false,
+          errorMessageOf(error, "在新窗口打开失败"),
+        );
+        return false;
+      }
+    });
+  }
+
+  /**
+   * 启动自动打开：宿主派发的启动项目（他实例"新窗口打开"spawn 本实例时注入）。
+   * 无上下文或端口缺省时静默跳过；打开失败走 open 的错误展示路径（如双开提示）。
+   */
+  openStartupWorkspace(): Promise<void> {
+    return this.runExclusive(async () => {
+      if (this.sessions.takeStartupWorkspace === undefined) return;
+      let reference: WorkspaceReferenceView | undefined;
+      try {
+        reference = captureOptionalWorkspaceReference(
+          await this.sessions.takeStartupWorkspace(),
+        );
+      } catch {
+        this.logger.warn("workspace_controller.startup_workspace_take_failed");
+        return;
+      }
+      if (reference === undefined) return;
+      this.logger.info("workspace_controller.startup_workspace_found", {
+        label: reference.label,
+      });
+      await this.openReference(reference);
+    });
   }
 
   closeCurrent(): Promise<boolean> {
@@ -240,8 +326,9 @@ export class WorkspaceController {
         recentCount: recent.length,
       });
       return current;
-    } catch {
-      this.reject("WORKSPACE_OPEN_FAILED", true, "Workspace 打开失败");
+    } catch (error) {
+      // 主进程错误文案直达 UI（如同项目双开的"已为你切换到该窗口"）；空文案回退通用提示
+      this.reject("WORKSPACE_OPEN_FAILED", true, errorMessageOf(error, "Workspace 打开失败"));
       return undefined;
     }
   }
@@ -385,4 +472,9 @@ function freezeSnapshot(
 function requireNonBlank(value: string, label: string): string {
   if (value.trim().length === 0) throw new TypeError(`${label} must not be blank`);
   return value;
+}
+
+/** 底层错误的用户可见文案：Error 且 message 非空时透传（kkrpc 会保真远端 message） */
+function errorMessageOf(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
 }

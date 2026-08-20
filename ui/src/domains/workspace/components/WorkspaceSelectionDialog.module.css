@@ -1,7 +1,7 @@
 /**
  * WorkspaceSelectionDialog 视觉。
  *
- * body：垂直排列选择按钮 / 错误 / 最近列表。
+ * body：垂直排列打开位置选择 / 选择按钮 / 错误 / 最近列表。
  * 主选择按钮走 Button 原语（primary + fullWidth + 图标）。
  * recent：列表项卡片化（文件夹图标 + label 13px/750 + id mono 11px/faint）。
  */
@@ -9,6 +9,36 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-14px);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-10px) var(--space-3);
+  border: 1px solid var(--color-accent-9);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-8-surface);
+}
+
+.choiceTitle {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-heavy);
+  color: var(--color-fg);
+  word-break: break-all;
+}
+
+.choiceActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.choiceHint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--color-muted);
 }
 
 .error {

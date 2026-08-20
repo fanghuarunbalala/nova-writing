@@ -54,6 +54,14 @@ import {
 	parseRuntimeSettingsEnv,
 	type ResolvedAgentConnection,
 } from "../../config/runtimeSettings.js";
+import { SkillRegistry } from "../../runtime/skill/SkillRegistry.js";
+import {
+	SKILLS_SETTINGS_ENV,
+	parseSkillsEnv,
+	resolveSkillDirs,
+} from "../../runtime/skill/skillsEnv.js";
+import { McpConnectionManager } from "../../runtime/mcp/McpConnectionManager.js";
+import { MCP_SERVERS_ENV, parseMcpEnv } from "../../runtime/mcp/mcpEnv.js";
 import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
@@ -291,9 +299,19 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 非法/缺省整体回落 NOVEL_PROVIDER_* env 默认
 	const runtimeSettings = parseRuntimeSettingsEnv(process.env[RUNTIME_SETTINGS_ENV]);
 	const novelRuntime = runtimeSettings?.agents.novel;
-	// ProjectImporter 走独立采样面（设置页可覆盖；缺省 thinking=low，与 BookAnalyst 同
-	// 依据——抽取型任务 high 只加延迟）
-	const importerRuntime = runtimeSettings?.agents.ProjectImporter;
+// ProjectImporter 走独立采样面（设置页可覆盖；缺省 thinking=low，与 BookAnalyst 同
+// 依据——抽取型任务 high 只加延迟）
+const importerRuntime = runtimeSettings?.agents.ProjectImporter;
+// 技能装载（NOVEL_SKILLS_SETTINGS：应用级根目录 + 禁用名单，main 序列化注入）。
+// 项目级目录 = <workspace>/skills 由本进程派生；后台会话（BookAnalyst / ProjectImporter）不装技能。
+// 注册表 load 失败/目录缺失均回退空集（skill 工具回「不存在」），不阻断会话。
+const skillsDescriptor =
+	isAnalyst || isImporter ? undefined : parseSkillsEnv(process.env[SKILLS_SETTINGS_ENV]);
+const skillRegistry = new SkillRegistry({
+	dirs: skillsDescriptor !== undefined ? resolveSkillDirs(skillsDescriptor, workspace) : [],
+	disabled: skillsDescriptor?.disabled,
+});
+await skillRegistry.load();
 	// 采样：runtime 优先，其次 NOVEL_PROVIDER_* env。默认 8192/high
 	// ——reasoning 模型的思考 token 计入 max_completion_tokens 预算，上限过低会被
 	// 思考独占导致空回复/截断（finish_reason=length）
@@ -666,6 +684,23 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 书库只读服务（novel 主 Agent 的 library.read 组）：main 分支暂不接入（避免污染主
 	// agent 工具面）；开发在 book-analyst 分支恢复该装配（NOVEL_LIBRARY_ROOT 注入时构造）
 
+	// MCP 服务器（NOVEL_MCP_SERVERS：main 序列化的 enabled 项；BookAnalyst 不接）。
+	// 并行连接（单台 8s 上限），失败逐台记录跳过不阻断会话；工具面装配期定死。
+	// 注意须在 cmsApi.register 之前完成——spawner 报到超时 15s 自 spawn 起算
+	const mcpManager = new McpConnectionManager({ logger });
+	const mcpServers = isAnalyst ? undefined : parseMcpEnv(process.env[MCP_SERVERS_ENV]);
+	const mcpConnected =
+		mcpServers !== undefined
+			? await mcpManager.connectAll(mcpServers)
+			: { tools: [] as never[], failures: [] as never[] };
+	for (const failure of mcpConnected.failures) {
+		logger?.warn("child.mcp_connect_failed", {
+			conversationId,
+			server: failure.server.name,
+			error: failure.error,
+		});
+	}
+
 	// agentType 分发：BookAnalyst = 书库完本解构后台装配（书库根沙盒 + 该书 book.db
 	// 读写 + bypass + journal 恢复；无 compose/ask/subagent）；否则 novel 主 Agent。
 	const loop = isAnalyst
@@ -722,9 +757,13 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		// call 发起时晋升 pendingMode（mode.set 记录后由本钩子生效，PRD F1 双态）
 		composeState,
 		composeService,
-		beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
-		todoStore: new InMemoryConversationTodoStore(),
-	});
+			beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
+			todoStore: new InMemoryConversationTodoStore(),
+			// 技能注册表（runtime.skills 组；空目录=无技能，工具正确回「不存在」）
+			skills: { registry: skillRegistry },
+			// MCP 包装工具（组外追加；连接失败的服务器自然缺席；ProjectImporter 后台受限工具面不挂）
+			...(mcpConnected.tools.length > 0 && !isImporter ? { extraTools: mcpConnected.tools } : {}),
+		});
 	// ProjectImporter 里程碑日志（下次「报到超时被 kill」时定位卡点：装配完成→注册→自驱动）
 	if (isImporter) {
 		logger?.info("child.importer.assembled", {
@@ -782,8 +821,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 			logger?.info("child.importer.registered", { conversationId });
 		}
 	} else {
-		// 无 manager WS（独立脚本/dev）：stdin end 退出兜底
-		process.stdin.on("end", () => process.exit(0));
+		// 无 manager WS（独立脚本/dev）：stdin end 关 MCP 连接后退出兜底
+		process.stdin.on("end", () => {
+			void mcpManager.close().finally(() => process.exit(0));
+		});
 	}
 
 	// 暂停点续跑：仅当恢复消息中存在缺 tool 结果的 toolCall 才补完收口——

@@ -5,6 +5,7 @@ import type {
   CaseGuideProvider,
   DynamicPromptSectionInput,
   NovelConstraintsProvider,
+  SkillsIndexSnapshot,
 } from "../prompt/PromptSection.js";
 import { CompactPolicyChainImpl } from "../compact/CompactPolicyChainImpl.js";
 import { reorderToolResults } from "./toolSequenceGuard.js";
@@ -59,6 +60,8 @@ export class LoopContext implements ReadonlyLoopContext {
   private readonly novelConstraintsProvider: NovelConstraintsProvider;
   /** 案例引导提供者（每 provider call 前调用；缺省空——规范段仅省略案例小节） */
   private readonly caseGuideProvider: CaseGuideProvider;
+  /** 技能索引快照（构造注入一次，会话期静态；缺省空——skill.index 段省略） */
+  private readonly skillsIndex?: SkillsIndexSnapshot;
   /** 每次 provider call 发起前回调（mode pending→active 晋升；缺省 no-op） */
   private readonly beforeProviderCall: () => void | Promise<void>;
 
@@ -78,6 +81,7 @@ export class LoopContext implements ReadonlyLoopContext {
     platform?: string;
     novelConstraintsProvider?: NovelConstraintsProvider;
     caseGuideProvider?: CaseGuideProvider;
+    skillsIndex?: SkillsIndexSnapshot;
     beforeProviderCall?: () => void | Promise<void>;
   }) {
     this.agentCapability = opts.agentCapability;
@@ -86,6 +90,7 @@ export class LoopContext implements ReadonlyLoopContext {
     this.platform = opts.platform;
     this.novelConstraintsProvider = opts.novelConstraintsProvider ?? (async () => undefined);
     this.caseGuideProvider = opts.caseGuideProvider ?? (async () => undefined);
+    this.skillsIndex = opts.skillsIndex;
     this.beforeProviderCall = opts.beforeProviderCall ?? (async () => {});
     for (const policy of opts.agentCapability.compactPolicies) {
       this.compactChain.register(policy, 0);
@@ -233,6 +238,7 @@ export class LoopContext implements ReadonlyLoopContext {
             },
       ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
       ...(guide === undefined ? {} : { caseGuide: guide }),
+      ...(this.skillsIndex !== undefined ? { skills: this.skillsIndex } : {}),
     };
     // ④ 组装基础请求（system / tools / messages / sampling；messages 快照含 ② 注入；
     // toolSequenceGuard 兜底协议合法性——存量 journal 坏序列在此自愈，不落盘）

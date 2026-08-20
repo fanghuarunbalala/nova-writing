@@ -5,6 +5,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,10 +16,14 @@ import {
   EventPublisher,
   EventSubscriber,
   FileConversationJournalService,
+  bindFocusChannel,
+  requestFocus,
+  type FocusChannelHandle,
   CONVERSATION_OUTPUT,
   conversationEventsAddr,
   NOVEL_CHANGED,
-  NOVEL_EVENTS_ADDR,
+  novelEventsAddr,
+  workspaceFocusAddr,
   SqliteNovelStore,
   deriveChangeEntities,
   ConfigServer,
@@ -44,7 +49,12 @@ import {
   type LoopEvent,
   type RunContext,
 } from "@novel/core";
-import { NodeApplicationConfigStore, NodeConfigHomeResolver, NodeWorkspaceStoreLocator } from "@novel/core/node";
+import {
+  NodeApplicationConfigStore,
+  NodeConfigHomeResolver,
+  NodeWorkspaceStoreLocator,
+  WorkspaceDirLock,
+} from "@novel/core/node";
 import {
   DesktopDesignFileService,
   DesktopDesignIpcController,
@@ -287,12 +297,39 @@ process.on("unhandledRejection", (reason) => {
   process.exit(1);
 });
 
+/** 启动一个新的 GUI 实例（独立进程，显示项目选择页——多实例并行创作入口）。
+ *  env 必须剔除实例命名空间：新实例以自身 pid 命名，否则两实例会话事件管道撞名
+ *  （手动双击 exe 的第二实例天然无继承，不受影响） */
+const spawnNewGuiInstance = (): void => {
+  try {
+    const env = { ...process.env };
+    delete env.NOVEL_EVENT_NAMESPACE;
+    // dev（electron CLI 带入口脚本）需重传脚本路径；打包 exe 裸启即可
+    const args = process.defaultApp ? [process.argv[1] ?? join(__dirname, "main.cjs")] : [];
+    const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", env });
+    child.unref();
+    child.once("error", (e) => console.warn("[main] spawn new instance failed:", e));
+  } catch (e) {
+    console.warn("[main] spawn new instance failed:", e);
+  }
+};
+
 async function main(): Promise<void> {
+  // 多实例并行的事件管道命名空间（须先于任何 conversationEventsAddr 解析/子进程 spawn）：
+  // 会话事件地址在 main 与子进程两侧解析而 pid 不同，只能经 env 继承对齐
+  process.env.NOVEL_EVENT_NAMESPACE ??= String(process.pid);
   await app.whenReady();
 
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
-      { label: "文件", submenu: [{ role: "quit", label: "退出" }] },
+      {
+        label: "文件",
+        submenu: [
+          { label: "新建窗口", accelerator: "CmdOrCtrl+Shift+N", click: () => spawnNewGuiInstance() },
+          { type: "separator" },
+          { role: "quit", label: "退出" },
+        ],
+      },
       {
         label: "编辑",
         submenu: [{ role: "copy" }, { role: "paste" }, { role: "selectAll" }],
@@ -315,7 +352,7 @@ async function main(): Promise<void> {
   // novel.changed 广播：ZeroMQ PUB/SUB（mutate 成功 → publish；订阅 → rpc 通知 renderer 刷新）。
   // 派生规则：级联删除波及其他实体（如 storyUnit.delete 删段落）时补发对应实体事件。
   const novelLogger = createConsoleLogger();
-  const novelPublisher = new EventPublisher(NOVEL_EVENTS_ADDR);
+  const novelPublisher = new EventPublisher(novelEventsAddr());
   await novelPublisher.bind();
   const publishingStore: NovelStore = {
     query: (q) => requireNovelStore().query(q),
@@ -441,8 +478,14 @@ async function main(): Promise<void> {
   /** 解析会话可用：provider env 已就绪（applyDefaultProviderEnv）且已打开工作区 */
   const canSpawnAnalysis = (): boolean =>
     (process.env.NOVEL_PROVIDER_API_KEY ?? "").trim() !== "" && currentWorkspaceRoot !== undefined;
-  /** 书库服务随 workspace 热重绑：open 带 workspaceRoot 走书单过滤；close 回管理侧全集 */
+  /** 书库服务随 workspace 热重绑：open 带 workspaceRoot 走书单过滤；close 回管理侧全集。
+   *  重建前先关旧实例——Windows 下未关句柄会锁 book.db（多次切换累积锁定） */
   const rebindLibraryService = (): void => {
+    try {
+      libraryService.close();
+    } catch (e) {
+      console.warn("[main] library service close failed on rebind:", e);
+    }
     libraryService = new LibraryService({
       libraryRoot,
       ...(currentWorkspaceRoot !== undefined ? { workspaceRoot: currentWorkspaceRoot } : {}),
@@ -516,7 +559,7 @@ async function main(): Promise<void> {
     });
   };
   // novel.changed 订阅：ZeroMQ → renderer 通知（拉取为准，通知仅触发刷新）
-  const novelSubscriber = new EventSubscriber(NOVEL_EVENTS_ADDR, [NOVEL_CHANGED]);
+  const novelSubscriber = new EventSubscriber(novelEventsAddr(), [NOVEL_CHANGED]);
   await novelSubscriber.connect();
   void (async () => {
     try {
@@ -561,6 +604,25 @@ async function main(): Promise<void> {
     if (subscriber !== undefined) void subscriber.close().catch(() => {});
   });
 
+  // 同项目双开守卫（PRD gui-多实例多开）：storeDir 进程锁 + 焦点回切通道，
+  // 随 open/close/quit 生命周期获取与释放（open 持有、切换/关闭让位）
+  let workspaceLock: WorkspaceDirLock | undefined;
+  let focusChannel: FocusChannelHandle | undefined;
+  /** 焦点回切 ack 等待上限（跨进程 REQ/REP + 窗口操作；超时回退报错路径） */
+  const FOCUS_ACK_TIMEOUT_MS = 500;
+  /** 释放当前工作区守卫（锁 + 焦点通道；close/切换时调用） */
+  const releaseWorkspaceGuards = (): void => {
+    try {
+      workspaceLock?.release();
+    } catch (e) {
+      console.warn("[main] workspace lock release failed:", e);
+    }
+    workspaceLock = undefined;
+    const channel = focusChannel;
+    focusChannel = undefined;
+    if (channel !== undefined) void channel.close().catch(() => {});
+  };
+
   // 退出前有序关闭：zeromq 原生插件（addon.node）在进程退出时若 socket 未干净拆除会
   // fail-fast（0xC0000409，Event Log 已确认）。will-quit 先 preventDefault，等全部
   // close（含 SUB socket，其关闭令上方 for-await 自然结束）完成后再真正 quit；
@@ -575,12 +637,22 @@ async function main(): Promise<void> {
     } catch (e2) {
       console.warn("[main] novel store close failed on quit:", e2);
     }
+    // 双开守卫：锁同步释放（让位给其他实例），焦点通道异步拆除并入下方等待
+    try {
+      workspaceLock?.release();
+      workspaceLock = undefined;
+    } catch (e2) {
+      console.warn("[main] workspace lock release failed on quit:", e2);
+    }
+    const focusClose = focusChannel?.close();
+    focusChannel = undefined;
     void Promise.race([
       Promise.allSettled([
         novelPublisher.close(),
         novelSubscriber.close(),
         novelWs.close(),
         managerWs.close(),
+        ...(focusClose !== undefined ? [focusClose] : []),
       ]),
       new Promise((resolve) => setTimeout(resolve, 2000)),
     ]).finally(() => app.quit());
@@ -603,7 +675,7 @@ async function main(): Promise<void> {
   }
   // 最近工作区注册表：id→root 反查（openRecent 修复）+ 重启恢复（roots 重新入白名单）
   const registryPath = join(app.getPath("userData"), "workspaces.json");
-  const registryEntries: WorkspaceRegistryEntry[] = (() => {
+  const loadRegistryEntries = (): WorkspaceRegistryEntry[] => {
     try {
       const parsed = JSON.parse(readFileSync(registryPath, "utf8")) as {
         entries?: WorkspaceRegistryEntry[];
@@ -619,10 +691,25 @@ async function main(): Promise<void> {
     } catch {
       return [];
     }
-  })();
+  };
+  const registryEntries: WorkspaceRegistryEntry[] = loadRegistryEntries();
+  // 多实例并发写收敛（PRD gui-多实例多开 功能点五）：写前重读磁盘按 workspaceId 合并
+  // （lastOpenedAt 新者胜），避免另一实例刚登记的条目被本实例全量覆盖丢失。
+  // config.json 维持单写者假设（两实例同时改设置的窗口极小，不做并发控制）
   const saveRegistry = (): void => {
     try {
-      writeFileSync(registryPath, JSON.stringify({ version: 1, entries: registryEntries }), "utf8");
+      const merged = new Map(loadRegistryEntries().map((entry) => [entry.workspaceId, entry]));
+      for (const entry of registryEntries) {
+        const existing = merged.get(entry.workspaceId);
+        if (existing === undefined || entry.lastOpenedAt >= existing.lastOpenedAt) {
+          merged.set(entry.workspaceId, entry);
+        }
+      }
+      const entries = [...merged.values()];
+      // 内存同步收敛：本实例 listRecent 即时可见其他实例登记的项目
+      registryEntries.length = 0;
+      registryEntries.push(...entries);
+      writeFileSync(registryPath, JSON.stringify({ version: 1, entries }), "utf8");
     } catch (e) {
       console.warn("[main] workspaces registry persist failed:", e);
     }
@@ -729,7 +816,39 @@ async function main(): Promise<void> {
       const label = reference.label.trim() !== "" ? reference.label : basename(workspaceRoot);
       const location = await locator.resolve(workspaceRoot);
       adoptLegacyData(location.storeDir);
-      await rebindWorkspace(location.storeDir);
+      // 同项目双开互斥：先取新锁（失败时当前工作区原样保留），成功后才切换——
+      // 释放旧守卫 → rebind → 绑新焦点通道（供他实例双开时回切本窗口）
+      const lockResult = WorkspaceDirLock.acquire(location.storeDir, {
+        workspaceId: location.workspaceId,
+        workspaceRoot: location.workspaceRoot,
+      });
+      if (lockResult.status === "held") {
+        // 优先回切持有窗口：持有方应答即其窗口已被拉到前台，以提示代替报错；
+        // 通道不可达（持有实例卡死/异常）回退报错（附 pid 与锁路径自救）
+        const focused = await requestFocus(workspaceFocusAddr(location.workspaceId), FOCUS_ACK_TIMEOUT_MS);
+        if (focused) {
+          throw new Error("该项目已在另一窗口打开，已为你切换到该窗口");
+        }
+        throw new Error(
+          `该项目已在另一个窗口打开（进程 ${lockResult.holderPid}），请切换到该窗口；` +
+            `若确认未打开，可删除 ${lockResult.lockPath}`,
+        );
+      }
+      releaseWorkspaceGuards();
+      try {
+        await rebindWorkspace(location.storeDir);
+        focusChannel = await bindFocusChannel(workspaceFocusAddr(location.workspaceId), () => {
+          const win = mainWindow;
+          if (win === undefined || win.isDestroyed()) return;
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+        });
+      } catch (e) {
+        lockResult.lock.release();
+        throw e;
+      }
+      workspaceLock = lockResult.lock;
       currentWorkspaceRoot = location.workspaceRoot;
       rebindLibraryService();
       const lastOpenedAt = new Date().toISOString();
@@ -757,6 +876,7 @@ async function main(): Promise<void> {
       currentWorkspaceRoot = undefined;
       rebindLibraryService();
       await rebindWorkspace(undefined);
+      releaseWorkspaceGuards();
     },
   };
   expose(workspaceApi, electronIpcTransport({ endpoint, channel: WORKSPACE_CHANNEL }));

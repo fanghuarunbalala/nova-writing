@@ -2,4 +2,5 @@
 
 export * from "./EventPublisher.js";
 export * from "./EventSubscriber.js";
+export * from "./FocusChannel.js";
 export * from "./topics.js";

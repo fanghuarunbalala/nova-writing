@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { EventPublisher } from "../EventPublisher.js";
 import { EventSubscriber } from "../EventSubscriber.js";
-import { CONVERSATION_OUTPUT, NOVEL_CHANGED } from "../topics.js";
+import { bindFocusChannel, requestFocus } from "../FocusChannel.js";
+import { CONVERSATION_OUTPUT, NOVEL_CHANGED, conversationEventsAddr, novelEventsAddr } from "../topics.js";
 
 describe("EventPublisher / EventSubscriber（inproc）", () => {
 	it("publish → subscriber 收到 { topic, payload }（JSON 解码）", async () => {
@@ -59,5 +60,59 @@ describe("EventPublisher / EventSubscriber（inproc）", () => {
 		expect(evt.payload).toBe("raw-text");
 		await pub.close();
 		await sub.close();
+	});
+});
+
+describe("事件地址按实例唯一化", () => {
+	it("novelEventsAddr 默认带 pid；env 覆盖生效", () => {
+		const saved = process.env.NOVEL_EVENTS_ADDR;
+		try {
+			delete process.env.NOVEL_EVENTS_ADDR;
+			expect(novelEventsAddr()).toBe(`ipc://novel-events-${process.pid}`);
+			process.env.NOVEL_EVENTS_ADDR = "ipc://debug-events";
+			expect(novelEventsAddr()).toBe("ipc://debug-events");
+		} finally {
+			if (saved === undefined) delete process.env.NOVEL_EVENTS_ADDR;
+			else process.env.NOVEL_EVENTS_ADDR = saved;
+		}
+	});
+
+	it("conversationEventsAddr：无命名空间保持原形态；有则拼入", () => {
+		const saved = process.env.NOVEL_EVENT_NAMESPACE;
+		try {
+			delete process.env.NOVEL_EVENT_NAMESPACE;
+			expect(conversationEventsAddr("conv_1")).toBe("ipc://conversation-conv_1-events");
+			process.env.NOVEL_EVENT_NAMESPACE = "12345";
+			expect(conversationEventsAddr("conv_1")).toBe("ipc://conversation-12345-conv_1-events");
+		} finally {
+			if (saved === undefined) delete process.env.NOVEL_EVENT_NAMESPACE;
+			else process.env.NOVEL_EVENT_NAMESPACE = saved;
+		}
+	});
+});
+
+describe("FocusChannel（焦点回切，inproc）", () => {
+	it("bind 监听 focus → 回调触发 + 挑战侧收 ack", async () => {
+		const handle = await bindFocusChannel("inproc://focus-1", () => {});
+		const focused = await requestFocus("inproc://focus-1", 2000);
+		expect(focused).toBe(true);
+		await handle.close();
+	});
+
+	it("无持有方（通道不通）→ 超时返回 false", async () => {
+		const focused = await requestFocus("inproc://focus-2-unbound", 100);
+		expect(focused).toBe(false);
+	});
+
+	it("多次 focus 请求均触发回调；close 后通道拆除", async () => {
+		let count = 0;
+		const handle = await bindFocusChannel("inproc://focus-3", () => {
+			count++;
+		});
+		expect(await requestFocus("inproc://focus-3", 2000)).toBe(true);
+		expect(await requestFocus("inproc://focus-3", 2000)).toBe(true);
+		expect(count).toBe(2);
+		await handle.close();
+		expect(await requestFocus("inproc://focus-3", 100)).toBe(false);
 	});
 });

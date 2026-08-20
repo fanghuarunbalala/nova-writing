@@ -6,4 +6,5 @@ export * from "./ModelProviderSettings.js";
 export * from "./ModelProviderSettingsPanel.js";
 export * from "./PersistentModelConnectionSettingsPanel.js";
 export * from "./SkillsSettingsPanel.js";
+export * from "./McpSettingsPanel.js";
 export * from "./SettingsDialog.js";

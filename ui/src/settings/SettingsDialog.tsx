@@ -13,6 +13,7 @@ import type { ApplicationConfigurationClient } from "./ApplicationConfigurationC
 import { ModelProviderSettingsPanel } from "./ModelProviderSettingsPanel.js";
 import { AgentSettingsPanel } from "./AgentSettingsPanel.js";
 import { SkillsSettingsPanel } from "./SkillsSettingsPanel.js";
+import { McpSettingsPanel } from "./McpSettingsPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
 import styles from "./SettingsDialog.module.css";
 
@@ -83,6 +84,16 @@ export function SettingsDialog({
               技能
             </button>
           ) : null}
+          {configuration !== undefined ? (
+            <button
+              type="button"
+              className={styles.navItem}
+              data-active={activeSectionId === "mcp"}
+              onClick={() => setActiveSectionId("mcp")}
+            >
+              MCP 服务器
+            </button>
+          ) : null}
           <button
             type="button"
             className={styles.navItem}
@@ -115,6 +126,9 @@ export function SettingsDialog({
           ) : null}
           {activeSectionId === "skills" && configuration !== undefined ? (
             <SkillsSettingsPanel configuration={configuration} />
+          ) : null}
+          {activeSectionId === "mcp" && configuration !== undefined ? (
+            <McpSettingsPanel configuration={configuration} />
           ) : null}
           {activeSectionId === "appearance" ? <AppearanceSettingsPanel /> : null}
           {extensionSection !== undefined && ExtensionSection !== undefined ? (

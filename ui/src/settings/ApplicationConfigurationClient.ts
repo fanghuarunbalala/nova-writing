@@ -4,6 +4,8 @@ import type {
   ConfigSnapshot,
   ConnectionTestInput,
   ConnectionTestResult,
+  McpServerInput,
+  McpTestResult,
   ProviderRuntimeStatus,
   SkillsListResult,
 } from "@novel/core";
@@ -44,4 +46,12 @@ export interface ApplicationConfigurationClient {
    * @returns 技能清单（含生效/禁用状态与目录路径）
    */
   skillsList?(): Promise<SkillsListResult>;
+
+  /**
+   * 测试 MCP 服务器连通性（initialize + tools/list；成功附工具清单预览）。
+   * 可选：宿主未接线时设置页隐藏测试按钮。
+   * @param input 服务器配置（draft 表单直传，无需先保存）
+   * @returns 测试结果（失败附中文原因）
+   */
+  testMcp?(input: McpServerInput): Promise<McpTestResult>;
 }

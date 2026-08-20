@@ -40,6 +40,9 @@
   --max-w-dialog-md:  560px; /* Dialog.md + ChatEmptyState 标题区 */
   --max-w-overlay:    360px; /* ToastHost + ChatEmptyState 提示区 */
 
+  /* 视图切换器列数默认值：TopBarViewSwitcher 按书库门控 JS 注入覆盖（隐藏时 3 列） */
+  --view-count: 4;
+
   /* z-index 角色刻度（值为现有精确快照，同名不同值不合并；
      Dialog 的 backdrop/content 用 50/51 区分，Toast 与 backdrop 同为 50） */
   --z-list-item:      2;   /* ConversationListItem 状态点 */

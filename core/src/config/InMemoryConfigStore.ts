@@ -11,18 +11,20 @@ import type {
 	RuntimeSettings,
 } from "./contract.js";
 import {
-	removeProfileReferences,
-	validateModelCapabilities,
-	validateRuntimeSettings,
+  removeProfileReferences,
+  validateModelCapabilities,
+  validateRuntimeSettings,
 } from "./runtimeSettings.js";
+import { validateSkillsDisabled } from "./skillsSettings.js";
 import type { ConfigStore } from "./store.js";
 
 /** 内存版 config 存储（profile Map + 凭据 Map） */
 export class InMemoryConfigStore implements ConfigStore {
-	private readonly profiles = new Map<string, ModelProfile>();
-	private defaultProfileId?: string;
-	private readonly credentials = new Map<CredentialRef, string>();
-	private runtime?: RuntimeSettings;
+  private readonly profiles = new Map<string, ModelProfile>();
+  private defaultProfileId?: string;
+  private readonly credentials = new Map<CredentialRef, string>();
+  private runtime?: RuntimeSettings;
+  private skillsDisabled?: string[];
 
 	/** 读取配置快照 */
 	async get(): Promise<ConfigSnapshot> {
@@ -33,6 +35,7 @@ export class InMemoryConfigStore implements ConfigStore {
 			...(this.defaultProfileId !== undefined ? { defaultProfileId: this.defaultProfileId } : {}),
 			credentials: Object.freeze(credentials),
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
+			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
 			diagnostics: { logLevel: "info" },
 		};
 	}
@@ -64,6 +67,10 @@ export class InMemoryConfigStore implements ConfigStore {
 			}
 			case "runtime.set": {
 				this.runtime = validateRuntimeSettings(m.runtime, [...this.profiles.keys()]);
+				break;
+			}
+			case "skills.setDisabled": {
+				this.skillsDisabled = validateSkillsDisabled([...m.names]);
 				break;
 			}
 			case "credential.save": {

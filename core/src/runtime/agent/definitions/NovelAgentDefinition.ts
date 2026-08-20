@@ -26,10 +26,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** Novel Agent 声明式定义（definitionVersion 1.2.0：规范段转 dynamic 承载参考案例小节） */
+/** Novel Agent 声明式定义（definitionVersion 1.3.0：接入 runtime.skills 技能组） */
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.2.0",
+  definitionVersion: "1.3.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -53,6 +53,7 @@ export const novelAgentDefinition = new AgentDefinition({
       "runtime.todo",
       "runtime.files",
       "runtime.ask",
+      "runtime.skills",
       "novel.compose",
       "novel.entities",
       // library.read 暂不接入 main（避免污染主 agent 工具面）；开发在 book-analyst 分支

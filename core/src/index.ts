@@ -8,6 +8,7 @@ export * from "./runtime/compact/index.js";
 export * from "./runtime/nudge/index.js";
 export * from "./runtime/debug/index.js";
 export * from "./runtime/todo/index.js";
+export * from "./runtime/skill/index.js";
 export * from "./runtime/loop/index.js";
 export * from "./novel/index.js";
 export * from "./library/index.js";

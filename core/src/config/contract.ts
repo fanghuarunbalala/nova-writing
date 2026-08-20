@@ -97,6 +97,8 @@ export interface ConfigSnapshot {
 	credentials: Readonly<Record<CredentialRef, CredentialStatus>>
 	/** Agent 运行参数（缺省全策略默认值） */
 	runtime?: RuntimeSettings
+	/** 禁用技能名单（Agent Skills；缺省全启用） */
+	skillsDisabled?: readonly string[]
 	/** 诊断 */
 	diagnostics: { logLevel: string }
 }
@@ -107,6 +109,7 @@ export type ConfigMutation =
 	| { op: "model.remove"; profileId: string }
 	| { op: "model.setDefault"; profileId: string }
 	| { op: "runtime.set"; runtime: RuntimeSettings }
+	| { op: "skills.setDisabled"; names: readonly string[] }
 	| { op: "credential.save"; ref: CredentialRef; secret: string }
 	| { op: "credential.delete"; ref: CredentialRef }
 

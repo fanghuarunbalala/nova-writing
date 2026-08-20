@@ -44,6 +44,7 @@ import type {
 } from "../../conversation/contract/types/index.js";
 import type { AskUserChannel } from "../tool/definitions/askUser.js";
 import type { LibraryReadDeps } from "../tool/definitions/library.js";
+import type { SkillRegistry } from "../skill/SkillRegistry.js";
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
@@ -94,6 +95,8 @@ export interface NovelAgentOptions {
   composeSparseEveryCalls?: number;
   /** Todo 存储（runtime.todo 组 TodoWrite 装配；缺省 InMemoryConversationTodoStore） */
   todoStore?: ConversationTodoStore;
+  /** 技能注册表（runtime.skills 组 skill；缺省=未装配降级。宿主构造并 load 后注入） */
+  skills?: { registry: SkillRegistry };
   /** 书库服务（library.read 组）：main 暂不接入（定义已移除该组）；book-analyst 分支恢复 */
   library?: { deps: LibraryReadDeps };
   /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
@@ -164,6 +167,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       ...(opts.requestAsk !== undefined
         ? { ask: { channel: opts.requestAsk, conversationId: opts.conversationId ?? "" } }
         : {}),
+      ...(opts.skills !== undefined ? { skills: opts.skills } : {}),
       ...(opts.library !== undefined ? { library: opts.library } : {}),
     }),
     nudgeCatalog,

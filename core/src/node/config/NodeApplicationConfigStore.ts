@@ -18,6 +18,7 @@ import {
 	validateModelCapabilities,
 	validateRuntimeSettings,
 } from "../../config/runtimeSettings.js";
+import { validateSkillsDisabled } from "../../config/skillsSettings.js";
 
 /** node config store 构造选项 */
 export interface NodeApplicationConfigStoreOptions {
@@ -34,6 +35,7 @@ interface PersistedConfig {
 	profiles: ModelProfile[]
 	defaultProfileId?: string
 	runtime?: RuntimeSettings
+	skillsDisabled?: string[]
 	credentials: Record<CredentialRef, string>
 }
 
@@ -45,6 +47,7 @@ export class NodeApplicationConfigStore implements ConfigStore {
 	private profiles: ModelProfile[] = [];
 	private defaultProfileId?: string;
 	private runtime?: RuntimeSettings;
+	private skillsDisabled?: string[];
 	private credentials = new Map<CredentialRef, string>();
 
 	/**
@@ -73,10 +76,17 @@ export class NodeApplicationConfigStore implements ConfigStore {
 				// 旧版本/异常落盘的 runtime 非法：丢弃回退默认（profiles/凭据不受影响）
 				this.runtime = undefined;
 			}
+			try {
+				this.skillsDisabled = validateSkillsDisabled(parsed.skillsDisabled ?? []);
+			} catch {
+				// 旧版本/异常落盘的禁用名单非法：丢弃回退全启用
+				this.skillsDisabled = undefined;
+			}
 		} catch {
 			this.profiles = [];
 			this.defaultProfileId = undefined;
 			this.runtime = undefined;
+			this.skillsDisabled = undefined;
 			this.credentials = new Map();
 		}
 	}
@@ -90,6 +100,7 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			...(this.defaultProfileId !== undefined ? { defaultProfileId: this.defaultProfileId } : {}),
 			credentials: Object.freeze(credentials),
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
+			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
 			diagnostics: { logLevel: "info" },
 		};
 	}
@@ -120,6 +131,9 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			case "runtime.set":
 				this.runtime = validateRuntimeSettings(m.runtime, this.profiles.map((p) => p.id));
 				break;
+			case "skills.setDisabled":
+				this.skillsDisabled = validateSkillsDisabled([...m.names]);
+				break;
 			case "credential.save":
 				this.credentials.set(m.ref, await this.cipher.encrypt(m.secret));
 				break;
@@ -142,6 +156,7 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			profiles: this.profiles,
 			...(this.defaultProfileId !== undefined ? { defaultProfileId: this.defaultProfileId } : {}),
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
+			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
 			credentials: Object.fromEntries(this.credentials),
 		};
 		await writeFile(this.filePath, JSON.stringify(payload, null, 2), "utf8");

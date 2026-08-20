@@ -37,6 +37,7 @@ import {
   type ConversationJournalService,
   type CredentialCipher,
   resolveRuntimeAgents,
+  serializeSkillsEnv,
   createConsoleLogger,
   infoLog,
   type LLMessage,
@@ -209,6 +210,21 @@ async function applyRuntimeEnv(configStore: NodeApplicationConfigStore): Promise
   infoLog(`[main] runtime settings resolved: ${Object.keys(resolved.agents).join(",")}`);
 }
 
+/**
+ * 技能装载设置解析为 NOVEL_SKILLS_SETTINGS env（应用级技能根目录 + 禁用名单；
+ * 项目级目录 = <workspace>/skills 由子进程派生）。同 onMutated 重写语义。
+ */
+async function applySkillsEnv(
+  configStore: NodeApplicationConfigStore,
+  appSkillsRoot: string,
+): Promise<void> {
+  const snapshot = await configStore.get();
+  process.env.NOVEL_SKILLS_SETTINGS = serializeSkillsEnv({
+    appSkillsRoot,
+    disabled: [...(snapshot.skillsDisabled ?? [])],
+  });
+}
+
 /** manager：providerLive（启动时凭据已解析）spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
 function createManager(
   conversationsRoot: () => string | undefined,
@@ -372,6 +388,9 @@ async function main(): Promise<void> {
       applyRuntimeEnv(configStore).catch((e) => {
         infoLog(`[main] runtime env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
       });
+      applySkillsEnv(configStore, join(app.getPath("userData"), "skills")).catch((e) => {
+        infoLog(`[main] skills env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
     },
   });
   await configStore.load();
@@ -384,9 +403,10 @@ async function main(): Promise<void> {
   });
 
   // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*） +
-  // Agent 运行参数（NOVEL_RUNTIME_SETTINGS）。设置页保存后经 onMutated 重写，
-  // 对新 spawn 的对话生效（运行中对话维持启动时快照）。
+  // Agent 运行参数（NOVEL_RUNTIME_SETTINGS）+ 技能装载（NOVEL_SKILLS_SETTINGS）。
+  // 设置页保存后经 onMutated 重写，对新 spawn 的对话生效（运行中对话维持启动时快照）。
   await applyRuntimeEnv(configStore);
+  await applySkillsEnv(configStore, join(app.getPath("userData"), "skills"));
   providerLive = process.env.NOVEL_PROVIDER_API_KEY !== undefined;
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）

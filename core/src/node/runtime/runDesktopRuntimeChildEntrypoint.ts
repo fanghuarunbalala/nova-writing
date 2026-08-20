@@ -54,6 +54,12 @@ import {
 	parseRuntimeSettingsEnv,
 	type ResolvedAgentConnection,
 } from "../../config/runtimeSettings.js";
+import { SkillRegistry } from "../../runtime/skill/SkillRegistry.js";
+import {
+	SKILLS_SETTINGS_ENV,
+	parseSkillsEnv,
+	resolveSkillDirs,
+} from "../../runtime/skill/skillsEnv.js";
 import { findPendingToolIds } from "../../runtime/loop/AgentLoop.js";
 import type { ApprovalQueueItem } from "../../conversation/server/WaitRequestQueue.js";
 import { buildNovelExplorerAgent } from "../../runtime/agent/NovelExplorerAgent.js";
@@ -279,6 +285,15 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	// 非法/缺省整体回落 NOVEL_PROVIDER_* env 默认
 	const runtimeSettings = parseRuntimeSettingsEnv(process.env[RUNTIME_SETTINGS_ENV]);
 	const novelRuntime = runtimeSettings?.agents.novel;
+	// 技能装载（NOVEL_SKILLS_SETTINGS：应用级根目录 + 禁用名单，main 序列化注入）。
+	// 项目级目录 = <workspace>/skills 由本进程派生；BookAnalyst 后台会话不装技能。
+	// 注册表 load 失败/目录缺失均回退空集（skill 工具回「不存在」），不阻断会话。
+	const skillsDescriptor = isAnalyst ? undefined : parseSkillsEnv(process.env[SKILLS_SETTINGS_ENV]);
+	const skillRegistry = new SkillRegistry({
+		dirs: skillsDescriptor !== undefined ? resolveSkillDirs(skillsDescriptor, workspace) : [],
+		disabled: skillsDescriptor?.disabled,
+	});
+	await skillRegistry.load();
 	// 采样：runtime 优先，其次 NOVEL_PROVIDER_* env。默认 8192/high
 	// ——reasoning 模型的思考 token 计入 max_completion_tokens 预算，上限过低会被
 	// 思考独占导致空回复/截断（finish_reason=length）
@@ -661,9 +676,11 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 		// call 发起时晋升 pendingMode（mode.set 记录后由本钩子生效，PRD F1 双态）
 		composeState,
 		composeService,
-		beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
-		todoStore: new InMemoryConversationTodoStore(),
-	});
+			beforeProviderCall: () => holder.conv?.promotePendingMode() ?? Promise.resolve(),
+			todoStore: new InMemoryConversationTodoStore(),
+			// 技能注册表（runtime.skills 组；空目录=无技能，工具正确回「不存在」）
+			skills: { registry: skillRegistry },
+		});
 
 	const managerWait: ManagerWaitChannel | undefined =
 		cmsApi !== undefined

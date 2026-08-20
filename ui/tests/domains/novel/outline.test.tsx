@@ -74,6 +74,35 @@ describe("StoryOutlineTreeProjection", () => {
     expect(blocked.planningStatus).toBe("idea");
   });
 
+  it("computes ordinals（全书 / 一、 / 1.1 / 1.1.1，按 orderKey 升序）+ 超深标记", () => {
+    const deepUnits: readonly StoryUnit[] = [
+      unit({ id: "sg", title: "全书", scope: "saga", orderKey: "0000" }),
+      unit({ id: "a1", title: "幕甲", parentId: "sg", scope: "arc", orderKey: "0001" }),
+      unit({ id: "a2", title: "幕乙", parentId: "sg", scope: "arc", orderKey: "0002" }),
+      // orderKey 乱序插入：序号按 orderKey 排序而非插入序
+      unit({ id: "s1", title: "场景一", parentId: "a1", scope: "scene", orderKey: "0002" }),
+      unit({ id: "s0", title: "场景零", parentId: "a1", scope: "scene", orderKey: "0001" }),
+      unit({ id: "m1", title: "子幕", parentId: "a1", scope: "sequence", orderKey: "0003" }),
+      unit({ id: "s1_1", title: "深层场景", parentId: "m1", scope: "scene", orderKey: "0001" }),
+      unit({ id: "over", title: "过深", parentId: "s1_1", scope: "custom", orderKey: "0001" }),
+    ];
+    const tree = StoryOutlineTreeProjection.build(deepUnits);
+    const sg = tree[0];
+    const [a1, a2] = sg.children;
+    expect(sg.ordinal).toBe("全书");
+    expect(a1.ordinal).toBe("一");
+    expect(a2.ordinal).toBe("二");
+    const a1Children = a1.children.map((c) => c.ordinal);
+    expect(a1Children).toEqual(["1.1", "1.2", "1.3"]); // s0(0001)/s1(0002)/m1(0003)
+    const m1Node = a1.children[2];
+    const deep = m1Node.children[0];
+    expect(deep.ordinal).toBe("1.3.1");
+    expect(deep.overDepth).toBe(false);
+    const over = deep.children[0];
+    expect(over.ordinal).toBe("1.3.1.1");
+    expect(over.overDepth).toBe(true);
+  });
+
   it("keeps includePlans rollup as progress and counts all units", () => {
     const withRollup = [
       unit({ id: "sg", title: "全书", scope: "saga", orderKey: "0000" }),
@@ -223,10 +252,10 @@ describe("outline components", () => {
         onToggleExpand={onToggleExpand}
       />,
     );
-    expect(screen.getByText("第一卷：旧船坞")).toBeInTheDocument();
-    expect(screen.getByText("第 7 号场景")).toBeInTheDocument();
+    expect(screen.getByText("一、第一卷：旧船坞")).toBeInTheDocument();
+    expect(screen.getByText("1.1 第 7 号场景")).toBeInTheDocument();
     // 父单元 scope chip + 进度数字 + 状态 chip（写作中）。
-    expect(screen.getByText("卷")).toBeInTheDocument();
+    expect(screen.getByText("幕")).toBeInTheDocument();
     expect(screen.getByText("1/2")).toBeInTheDocument();
     // 状态 chip（树行与图例都会出现「写作中」）。
     expect(screen.getAllByText("写作中").length).toBeGreaterThan(0);
@@ -238,7 +267,7 @@ describe("outline components", () => {
 
   it("renders legend with hierarchy line and both status axes", () => {
     render(<StoryOutlineTreeLegend />);
-    expect(screen.getByText(/saga 全书 → arc 卷/)).toBeInTheDocument();
+    expect(screen.getByText(/全书 → 幕（一、\/ 1.1 \/ 1.1.1，最多 4 层）→ 场景/)).toBeInTheDocument();
     expect(screen.getByText("规划")).toBeInTheDocument();
     expect(screen.getByText("实现")).toBeInTheDocument();
     for (const label of ["点子", "已成纲", "可开写", "未动笔", "写作中", "已完成", "受阻", "废弃"]) {

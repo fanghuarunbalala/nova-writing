@@ -366,3 +366,98 @@ describe("NovelDelete（kind 分发 + leaf 引用预检）", () => {
     expect(mutateBatch).not.toHaveBeenCalled();
   });
 });
+
+describe("story_unit 层级形状预检（最多 4 层 / 场景是最底层）", () => {
+  /** saga(1) → arc1(2) → seq1(3) → scene1(4)；mid 为第 4 层非场景（custom） */
+  const TREE = [
+    { id: "saga", entityVersion: 1, parentId: undefined, scope: "saga" },
+    { id: "arc1", entityVersion: 1, parentId: "saga", scope: "arc" },
+    { id: "seq1", entityVersion: 1, parentId: "arc1", scope: "sequence" },
+    { id: "scene1", entityVersion: 1, parentId: "seq1", scope: "scene" },
+    { id: "mid", entityVersion: 1, parentId: "seq1", scope: "custom" },
+  ];
+
+  function treeHandle() {
+    const { handle, query, mutateBatch } = mockHandle();
+    query.mockImplementation(async (q) => {
+      if (q.op === "outline.get") return { outline: {}, units: TREE };
+      return [];
+    });
+    return { handle, query, mutateBatch };
+  }
+
+  it("Write 第 5 层 → 拒绝（中文报错含 4 层说明）", async () => {
+    const { handle, mutateBatch } = treeHandle();
+    const write = toolOf(handle, "NovelWrite");
+    await expect(
+      write.precheck?.(call("NovelWrite", { kind: "story_unit", values: [{ title: "过深", parentId: "mid" }] })),
+    ).rejects.toThrow(/最多 4 层/);
+    expect(mutateBatch).not.toHaveBeenCalled();
+  });
+
+  it("Write 挂到场景下 → 拒绝（场景是最底层）", async () => {
+    const { handle } = treeHandle();
+    const write = toolOf(handle, "NovelWrite");
+    await expect(
+      write.precheck?.(call("NovelWrite", { kind: "story_unit", values: [{ title: "新单元", parentId: "scene1" }] })),
+    ).rejects.toThrow(/场景单元已是最底层/);
+  });
+
+  it("Write 合法深度（第 2/3/4 层）→ 放行", async () => {
+    const { handle } = treeHandle();
+    const write = toolOf(handle, "NovelWrite");
+    await expect(
+      write.precheck?.(
+        call("NovelWrite", {
+          kind: "story_unit",
+          values: [
+            { title: "顶层下", parentId: "saga" },
+            { title: "幕下", parentId: "arc1" },
+            { title: "序列下", parentId: "seq1" },
+          ],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("Edit 换父到场景下 / 换父致子树超深 → 拒绝", async () => {
+    const { handle } = treeHandle();
+    const edit = toolOf(handle, "NovelEdit");
+    await expect(
+      edit.precheck?.(
+        call("NovelEdit", { kind: "story_unit", values: [{ id: "seq1", baseRevision: 1, value: { parentId: "scene1" } }] }),
+      ),
+    ).rejects.toThrow(/场景单元已是最底层/);
+    // seq1 自带子节点（scene1/mid）：移到 mid 下 = 第 4 层 + 子树高度 1 → 第 5 层
+    await expect(
+      edit.precheck?.(
+        call("NovelEdit", { kind: "story_unit", values: [{ id: "seq1", baseRevision: 1, value: { parentId: "mid" } }] }),
+      ),
+    ).rejects.toThrow(/最多 4 层/);
+  });
+
+  it("Edit 把有子节点的单元改为场景 → 拒绝；无子节点改场景放行", async () => {
+    const { handle } = treeHandle();
+    const edit = toolOf(handle, "NovelEdit");
+    await expect(
+      edit.precheck?.(
+        call("NovelEdit", { kind: "story_unit", values: [{ id: "seq1", baseRevision: 1, value: { scope: "scene" } }] }),
+      ),
+    ).rejects.toThrow(/不能改为场景/);
+    await expect(
+      edit.precheck?.(
+        call("NovelEdit", { kind: "story_unit", values: [{ id: "scene1", baseRevision: 1, value: { scope: "scene" } }] }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("Edit 不动挂靠与层级 → 放行（形状检查不拦截）", async () => {
+    const { handle } = treeHandle();
+    const edit = toolOf(handle, "NovelEdit");
+    await expect(
+      edit.precheck?.(
+        call("NovelEdit", { kind: "story_unit", values: [{ id: "scene1", baseRevision: 1, value: { title: "改名" } }] }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+});

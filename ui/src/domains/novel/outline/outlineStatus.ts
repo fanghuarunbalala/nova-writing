@@ -44,8 +44,8 @@ export const SCOPE_TYPE: Readonly<
   Record<StoryUnitScope, { readonly label: string; readonly variant: StatusChipVariant }>
 > = {
   saga: { label: "全书", variant: "accent" },
-  arc: { label: "卷", variant: "accent" },
-  sequence: { label: "序列", variant: "info" },
+  arc: { label: "幕", variant: "accent" },
+  sequence: { label: "幕", variant: "info" },
   scene: { label: "场景", variant: "neutral" },
   custom: { label: "自定义", variant: "faint" },
 };
@@ -53,6 +53,18 @@ export const SCOPE_TYPE: Readonly<
 /** scope 缺省归 custom（core scope 可选） */
 export function scopeView(scope: StoryUnitScope | undefined) {
   return SCOPE_TYPE[scope ?? "custom"];
+}
+
+/**
+ * synopsis 覆盖区间脱敏：解析产物的「（覆盖 <bookId>-pXXXXXX–pYYYYYY）」
+ * （GUI 进度信号，原文保留在数据层）显示为「（覆盖正文 pXXXXXX–pYYYYYY）」。
+ */
+export function formatSynopsisDisplay(synopsis: string | undefined): string {
+  if (synopsis === undefined) return "";
+  return synopsis.replace(
+    /（覆盖\s*[^\s（）]+-(p[0-9A-Za-z]+)\s*[–—-]\s*[^\s（）]+-(p[0-9A-Za-z]+)\s*）/g,
+    "（覆盖正文 $1–$2）",
+  );
 }
 
 /** 派生实现态：pending + blockState → blocked（与 core rollup 口径一致） */

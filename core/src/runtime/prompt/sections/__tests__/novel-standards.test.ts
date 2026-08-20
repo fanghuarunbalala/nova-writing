@@ -40,12 +40,16 @@ describe("novel 质量规范段（规范层，main/compose 共享；v2.0 动态�
     const text = novelOutlineStandardSection.renderDynamic(withCases, ctx);
     expect(text).toContain("# 大纲规范");
     expect(text).toContain("一条由场景串成的情绪链");
-    expect(text).toContain("没有情绪标注的 Scene 视为无效");
+    expect(text).toContain("没有情绪标注的场景视为无效");
     expect(text).toContain("悬念牵引连接");
     expect(text).toContain("事件流水账");
     expect(text).toContain("## 落地到工具");
     expect(text).toContain("readerEmotion 即情绪标注");
     expect(text).toContain("不是大纲的组织单位");
+    // 概念边界（序号体系口径）：对外不用 saga/arc/sequence/scene 内部词
+    expect(text).toContain("一律用「全书 / 一、 / 1.1 / 1.1.1」编号＋标题指代单元");
+    expect(text).toContain("不自评质量");
+    expect(text).toContain("层级最多 4 层");
   });
 
   it("novel.prose_standard：定义 + 排版范式 + 好/坏判据（含去 AI 味条目）", () => {

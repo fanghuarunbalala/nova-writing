@@ -124,7 +124,7 @@ export function EntityPane({ bookId, kind, snapshot, store, onOpenUnit }: Entity
 				</div>
 				<div className={styles.paraCard}>
 					<div className={styles.paraHead}>
-						<span className={styles.mono}>关联幕 · leaf 绑定反查</span>
+						<span className={styles.mono}>关联幕</span>
 					</div>
 					{relatedUnits.length > 0 ? (
 						<div className={styles.refChips}>

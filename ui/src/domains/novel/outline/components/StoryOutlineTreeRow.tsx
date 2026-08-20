@@ -11,6 +11,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { DragEvent } from "react";
 import { Icon, StatusChip } from "../../../../shared/primitives/index.js";
 import type { StoryOutlineTreeNode } from "../projection/StoryOutlineTreeProjection.js";
+import { ordinalLabel } from "../projection/StoryOutlineTreeProjection.js";
 import { REAL_STATUS, SCOPE_TYPE } from "../outlineStatus.js";
 import styles from "./StoryOutlineTreeRow.module.css";
 
@@ -66,13 +67,18 @@ export function StoryOutlineTreeRow({
         type="button"
         className={styles.main}
         onClick={onSelect}
-        title={`${unit.title} · ${unit.scope}`}
+        title={unit.title}
       >
-        <span className={styles.label}>{unit.title}</span>
+        <span className={styles.label}>{`${ordinalLabel(unit.ordinal)}${unit.title}`}</span>
       </button>
       {hasChildren ? (
-        <StatusChip variant={SCOPE_TYPE[unit.scope].variant} compact title={unit.scope}>
+        <StatusChip variant={SCOPE_TYPE[unit.scope].variant} compact title={SCOPE_TYPE[unit.scope].label}>
           {SCOPE_TYPE[unit.scope].label}
+        </StatusChip>
+      ) : null}
+      {unit.overDepth ? (
+        <StatusChip variant="danger" compact title="层级超过 4 层（全书 → 幕 → 幕 → 场景），建议整理">
+          超深
         </StatusChip>
       ) : null}
       {showProgress ? (

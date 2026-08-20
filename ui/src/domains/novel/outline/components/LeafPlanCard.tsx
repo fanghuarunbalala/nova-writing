@@ -31,9 +31,8 @@ export interface LeafEntityLookup {
 export type LeafNameMap = ReadonlyMap<string, string | LeafEntityLookup>;
 
 function lookupName(map: LeafNameMap | undefined, id: string): string {
-  if (map === undefined) return id;
-  const hit = map.get(id);
-  return typeof hit === "string" ? hit : (hit?.name ?? id);
+  const hit = map?.get(id);
+  return typeof hit === "string" ? hit : (hit?.name ?? "未知实体");
 }
 
 /** 引用 chip：图标 + 名称 + 附加标签；有 onClick 渲染 button，否则 span。 */
@@ -154,7 +153,7 @@ export function LeafPlanCard({
   if (leaf === undefined) {
     return (
       <div className={styles.card}>
-        <h3 className={styles.cardTitle}>场景计划 · leaf</h3>
+        <h3 className={styles.cardTitle}>场景计划</h3>
         <div className={`${styles.banner} ${styles.faint}`}>
           <Icon icon={ScrollText} size="sm" />
           <span>leaf 未编写——写场景前先补场景设计：人物 / 地点绑定、事件序列、节奏拍、实体变更。</span>
@@ -216,11 +215,11 @@ export function LeafPlanCard({
     );
   return (
     <div className={styles.card}>
-      <h3 className={styles.cardTitle}>场景计划 · leaf</h3>
+      <h3 className={styles.cardTitle}>场景计划</h3>
       <dl className={styles.paramList}>
         {row(
           "场景模式",
-          leaf.settingMode === "located" ? "located · 有确定地点" : "location-independent · 无固定地点",
+          leaf.settingMode === "located" ? "有确定地点" : "无固定地点",
         )}
         {row("时间", leaf.time?.description || undefined)}
         {row(

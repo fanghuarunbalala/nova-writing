@@ -219,7 +219,7 @@ describe("ContentDirectoryPanel", () => {
     await user.click(screen.getByRole("button", { name: /林夏/ }));
     // 关联单元 chip（leaf 绑定派生：c-1 出场于 u1）→ 面板内跳单元详情
     await user.click(await screen.findByRole("button", { name: /第一章 · 雾起/ }));
-    expect(await screen.findByText("意图 · intent")).toBeInTheDocument();
+    expect(await screen.findByText("意图")).toBeInTheDocument();
   });
 
   it("outline parent row toggles children; scene leaf row opens unit detail (leaf + paragraphs + jumps)", async () => {
@@ -238,9 +238,9 @@ describe("ContentDirectoryPanel", () => {
     expect(screen.getByRole("button", { name: /第一章 · 雾起/ })).toBeInTheDocument();
     // leaf（场景）行点击 = 进单元详情页：意图/梗概 + leaf + 段落 + 跳转钮
     await user.click(screen.getByRole("button", { name: /第一章 · 雾起/ }));
-    expect(await screen.findByText("意图 · intent")).toBeInTheDocument();
-    expect(screen.getByText("梗概 · synopsis")).toBeInTheDocument();
-    expect(screen.getByText("场景计划 · leaf")).toBeInTheDocument();
+    expect(await screen.findByText("意图")).toBeInTheDocument();
+    expect(screen.getByText("梗概")).toBeInTheDocument();
+    expect(screen.getByText("场景计划")).toBeInTheDocument();
     expect(screen.getByText(/雾从旧船坞漫上来/)).toBeInTheDocument();
     expect(screen.getByText("P1")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /查看单元详情/ }));
@@ -265,7 +265,7 @@ describe("ContentDirectoryPanel", () => {
     expect(onOpenChapter).toHaveBeenCalledWith("ch-1");
     // 关联场景 chip → 面板内跳单元详情
     await user.click(screen.getByRole("button", { name: /第一章 · 雾起/ }));
-    expect(await screen.findByText("意图 · intent")).toBeInTheDocument();
+    expect(await screen.findByText("意图")).toBeInTheDocument();
   });
 
   it("locate() opens the detail page directly and scrolls (paragraph → chapter page + row)", async () => {

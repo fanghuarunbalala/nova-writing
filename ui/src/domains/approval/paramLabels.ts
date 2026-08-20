@@ -89,7 +89,7 @@ export const PARAM_VALUE_LABEL: Readonly<
     completed: "已完成",
     abandoned: "已废弃",
   },
-  scope: { saga: "系列", arc: "篇章", sequence: "段落", scene: "场景", custom: "自定义" },
+  scope: { saga: "全书", arc: "幕", sequence: "序列（子幕）", scene: "场景", custom: "自定义" },
   settingMode: { located: "定点场景", "location-independent": "非定点场景" },
   reasonCode: {
     dependency: "依赖阻塞",

@@ -28,16 +28,37 @@ import {
 } from "../previews.js";
 
 describe("novel 通用工具 preview（kind 分派）", () => {
-	it("NovelRead 按 kind 分派到对应域渲染", () => {
-		const read = (args: Record<string, unknown>) => novelReadPreview({ args: JSON.stringify(args) }, { result: "ok" });
-		expect(read({ kind: "character", characterId: "c1" })).toEqual({
+	it("NovelRead 按 kind 分派；recorded 从结果 JSON 解析名称（不回退 id）", () => {
+		const read = (args: Record<string, unknown>, result?: string) =>
+			novelReadPreview({ args: JSON.stringify(args) }, result === undefined ? { result: "ok" } : { result });
+		expect(read({ kind: "character", characterId: "c1" }, JSON.stringify({ id: "c1", name: "林默" }))).toEqual({
 			action: "读取",
 			object: "角色",
-			title: "c1",
+			title: "林默",
 			summary: "已读取",
 		});
 		expect(read({ kind: "overview" })).toEqual({ action: "读取", object: "总览", summary: "已读取" });
-		expect(read({ kind: "paragraph", paragraphId: "p1" })).toMatchObject({ object: "正文", title: "p1" });
+		expect(read({ kind: "paragraph", paragraphId: "p1" }, JSON.stringify({ id: "p1", text: "秋夜，风起。" }))).toMatchObject({
+			object: "正文",
+			title: "秋夜，风起。",
+		});
+		// 结果非 JSON（如 "ok"）→ 无 title，不露 id
+		expect(read({ kind: "character", characterId: "c1" })).toEqual({
+			action: "读取",
+			object: "角色",
+			summary: "已读取",
+		});
+	});
+
+	it("NovelRead started 态（无结果）不回退 raw id", () => {
+		expect(novelReadPreview({ args: JSON.stringify({ kind: "story_unit", storyUnitId: "book-su-0001" }) })).toEqual({
+			action: "读取",
+			object: "大纲",
+		});
+		expect(novelReadPreview({ args: JSON.stringify({ kind: "character", characterId: "c1" }) })).toEqual({
+			action: "读取",
+			object: "角色",
+		});
 	});
 
 	it("NovelWrite 按 kind 分派到对应域渲染", () => {
@@ -50,7 +71,7 @@ describe("novel 通用工具 preview（kind 分派）", () => {
 		expect(write({ kind: "volume", values: [{ title: "第一卷" }] })).toMatchObject({ object: "卷", title: "第一卷" });
 	});
 
-	it("NovelEdit 按 kind 分派到对应域渲染", () => {
+	it("NovelEdit 按 kind 分派；无名不回退 id", () => {
 		const edit = (args: Record<string, unknown>) => novelEditPreview({ args: JSON.stringify(args) }, { result: "ok" });
 		expect(edit({ kind: "character", values: [{ id: "c1", baseRevision: 1, value: { name: "新名" } }] })).toMatchObject({
 			action: "编辑",
@@ -60,6 +81,12 @@ describe("novel 通用工具 preview（kind 分派）", () => {
 		expect(edit({ kind: "story_unit", values: [{ id: "su1", baseRevision: 1, value: { title: "雨夜" } }] })).toMatchObject({
 			object: "大纲",
 			title: "雨夜",
+		});
+		// value 无 name/title → 无 title（原实现回退 raw id）
+		expect(edit({ kind: "character", values: [{ id: "c1", baseRevision: 1, value: { summary: "x" } }] })).toEqual({
+			action: "编辑",
+			object: "角色",
+			summary: "角色已更新",
 		});
 	});
 
@@ -129,18 +156,18 @@ describe("内置 preview（动作标识 + 纯内容 title）", () => {
 		});
 	});
 
-	it("paragraphWritePreview：批量插入 → 首项 storyUnitId + 段数 + 正文开头摘要；recorded 给插入结果", () => {
+	it("paragraphWritePreview：批量插入 → 段数 title（不露单元 id）+ 正文开头摘要；recorded 给插入结果", () => {
 		const args = JSON.stringify({ values: [{ storyUnitId: "ch3", text: "秋夜，风起。" }, { storyUnitId: "ch3", text: "第二段。" }] });
 		expect(paragraphWritePreview({ args })).toEqual({
 			action: "插入",
 			object: "正文",
-			title: "ch3（2 段）",
+			title: "2 段",
 			summary: "秋夜，风起。",
 		});
 		expect(paragraphWritePreview({ args }, { result: "ok" })).toEqual({
 			action: "插入",
 			object: "正文",
-			title: "ch3（2 段）",
+			title: "2 段",
 			summary: "正文已插入",
 		});
 	});
@@ -177,11 +204,10 @@ describe("内置 preview（动作标识 + 纯内容 title）", () => {
 });
 
 describe("实体域 preview（动作标识语义）", () => {
-	it("CharacterRead：单读带 id 内容、列表无内容；recorded 给结果", () => {
+	it("CharacterRead：recorded 从结果解析名字；started 无 title（不回退 id）", () => {
 		expect(characterReadPreview({ args: '{"characterId":"c1"}' })).toEqual({
 			action: "读取",
 			object: "角色",
-			title: "c1",
 		});
 		expect(characterReadPreview({ args: "{}" })).toEqual({ action: "读取", object: "角色" });
 		expect(characterReadPreview({ args: "{}" }, { result: "[]" })).toEqual({
@@ -189,17 +215,23 @@ describe("实体域 preview（动作标识语义）", () => {
 			object: "角色",
 			summary: "已读取",
 		});
+		expect(characterReadPreview({ args: '{"characterId":"c1"}' }, { result: '{"id":"c1","name":"林默"}' })).toEqual({
+			action: "读取",
+			object: "角色",
+			title: "林默",
+			summary: "已读取",
+		});
 	});
 
-	it("CharacterEdit：value.name 优先于 id（P1 形状 values[{id, baseRevision, value}]）", () => {
+	it("CharacterEdit：value.name（P1 形状 values[{id, baseRevision, value}]；无名不回退 id）", () => {
 		const args = JSON.stringify({
 			values: [{ id: "c1", baseRevision: 1, value: { name: "张三" } }, { id: "c2", baseRevision: 1, value: {} }],
 		});
-		expect(characterEditPreview({ args })).toEqual({ action: "编辑", object: "角色", title: "张三、c2" });
+		expect(characterEditPreview({ args })).toEqual({ action: "编辑", object: "角色", title: "张三" });
 		expect(characterEditPreview({ args }, { error: "stale" })).toEqual({
 			action: "编辑",
 			object: "角色",
-			title: "张三、c2",
+			title: "张三",
 			summary: "角色更新失败",
 		});
 	});
@@ -215,27 +247,29 @@ describe("实体域 preview（动作标识语义）", () => {
 		});
 	});
 
-	it("ParagraphRead/Edit：正文内容 + 新文本摘要", () => {
+	it("ParagraphRead/Edit：recorded 从结果取正文截断；started 无 title；Edit 只留文本摘要（不露 id）", () => {
 		expect(paragraphReadPreview({ args: '{"paragraphId":"p1"}' })).toEqual({
 			action: "读取",
 			object: "正文",
-			title: "p1",
 		});
 		expect(paragraphReadPreview({ args: '{"storyUnitId":"ch3"}' })).toEqual({
 			action: "读取",
 			object: "正文",
-			title: "ch3",
+		});
+		expect(paragraphReadPreview({ args: '{"paragraphId":"p1"}' }, { result: '{"id":"p1","text":"秋夜，风起。"}' })).toEqual({
+			action: "读取",
+			object: "正文",
+			title: "秋夜，风起。",
+			summary: "已读取",
 		});
 		expect(paragraphEditPreview({ args: '{"values":[{"id":"p1","baseRevision":1,"value":{"text":"新正文"}}]}' })).toEqual({
 			action: "编辑",
 			object: "正文",
-			title: "p1",
 			summary: "新正文",
 		});
 		expect(paragraphEditPreview({ args: '{"values":[{"id":"p1","baseRevision":1,"value":{"text":"新"}}]}' }, { result: "ok" })).toEqual({
 			action: "编辑",
 			object: "正文",
-			title: "p1",
 			summary: "正文已更新",
 		});
 	});

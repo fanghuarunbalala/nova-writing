@@ -37,11 +37,11 @@ export interface StoryUnitEditDialogProps {
 }
 
 const SCOPES: readonly { value: StoryUnitScope; label: string }[] = [
-  { value: "saga", label: "saga 长篇" },
-  { value: "arc", label: "arc 卷/弧" },
-  { value: "sequence", label: "sequence 序列" },
-  { value: "scene", label: "scene 场景" },
-  { value: "custom", label: "custom 自定义" },
+  { value: "saga", label: "全书" },
+  { value: "arc", label: "幕" },
+  { value: "sequence", label: "序列（子幕）" },
+  { value: "scene", label: "场景（最底层）" },
+  { value: "custom", label: "自定义" },
 ];
 
 export function StoryUnitEditDialog({

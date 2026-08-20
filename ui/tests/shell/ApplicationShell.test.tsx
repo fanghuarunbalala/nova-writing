@@ -205,10 +205,11 @@ describe("ApplicationShell smoke", () => {
     await renderShell();
     // 资料位在内容视图侧栏：先经顶栏切到内容视图（PRD SB-1 上下文目录）。
     await user.click(screen.getByRole("tab", { name: "内容" }));
-    expect(await screen.findByText("第一卷：旧船坞")).toBeInTheDocument();
+    // 树行带序号前缀（顶层幕 = 一、形态）。
+    expect(await screen.findByText("一、第一卷：旧船坞")).toBeInTheDocument();
     // 点击侧栏树节点 → 主区渲染选中单元详情（PRD OL-1，不再开 inspector）。
-    await user.click(screen.getByText("第一卷：旧船坞"));
-    expect(screen.getAllByText("第一卷：旧船坞").length).toBeGreaterThanOrEqual(2);
+    await user.click(screen.getByText("一、第一卷：旧船坞"));
+    expect(screen.getAllByText("一、第一卷：旧船坞").length).toBeGreaterThanOrEqual(2);
   });
 
   it("switches to the selected conversation when a sidebar conversation is clicked", async () => {
@@ -256,7 +257,7 @@ describe("ApplicationShell smoke", () => {
     await screen.findAllByText("对话 000002");
     // 用户场景：切到内容视图（侧栏变资料目录），经顶栏切回对话再选会话。
     await user.click(screen.getByRole("tab", { name: "内容" }));
-    expect(await screen.findByText("第一卷：旧船坞")).toBeInTheDocument();
+    expect(await screen.findByText("一、第一卷：旧船坞")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "对话" }));
     await user.click(screen.getAllByText("对话 000001")[0]);
     // chat 视图不再渲染会话标题 heading，改为断言对话输入框出现（切回聊天）。

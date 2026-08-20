@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
+import { ordinalLabel } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import {
   ABANDON_REASON_LABEL,
@@ -28,6 +29,7 @@ import {
   LEAF_ROLE_LABEL,
   PLAN_STATUS,
   REAL_STATUS,
+  formatSynopsisDisplay,
   scopeView,
 } from "../../../domains/novel/outline/outlineStatus.js";
 import {
@@ -104,7 +106,7 @@ function UnitParagraphsCard({
             const published = publishedParagraphIds?.has(p.paragraphId) ?? false;
             const text = p.text.trim();
             return (
-              <span key={p.paragraphId} title={`${p.paragraphId} · ${p.textLength} 字`}>
+              <span key={p.paragraphId} title={`${p.textLength} 字`}>
                 <i>
                   {String(index + 1).padStart(2, "0")}
                   <em className={styles.refTag}>{published ? "已入选章" : "未发布"}</em>
@@ -163,14 +165,14 @@ export function OutlineUnitInspectorPanel({
     <div className={styles.panel} data-workspace={workspaceId}>
       <div className={styles.card}>
         <div className={styles.unitHead}>
-          <StatusChip variant={scope.variant} title={unit.scope}>
+          <StatusChip variant={scope.variant} title={scope.label}>
             {scope.label}
           </StatusChip>
-          <h2 className={styles.title}>{unit.title}</h2>
+          <h2 className={styles.title}>{`${ordinalLabel(unit.ordinal)}${unit.title}`}</h2>
         </div>
         <div className={styles.unitSub}>
-          storyUnit {unit.unitId} · scope {unit.scope} · orderKey {unit.orderKey} · v{unit.entityVersion}
-          {unit.parentTitle !== undefined ? ` · 父 ${unit.parentTitle}` : ""}
+          {unit.parentTitle !== undefined ? `父 ${unit.parentTitle}` : "顶层单元"}
+          {unit.overDepth ? " · 层级超过 4 层（全书 → 幕 → 幕 → 场景），建议整理" : ""}
         </div>
         <div className={styles.statRow}>
           <StatusChip variant={plan.variant}>{plan.label}</StatusChip>
@@ -207,10 +209,14 @@ export function OutlineUnitInspectorPanel({
             </span>
           </div>
         ) : null}
-        <div className={styles.sectionHead}>意图 · intent</div>
+        <div className={styles.sectionHead}>意图</div>
         <p className={styles.cardP}>{coreUnit?.intent ?? "（尚未填写——这个单元要达成什么）"}</p>
-        <div className={styles.sectionHead}>梗概 · synopsis</div>
-        <p className={styles.cardP}>{coreUnit?.synopsis ?? "（尚未填写情节梗概）"}</p>
+        <div className={styles.sectionHead}>梗概</div>
+        <p className={styles.cardP}>
+          {coreUnit?.synopsis !== undefined && coreUnit.synopsis !== ""
+            ? formatSynopsisDisplay(coreUnit.synopsis)
+            : "（尚未填写情节梗概）"}
+        </p>
         {(chapter !== undefined || onDiscuss !== undefined) && (
           <div className={styles.jumpActions}>
             {chapter !== undefined && onOpenChapter !== undefined ? (
@@ -257,7 +263,7 @@ export function OutlineUnitInspectorPanel({
           <>
             {dependencyChips.length > 0 ? (
               <>
-                <div className={styles.sectionHead}>阻塞依赖 · dependencyIds</div>
+                <div className={styles.sectionHead}>阻塞依赖</div>
                 <div className={styles.refChips}>
                   {dependencyChips.map((dep) => (
                     <RefChip
@@ -272,7 +278,7 @@ export function OutlineUnitInspectorPanel({
             ) : null}
             {(coreUnit?.leaf?.characters.length ?? 0) > 0 ? (
               <>
-                <div className={styles.sectionHead}>出场人物 · leaf.characters</div>
+                <div className={styles.sectionHead}>出场人物</div>
                 <div className={styles.refChips}>
                   {(coreUnit?.leaf?.characters ?? []).map((binding) => {
                     const involvement = binding.involvement;
@@ -289,7 +295,7 @@ export function OutlineUnitInspectorPanel({
                       <RefChip
                         key={binding.characterId}
                         icon={UserRound}
-                        label={characterNames?.get(binding.characterId)?.name ?? binding.characterId}
+                        label={characterNames?.get(binding.characterId)?.name ?? "未知角色"}
                         tag={tag}
                         onClick={
                           onOpenCharacter !== undefined

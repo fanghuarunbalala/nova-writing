@@ -25,12 +25,22 @@ export interface MessageReferenceProps {
   readonly resolved?: ResolvedReference;
 }
 
+/** 解析失败且无显式标签时的中文占位（不回退内部 id） */
+const KIND_FALLBACK_LABEL: Readonly<Record<MessageReference["refKind"], string>> = {
+  character: "未知角色",
+  location: "未知地点",
+  outline: "未知大纲单元",
+  chapter: "未知章节",
+  paragraph: "未知段落",
+};
+
 export function MessageReferenceChip({
   reference,
   onClick,
   resolved,
 }: MessageReferenceProps) {
-  const display = reference.label ?? resolved?.label ?? reference.id;
+  const display =
+    reference.label ?? resolved?.label ?? KIND_FALLBACK_LABEL[reference.refKind];
   const known = resolved?.known ?? true;
   return (
     <button

@@ -21,6 +21,15 @@ import type {
 import type { StoryOutlineTreeStore } from "../../novel/outline/store/StoryOutlineTreeStore.js";
 import type { MessageReference, ResolvedReference } from "../components/MessageReference.js";
 
+/** 未建档实体的占位显示（不回退内部 id） */
+const UNKNOWN_LABEL: Readonly<Record<MessageReference["refKind"], string>> = {
+  character: "未知角色",
+  location: "未知地点",
+  outline: "未知大纲单元",
+  chapter: "未知章节",
+  paragraph: "未知段落",
+};
+
 export type ReferenceResolver = (
   reference: MessageReference,
 ) => ResolvedReference | undefined;
@@ -37,36 +46,32 @@ export function createDomainReferenceResolver(
   deps: DomainReferenceResolverDeps,
 ): ReferenceResolver {
   return (reference) => {
+    const unknown = (): ResolvedReference => ({
+      label: reference.label ?? UNKNOWN_LABEL[reference.refKind],
+      known: false,
+    });
     switch (reference.refKind) {
       case "character": {
         const found = deps.characters
           .getSnapshot()
           .characters.find((item) => item.characterId === reference.id);
-        return found === undefined
-          ? { label: reference.label ?? reference.id, known: false }
-          : { label: found.name, known: true };
+        return found === undefined ? unknown() : { label: found.name, known: true };
       }
       case "location": {
         const found = deps.locations
           .getSnapshot()
           .locations.find((item) => item.locationId === reference.id);
-        return found === undefined
-          ? { label: reference.label ?? reference.id, known: false }
-          : { label: found.name, known: true };
+        return found === undefined ? unknown() : { label: found.name, known: true };
       }
       case "outline": {
         const found = findUnit(deps.outline.getSnapshot().tree, reference.id);
-        return found === undefined
-          ? { label: reference.label ?? reference.id, known: false }
-          : { label: found.title, known: true };
+        return found === undefined ? unknown() : { label: found.title, known: true };
       }
       case "chapter": {
         const found = deps.manuscript
           .getSnapshot()
           .chapters.find((item) => item.chapterId === reference.id);
-        return found === undefined
-          ? { label: reference.label ?? reference.id, known: false }
-          : { label: found.title, known: true };
+        return found === undefined ? unknown() : { label: found.title, known: true };
       }
       case "paragraph": {
         const found = deps.manuscript
@@ -75,8 +80,8 @@ export function createDomainReferenceResolver(
             chapter.blocks.some((block) => block.blockId === reference.id),
           );
         return found
-          ? { label: reference.label ?? reference.id, known: true }
-          : { label: reference.label ?? reference.id, known: false };
+          ? { label: reference.label ?? "正文段落", known: true }
+          : unknown();
       }
     }
   };

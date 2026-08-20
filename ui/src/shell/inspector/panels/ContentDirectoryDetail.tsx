@@ -37,6 +37,7 @@ import {
   BLOCK_REASON_LABEL,
   PLAN_STATUS,
   REAL_STATUS,
+  formatSynopsisDisplay,
   realizationView,
   SCOPE_TYPE,
 } from "../../../domains/novel/outline/outlineStatus.js";
@@ -116,7 +117,7 @@ function useDetailHead(ctx: DirectoryDetailContext): DetailHeadInfo {
     if (detail.kind === "unit") {
       const unit = outlineTree.getUnit(detail.id);
       if (unit === undefined) return { title: "单元不存在", kicker: "大纲" };
-      return { title: unit.title, kicker: `大纲 · ${SCOPE_TYPE[unit.scope ?? "custom"].label} · ${unit.id}` };
+      return { title: unit.title, kicker: `大纲 · ${SCOPE_TYPE[unit.scope ?? "custom"].label}` };
     }
     if (detail.kind === "chapter") {
       const chapter = manuscriptSnapshot.chapters.find((item) => item.chapterId === detail.id);
@@ -191,8 +192,12 @@ function UnitDetailBody(ctx: DirectoryDetailContext) {
           </span>
         </div>
       ) : null}
-      <DetailSec label="意图 · intent">{unit.intent ?? "（尚未填写——这个单元要达成什么）"}</DetailSec>
-      <DetailSec label="梗概 · synopsis">{unit.synopsis ?? "（尚未填写情节梗概）"}</DetailSec>
+      <DetailSec label="意图">{unit.intent ?? "（尚未填写——这个单元要达成什么）"}</DetailSec>
+      <DetailSec label="梗概">
+        {unit.synopsis !== undefined && unit.synopsis !== ""
+          ? formatSynopsisDisplay(unit.synopsis)
+          : "（尚未填写情节梗概）"}
+      </DetailSec>
       {unit.scope === "scene" ? (
         <LeafPlanCard
           leaf={unit.leaf}

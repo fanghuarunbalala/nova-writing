@@ -146,7 +146,7 @@ export const novelOutlineStandardSection: PromptSection = {
         "",
         "## 概念边界（务必遵守）",
         "大纲（story unit）是叙事单位、卷/章是发布单位，两者无结构对应（数据模型见 NovelRead 的「小说数据模型」；章卷组装的合格判据见「章卷发布结构规范」）——禁止按「一章一幕」机械对齐。正文里的「场景」即大纲最底层单元。作者说「第X卷/第X章」多为口语指代位置：按大纲树定位对应内容，不要为此新建卷/章。层级最多 4 层（全书 → 幕 → 幕 → 场景），最底层场景必须带完整 leaf 计划、不得再挂子节点。",
-        "**向作者展示与汇报的口径**：一律用「全书 / 一、 / 1.1 / 1.1.1」编号＋标题指代单元（编号规则与禁词见 NovelRead 的「作者可见文本守则」），不用 saga/arc/sequence/scene、id、orderKey 等内部词，也不用「第X章」组织；汇报用创作语言、不自评质量、不解释内部机制。",",
+        "**向作者展示与汇报的口径**：一律用「全书 / 一、 / 1.1 / 1.1.1」编号＋标题指代单元（编号规则与禁词见 NovelRead 的「作者可见文本守则」），不用 saga/arc/sequence/scene、id、orderKey 等内部词，也不用「第X章」组织；汇报用创作语言、不自评质量、不解释内部机制。",
       ].join("\n"),
       renderCaseSubsection(input, OUTLINE_STANDARD_CASE_PREFIXES),
     ),

@@ -25,6 +25,13 @@ export interface StoryOutlineTreeNode {
   readonly entityVersion: number;
   readonly depth: number;
   readonly parentTitle: string | undefined;
+  /**
+   * 对外序号（全书 / 一、 / 1.1 / 1.1.1）：saga 根为「全书」；
+   * 顶层幕用中文序数，其下用点分数字（序号段数即层级，动态计算）。
+   */
+  readonly ordinal: string;
+  /** 层级超深（序号段数 > 3，即全书之下超过 3 层）——存量脏数据警示 */
+  readonly overDepth: boolean;
   readonly blockState: StoryUnitBlockState | undefined;
   readonly abandonment: StoryUnitAbandonment | undefined;
   readonly blockedReason: string | undefined;
@@ -41,12 +48,37 @@ type UnitWithPlans = StoryUnit & {
   };
 };
 
+/** 中文序数（顶层幕编号：一、二、…；≥100 回退阿拉伯数字——实际不可达） */
+function chineseNumeral(n: number): string {
+  const digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  if (n < 0 || n >= 100 || !Number.isInteger(n)) return String(n);
+  if (n < 10) return digits[n]!;
+  if (n < 20) return n === 10 ? "十" : `十${digits[n % 10]!}`;
+  const ones = n % 10;
+  return `${digits[Math.floor(n / 10)]!}十${ones === 0 ? "" : digits[ones]!}`;
+}
+
+/** 序号 → 树行前缀（一 → 「一、」；1.1 → 「1.1 」；全书 → 空串） */
+export function ordinalLabel(ordinal: string): string {
+  if (ordinal === "全书" || ordinal === "") return "";
+  return ordinal.includes(".") ? `${ordinal} ` : `${ordinal}、`;
+}
+
+/** 数字路径 → 序号（段数 1 → 中文序数；≥2 → 点分；>3 段 = 超深） */
+export function ordinalOfPath(path: readonly number[]): { ordinal: string; overDepth: boolean } {
+  if (path.length === 0) return { ordinal: "", overDepth: false };
+  if (path.length === 1) return { ordinal: chineseNumeral(path[0]!), overDepth: false };
+  return { ordinal: path.join("."), overDepth: path.length > 3 };
+}
+
 export const StoryOutlineTreeProjection = {
   build(units: readonly StoryUnit[]): readonly StoryOutlineTreeNode[] {
-    interface MutableNode extends Omit<StoryOutlineTreeNode, "children" | "depth" | "parentTitle"> {
+    interface MutableNode extends Omit<StoryOutlineTreeNode, "children" | "depth" | "parentTitle" | "ordinal" | "overDepth"> {
       children: MutableNode[];
       depth: number;
       parentTitle: string | undefined;
+      ordinal: string;
+      overDepth: boolean;
     }
     const nodes = new Map<string, MutableNode>();
     for (const unit of units) {
@@ -61,6 +93,8 @@ export const StoryOutlineTreeProjection = {
         entityVersion: unit.entityVersion,
         depth: 0,
         parentTitle: undefined,
+        ordinal: "",
+        overDepth: false,
         blockState: unit.blockState,
         abandonment: unit.abandonment,
         blockedReason:
@@ -91,16 +125,41 @@ export const StoryOutlineTreeProjection = {
         parent.children.push(node);
       }
     }
-    const annotate = (node: MutableNode, depth: number, parentTitle: string | undefined): void => {
+    // 序号与书序都按 orderKey 升序（store 列表无 ORDER BY，不能依赖插入顺序）
+    const sortSiblings = (siblings: MutableNode[]): void => {
+      siblings.sort((a, b) => a.orderKey.localeCompare(b.orderKey));
+      for (const child of siblings) sortSiblings(child.children);
+    };
+    for (const root of roots) sortSiblings(root.children);
+    roots.sort((a, b) => a.orderKey.localeCompare(b.orderKey));
+    /**
+     * 序号标注：saga 根为空路径（「全书」）；游离顶层根直接取 [i]（序数兜底，
+     * 其子层为 1.1 形态，避免与父层序号重复）；其余节点 = 父路径 + 兄弟序。
+     * 段数 1 → 中文序数，≥2 → 点分，>3 段 = 超深（全书之下最多 3 层）。
+     */
+    const annotate = (
+      node: MutableNode,
+      depth: number,
+      parentTitle: string | undefined,
+      path: readonly number[],
+    ): void => {
       node.depth = depth;
       node.parentTitle = parentTitle;
-      for (const child of node.children) {
-        annotate(child, depth + 1, node.title);
+      if (path.length === 0) {
+        node.ordinal = "全书";
+        node.overDepth = false;
+      } else {
+        const { ordinal, overDepth } = ordinalOfPath(path);
+        node.ordinal = ordinal;
+        node.overDepth = overDepth;
       }
+      node.children.forEach((child, index) => {
+        annotate(child, depth + 1, node.title, [...path, index + 1]);
+      });
     };
-    for (const root of roots) {
-      annotate(root, 0, undefined);
-    }
+    roots.forEach((root, index) => {
+      annotate(root, 0, undefined, root.scope === "saga" ? [] : [index + 1]);
+    });
     const freeze = (node: MutableNode): StoryOutlineTreeNode =>
       Object.freeze({
         ...node,

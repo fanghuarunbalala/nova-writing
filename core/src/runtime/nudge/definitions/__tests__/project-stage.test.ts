@@ -259,18 +259,18 @@ describe("renderFullText / renderSparseText", () => {
     expect(text).toContain("事件序列与节奏拍");
     expect(text).toContain("状态变更（实体状态变化，连贯性追踪）");
     expect(text).toContain("驳回则等待作者补充信息");
-    expect(text).toContain("只要有一个可用的 LeafPlan 即视为完成");
+    expect(text).toContain("只要有一个可用的场景 leaf 计划即视为完成");
   });
 
-  it("正文 full：按 LeafPlan 事件序列逐步推进（每事件确认）＋候选模式＋LeafPlan 完成后 Exit 审批写入", () => {
+  it("正文 full：按场景设计的事件序列逐步推进（每事件确认）＋候选模式＋leaf 计划完成后 Exit 审批写入", () => {
     const text = FULL_TEXT_OF.write_prose;
-    expect(text).toContain("按 LeafPlan 事件序列逐步推进");
+    expect(text).toContain("按 leaf 计划的事件序列逐步推进");
     expect(text).toContain("每个事件都要求作者确认，确认后才推进下一个事件");
     expect(text).toContain("如果有不明确的，用 AskUserQuestion 补充信息");
     expect(text).toContain("生成多个候选，同作者确认");
     expect(text).toContain("一次只委派当前一个事件，不批量委派");
-    expect(text).toContain("已有完整 LeafPlan");
-    expect(text).toContain("当前 LeafPlan 完成后 ExitComposeMode 提交审批");
+    expect(text).toContain("已有完整 leaf 计划");
+    expect(text).toContain("当前场景的 leaf 计划完成后 ExitComposeMode 提交审批");
     expect(text).toContain("定稿标 completed");
     expect(text).toContain("每完成 10-15 个场景统一组装");
   });

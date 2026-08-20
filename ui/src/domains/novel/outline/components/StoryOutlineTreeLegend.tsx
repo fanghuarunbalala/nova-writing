@@ -13,7 +13,7 @@ const PLAN_ORDER = ["idea", "outlined", "ready"] as const;
 export function StoryOutlineTreeLegend() {
   return (
     <div className={styles.legend}>
-      <span className={styles.line}>saga 全书 → arc 卷 → sequence 序列 → scene 场景（叶 = 场景，正文挂叶）</span>
+      <span className={styles.line}>全书 → 幕（一、/ 1.1 / 1.1.1，最多 4 层）→ 场景（最底层，正文挂场景）</span>
       <span className={styles.lbl}>规划</span>
       {PLAN_ORDER.map((key) => (
         <StatusChip key={key} variant={PLAN_STATUS[key].variant}>

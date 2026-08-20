@@ -117,6 +117,10 @@ docs/                PRD、架构文档、开发规范
 
 ## 社区与贡献
 
+- 📕 **小红书**：和大家一起交流创作心得，并为它提出改进意见 —— 扫码或[点击主页](https://xhslink.cn/o/8tS4tRCxeD4)关注
+
+<img src="docs/assets/xhs-qr.png" width="150" alt="Nova Writing 小红书主页二维码">
+
 - 问题与建议：欢迎到 [GitHub Issues](https://github.com/fanghuarunbalala/nova-writing/issues) 提
 - 想参与开发：`docs/development/` 下有编码规范与协议文档，欢迎 fork、提 PR
 

@@ -69,6 +69,23 @@ function parseArgsJson(args: string): Record<string, unknown> | undefined {
 	}
 }
 
+/** 响应结果 JSON 解析（recorded 态；解析失败/非 JSON 返回 undefined） */
+function parseResultJson(response: ToolPreviewResponse | undefined): unknown {
+	if (response?.result === undefined) return undefined;
+	try {
+		return JSON.parse(response.result) as unknown;
+	} catch {
+		return undefined;
+	}
+}
+
+/** 结果对象取字符串字段（非对象/数组/字段缺失/空串返回 undefined） */
+function resultField(result: unknown, field: string): string | undefined {
+	if (typeof result !== "object" || result === null || Array.isArray(result)) return undefined;
+	const v = (result as Record<string, unknown>)[field];
+	return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
 /** 路径末段（file_path → basename；支持 / 与 \\） */
 function basenameOf(path: string): string {
 	const segments = path.split(/[/\\]/).filter((s) => s.length > 0);
@@ -128,11 +145,10 @@ export function defaultToolPreview(
 
 /* ============ character 域 ============ */
 
-/** CharacterRead preview：单读 → title=id；列表无 title */
+/** CharacterRead preview：recorded 从结果解析名字；started 无 title（不回退 id） */
 export function characterReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
-	const id = parseArgsJson(call.args)?.characterId;
-	const title = typeof id === "string" && id.length > 0 ? id : undefined;
-	return withIdentity("读取", "角色", title, "已读取", "读取失败", response);
+	const name = resultField(parseResultJson(response), "name");
+	return withIdentity("读取", "角色", name, "已读取", "读取失败", response);
 }
 
 /** CharacterWrite preview：解析 values[].name 列表 → title */
@@ -144,27 +160,24 @@ export function characterWritePreview(call: ToolPreviewInput, response?: ToolPre
 	return withIdentity("创建", "角色", names, "角色已写入", "角色写入失败", response);
 }
 
-/** CharacterEdit preview：value.name 优先于 id（P1 形状 values[{id, baseRevision, value}]） */
+/** CharacterEdit preview：value.name（P1 形状 values[{id, baseRevision, value}]；无名不回退 id） */
 export function characterEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as unknown[]) : [];
 	const names = joinList(values, (v) => {
 		const rec = (v ?? {}) as Record<string, unknown>;
 		const value = typeof rec.value === "object" && rec.value !== null ? (rec.value as Record<string, unknown>) : {};
-		const name = typeof value.name === "string" && value.name.length > 0 ? value.name : undefined;
-		const id = typeof rec.id === "string" ? rec.id : undefined;
-		return name ?? id;
+		return typeof value.name === "string" && value.name.length > 0 ? value.name : undefined;
 	});
 	return withIdentity("编辑", "角色", names, "角色已更新", "角色更新失败", response);
 }
 
 /* ============ location 域 ============ */
 
-/** LocationRead preview：单读 → title=id */
+/** LocationRead preview：recorded 从结果解析名字；started 无 title（不回退 id） */
 export function locationReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
-	const id = parseArgsJson(call.args)?.locationId;
-	const title = typeof id === "string" && id.length > 0 ? id : undefined;
-	return withIdentity("读取", "地点", title, "已读取", "读取失败", response);
+	const name = resultField(parseResultJson(response), "name");
+	return withIdentity("读取", "地点", name, "已读取", "读取失败", response);
 }
 
 /** LocationWrite preview：解析 values[].name 列表 → title */
@@ -176,45 +189,37 @@ export function locationWritePreview(call: ToolPreviewInput, response?: ToolPrev
 	return withIdentity("创建", "地点", names, "地点已写入", "地点写入失败", response);
 }
 
-/** LocationEdit preview：value.name 优先于 id（P1 形状 values[{id, baseRevision, value}]） */
+/** LocationEdit preview：value.name（P1 形状 values[{id, baseRevision, value}]；无名不回退 id） */
 export function locationEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as unknown[]) : [];
 	const names = joinList(values, (v) => {
 		const rec = (v ?? {}) as Record<string, unknown>;
 		const value = typeof rec.value === "object" && rec.value !== null ? (rec.value as Record<string, unknown>) : {};
-		const name = typeof value.name === "string" && value.name.length > 0 ? value.name : undefined;
-		const id = typeof rec.id === "string" ? rec.id : undefined;
-		return name ?? id;
+		return typeof value.name === "string" && value.name.length > 0 ? value.name : undefined;
 	});
 	return withIdentity("编辑", "地点", names, "地点已更新", "地点更新失败", response);
 }
 
 /* ============ paragraph 域 ============ */
 
-/** ParagraphRead preview：按 paragraphId/storyUnitId 给出内容 */
+/** ParagraphRead preview：recorded 从结果取正文截断；started 无 title（不回退 id） */
 export function paragraphReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
-	const parsed = parseArgsJson(call.args);
-	const target =
-		typeof parsed?.paragraphId === "string" && parsed.paragraphId.length > 0
-			? parsed.paragraphId
-			: typeof parsed?.storyUnitId === "string" && parsed.storyUnitId.length > 0
-			  ? parsed.storyUnitId
-			  : undefined;
-	return withIdentity("读取", "正文", target, "已读取", "读取失败", response);
+	const text = resultField(parseResultJson(response), "text");
+	const title = text !== undefined ? truncate(text) : undefined;
+	return withIdentity("读取", "正文", title, "已读取", "读取失败", response);
 }
 
-/** ParagraphWrite preview：批量插入 → 首项 storyUnitId + 段数（started detail 用首段文本摘要） */
+/** ParagraphWrite preview：批量插入 → 段数（started detail 用首段文本摘要；不露单元 id） */
 export function paragraphWritePreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as Record<string, unknown>[]) : [];
-	const storyUnitId = values.length > 0 && typeof values[0]!.storyUnitId === "string" && values[0]!.storyUnitId.length > 0 ? (values[0]!.storyUnitId as string) : undefined;
 	const text = values.length > 0 && typeof values[0]!.text === "string" ? truncate(values[0]!.text as string) : undefined;
-	const count = values.length > 1 ? `（${values.length} 段）` : "";
+	const title = values.length > 0 ? `${values.length} 段` : undefined;
 	return {
 		action: "插入",
 		object: "正文",
-		...(storyUnitId !== undefined ? { title: `${storyUnitId}${count}` } : {}),
+		...(title !== undefined ? { title } : {}),
 		...(response === undefined
 			? text !== undefined
 				? { summary: text }
@@ -223,18 +228,16 @@ export function paragraphWritePreview(call: ToolPreviewInput, response?: ToolPre
 	};
 }
 
-/** ParagraphEdit preview：批量替换 → 首项 id + 新文本摘要（P1 形状 values[{id, baseRevision, value}]） */
+/** ParagraphEdit preview：批量替换 → 新文本摘要（P1 形状 values[{id, baseRevision, value}]；不露段落 id） */
 export function paragraphEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as Record<string, unknown>[]) : [];
 	const first = values[0] ?? {};
-	const id = typeof first.id === "string" && first.id.length > 0 ? first.id : undefined;
 	const value = typeof first.value === "object" && first.value !== null ? (first.value as Record<string, unknown>) : {};
 	const text = typeof value.text === "string" ? truncate(value.text) : undefined;
 	return {
 		action: "编辑",
 		object: "正文",
-		...(id !== undefined ? { title: id } : {}),
 		...(response === undefined
 			? text !== undefined
 				? { summary: text }
@@ -250,16 +253,18 @@ export function volumeReadPreview(call: ToolPreviewInput, response?: ToolPreview
 	return withIdentity("读取", "卷", undefined, "已读取", "读取失败", response);
 }
 
-/** ChapterRead preview：章读取（chapterId/volumeId 过滤时给出目标） */
+/** ChapterRead preview：recorded 单章结果取章名；started 无 title（不回退 id） */
 export function chapterReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
-	const parsed = parseArgsJson(call.args);
-	const target =
-		typeof parsed?.chapterId === "string" && parsed.chapterId.length > 0
-			? parsed.chapterId
-			: typeof parsed?.volumeId === "string" && parsed.volumeId.length > 0
-				? parsed.volumeId
-				: undefined;
-	return withIdentity("读取", "章", target, "已读取", "读取失败", response);
+	const result = parseResultJson(response);
+	const chapters =
+		typeof result === "object" && result !== null && !Array.isArray(result) && Array.isArray((result as Record<string, unknown>).chapters)
+			? ((result as Record<string, unknown>).chapters as unknown[])
+			: [];
+	const title =
+		chapters.length === 1
+			? resultField(chapters[0], "title")
+			: undefined;
+	return withIdentity("读取", "章", title, "已读取", "读取失败", response);
 }
 
 /** VolumeWrite preview：批量创建卷 → values[].title 列表 */
@@ -280,30 +285,26 @@ export function chapterWritePreview(call: ToolPreviewInput, response?: ToolPrevi
 	return withIdentity("创建", "章", names, "已创建", "创建失败", response);
 }
 
-/** VolumeEdit preview：value.title 优先，其次 id（P1 形状 values[{id, baseRevision, value}]） */
+/** VolumeEdit preview：value.title（P1 形状 values[{id, baseRevision, value}]；无名不回退 id） */
 export function volumeEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as unknown[]) : [];
 	const names = joinList(values, (v) => {
 		const rec = (v ?? {}) as Record<string, unknown>;
 		const value = typeof rec.value === "object" && rec.value !== null ? (rec.value as Record<string, unknown>) : {};
-		const title = typeof value.title === "string" && value.title.length > 0 ? value.title : undefined;
-		const id = typeof rec.id === "string" ? rec.id : undefined;
-		return title ?? id;
+		return typeof value.title === "string" && value.title.length > 0 ? value.title : undefined;
 	});
 	return withIdentity("编辑", "卷", names, "已更新", "更新失败", response);
 }
 
-/** ChapterEdit preview：value.title 优先，其次 id（P1 形状 values[{id, baseRevision, value}]） */
+/** ChapterEdit preview：value.title（P1 形状 values[{id, baseRevision, value}]；无名不回退 id） */
 export function chapterEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as unknown[]) : [];
 	const names = joinList(values, (v) => {
 		const rec = (v ?? {}) as Record<string, unknown>;
 		const value = typeof rec.value === "object" && rec.value !== null ? (rec.value as Record<string, unknown>) : {};
-		const title = typeof value.title === "string" && value.title.length > 0 ? value.title : undefined;
-		const id = typeof rec.id === "string" ? rec.id : undefined;
-		return title ?? id;
+		return typeof value.title === "string" && value.title.length > 0 ? value.title : undefined;
 	});
 	return withIdentity("编辑", "章", names, "已更新", "更新失败", response);
 }
@@ -341,10 +342,9 @@ export function novelDeletePreview(call: ToolPreviewInput, response?: ToolPrevie
 
 /* ============ outline 域 ============ */
 
-/** OutlineRead preview：单读 → storyUnitId */
+/** OutlineRead preview：recorded 单元结果取标题；started/全树无 title（不回退 id） */
 export function outlineReadPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
-	const id = parseArgsJson(call.args)?.storyUnitId;
-	const title = typeof id === "string" && id.length > 0 ? id : undefined;
+	const title = resultField(parseResultJson(response), "title");
 	return withIdentity("读取", "大纲", title, "已读取", "读取失败", response);
 }
 
@@ -360,16 +360,14 @@ export function outlineWritePreview(call: ToolPreviewInput, response?: ToolPrevi
 	return withIdentity("创建", "大纲", names, "已创建", "创建失败", response);
 }
 
-/** OutlineEdit preview：value.title 优先于 id（P1 形状 values[{id, baseRevision, value}]） */
+/** OutlineEdit preview：value.title（P1 形状 values[{id, baseRevision, value}]；无名不回退 id） */
 export function outlineEditPreview(call: ToolPreviewInput, response?: ToolPreviewResponse): ToolPreviewOutput {
 	const parsed = parseArgsJson(call.args);
 	const values = Array.isArray(parsed?.values) ? (parsed.values as unknown[]) : [];
 	const names = joinList(values, (v) => {
 		const rec = (v ?? {}) as Record<string, unknown>;
 		const value = typeof rec.value === "object" && rec.value !== null ? (rec.value as Record<string, unknown>) : {};
-		const title = typeof value.title === "string" && value.title.length > 0 ? value.title : undefined;
-		const id = typeof rec.id === "string" ? rec.id : undefined;
-		return title ?? id;
+		return typeof value.title === "string" && value.title.length > 0 ? value.title : undefined;
 	});
 	return withIdentity("编辑", "大纲", names, "已更新", "更新失败", response);
 }

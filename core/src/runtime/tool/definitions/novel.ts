@@ -429,6 +429,100 @@ async function assertReferencesExist(
   }
 }
 
+// ── 大纲层级形状预检（深度上限 + 场景末端；Write/Edit 共用） ──
+
+/** 大纲层级深度上限（含根：全书=1 → 幕=2 → 幕=3 → 场景=4） */
+const OUTLINE_MAX_DEPTH = 4;
+
+/** 深度预检用的树节点最小形状 */
+type OutlineUnitNode = { id: string; parentId?: string; scope?: string };
+
+/** 全树拉取（深度预检用；比 storyUnitVersions 多取 parentId/scope） */
+async function outlineUnitNodes(handle: NovelHandle): Promise<Map<string, OutlineUnitNode>> {
+  const snap = (await handle.query({ op: "outline.get" })) as { units: OutlineUnitNode[] };
+  return new Map(snap.units.map((u) => [u.id, u]));
+}
+
+/** 父链深度：顶层=1，逐层 +1；环/悬空截断（存在性由 assertExists 先行把关） */
+function outlineDepthOf(byId: ReadonlyMap<string, OutlineUnitNode>, unitId: string): number {
+  let depth = 0;
+  let cursor: string | undefined = unitId;
+  const seen = new Set<string>();
+  while (cursor !== undefined && !seen.has(cursor)) {
+    seen.add(cursor);
+    depth++;
+    cursor = byId.get(cursor)?.parentId;
+  }
+  return depth;
+}
+
+/** 层级形状检查项：unitId 缺省=新建；parentId undefined=不改挂靠（null=移到顶层） */
+interface OutlineShapeCheck {
+  unitId?: string;
+  parentId?: string | null;
+  scope?: string;
+}
+
+/**
+ * 预检：大纲层级形状（≤4 层；场景是最底层不可挂子；换父按子树整体深度计）。
+ * 深度含根（全书=1）；scene 父直接拒绝；Edit 把有子节点的单元改 scene 拒绝。
+ */
+function assertOutlineTreeShape(
+  toolName: string,
+  byId: ReadonlyMap<string, OutlineUnitNode>,
+  checks: ReadonlyArray<OutlineShapeCheck>,
+): void {
+  const childrenOf = new Map<string, string[]>();
+  for (const node of byId.values()) {
+    if (node.parentId !== undefined) {
+      const list = childrenOf.get(node.parentId) ?? [];
+      list.push(node.id);
+      childrenOf.set(node.parentId, list);
+    }
+  }
+  const subtreeHeight = (root: string): number => {
+    let height = 0;
+    const stack: Array<[string, number]> = [[root, 0]];
+    while (stack.length > 0) {
+      const [id, level] = stack.pop()!;
+      height = Math.max(height, level);
+      for (const child of childrenOf.get(id) ?? []) stack.push([child, level + 1]);
+    }
+    return height;
+  };
+  for (const check of checks) {
+    if (check.parentId !== undefined && check.parentId !== null) {
+      const parent = byId.get(check.parentId);
+      if (parent?.scope === "scene") {
+        throw precheckFail(
+          toolName,
+          `大纲层级非法：场景单元已是最底层，不能再挂子单元——大纲最多 4 层（全书 → 幕 → 幕 → 场景），请在场景层横向扩展`,
+        );
+      }
+    }
+    if (check.parentId !== undefined) {
+      const parentDepth =
+        check.parentId !== null && byId.has(check.parentId) ? outlineDepthOf(byId, check.parentId) : 0;
+      const baseDepth = parentDepth + 1;
+      const extra = check.unitId !== undefined && byId.has(check.unitId) ? subtreeHeight(check.unitId) : 0;
+      if (baseDepth + extra > OUTLINE_MAX_DEPTH) {
+        throw precheckFail(
+          toolName,
+          `大纲层级超限：该操作会产生第 ${baseDepth + extra} 层——大纲最多 4 层（全书 → 幕 → 幕 → 场景），请横向拆分而非继续加深`,
+        );
+      }
+    }
+    if (check.unitId !== undefined && check.scope === "scene") {
+      if ((childrenOf.get(check.unitId) ?? []).length > 0) {
+        throw precheckFail(
+          toolName,
+          `大纲层级非法：该单元已有子单元，不能改为场景——场景是最底层（正文与 leaf 计划挂场景）`,
+        );
+      }
+    }
+  }
+}
+
 // ── kind 参数校验（合并工具的 kind 级收窄；扁平并集 schema 之上） ──
 
 /** NovelRead 各 kind 允许的顶层参数（kind 之外） */
@@ -641,9 +735,15 @@ function novelRead(handle: NovelHandle): ToolDef {
       "## 小说数据模型",
       "",
       "### 大纲（story_unit）",
-      "整本书的结构真相源：saga（全书）→ arc（叙事弧，跨度由故事节奏决定，与卷的划分无关）→ sequence → scene 层级树，可按体量省略中间层，但树末端必须是能承载正文的 scene 级单元。正文挂在它上面、发布从它取材、进度沿它滚动。每本书恰好一个大纲、自动存在；你读取与修改的是其中的故事单元（units 平铺返回，层级看 parentId，兄弟序看 orderKey）。",
+      "整本书的结构真相源：全书 → 幕 → 场景的层级树（中间可有一层子幕），最多 4 层，最底层必须是能承载正文的场景级单元（须带完整 leaf 计划）。正文挂在它上面、发布从它取材、进度沿它滚动。每本书恰好一个大纲、自动存在；你读取与修改的是其中的故事单元（units 平铺返回，层级看 parentId，兄弟序看 orderKey）。",
+      "层级深度硬限制：全书 → 一、（第 1 层幕）→ 1.1（第 2 层）→ 1.1.1（第 3 层，最深）；挂第 5 层或场景下挂子节点会被拒绝。",
       "双状态推进：planningStatus（idea→outlined→ready）管规划；realizationStatus（pending→in-progress→completed/abandoned）管写作；父单元进度由叶自动汇总，不手填。",
-      "leaf 计划（场景级设计文档，挂 scene 叶单元）：人物/地点绑定、事件序列、节奏拍、实体状态变更——写场景前先读 leaf 保证一致性。",
+      "leaf 计划（场景级设计文档，挂最底层场景单元）：人物/地点绑定、事件序列、节奏拍、实体状态变更——写场景前先读 leaf 保证一致性。",
+      "",
+      "### 作者可见文本守则（务必遵守）",
+      "- 指代大纲单元一律用「编号＋标题」双写：顶层幕「一、《觉醒之弧》」、更深层「1.1《雨夜觉醒》」。编号规则：兄弟按 orderKey 升序从 1 编号；顶层用中文序数（一、二、三…），其下用点分数字（一、=1，子层 1.1、1.2，再下 1.1.1）；序号段数即层级。编号是动态的（删改后重排），所以必须带标题。",
+      "- 作者可见文本**不得出现任何内部标识**：saga/arc/sequence/scene、id、orderKey、entityVersion、leaf、story_unit 等词。id 与参数名只用于工具调用参数。",
+      "- 汇报进展用**创作语言**：说「第一幕的大纲已拟好：主角在雨夜觉醒……」，不说「序列方案出来了」「结构化产出完成」这类工程语汇；**不自评质量**（如「质量很高」「完成度不错」）；不向作者解释内部机制与流程（读库、leaf、节奏拍、状态推进、发布组装等）。",
       "",
       "### 段落（paragraph）",
       "正文的唯一载体，挂在 scene 级单元上；不可变追加，修改走 NovelEdit。",
@@ -683,12 +783,12 @@ function novelRead(handle: NovelHandle): ToolDef {
       "<example>",
       "作者：继续写",
       "→ NovelRead(kind=story_unit, includePlans=true)",
-      "→ 从 progress 定位第一个未完成 scene → 读其 leaf → 按场景设计写正文",
+      "→ 从 progress 定位第一个未完成场景 → 读其 leaf → 按场景设计写正文",
       "<reasoning>先读树确认进度与结构现状，避免凭记忆臆造走向或重写已完成场景。</reasoning>",
       "</example>",
       "<example>",
       "作者：第二卷开头主角在哪？",
-      "→ NovelRead(kind=story_unit) 全树 → 沿 arc 下 scene 的 synopsis 与 leaf（地点绑定、实体变更）查证后回答",
+      "→ NovelRead(kind=story_unit) 全树 → 沿第二卷对应幕下各场景的 synopsis 与 leaf（地点绑定、实体变更）查证后回答",
       "<reasoning>时间线与人物位置必须查大纲而非凭记忆。</reasoning>",
       "</example>",
       "拿不准就读一次再动手。",
@@ -855,6 +955,11 @@ async function precheckWrite(handle: NovelHandle, toolName: string, kind: NovelK
         if (id !== undefined) assertIdFree(toolName, units, id, "大纲单元");
       }
       await assertReferencesExist(handle, toolName, collectReferences(values), units);
+      assertOutlineTreeShape(
+        toolName,
+        await outlineUnitNodes(handle),
+        values.map((v) => ({ parentId: str(v.parentId) ?? null, scope: str(v.scope) })),
+      );
       return;
     }
   }
@@ -875,8 +980,8 @@ function novelWrite(handle: NovelHandle, requireApproval: boolean): ToolDef {
       "- paragraph：storyUnitId（推荐 scene 级单元，正文落在大纲树末端）+ text（一句一项——网文范式每句一段）+ rhythm（节奏档位八档之一）+ intensity（情绪强度 1-5）必填；orderKey 可选（4 位大写十六进制组，缺省排到该单元末尾）。rhythm/intensity 对齐场景节奏拍，是情绪曲线检查的数据源。",
       "- volume：title 必填（1-500 字）；orderKey 可选（缺省排到末卷之后）。",
       "- chapter：title 必填；volumeId 可选（缺省=未归卷）；paragraphIds 可选（章内段落有序选择，可跨单元、可拆分合并重排，引用段落须已存在，缺省空选择）；storyUnitId 仅来源提示（只在创建时可带）；orderKey 可选（同卷排序）。",
-      "- story_unit：title 必填（1-500 字）；parentId 缺省=顶层（必须引用已存在单元——不能引用同批先建项，多层结构分批建）；intent 单元意图；synopsis 情节梗概（数百字量级，勿塞正文）；scope 层级（saga/arc/sequence/scene/custom）；planningStatus / realizationStatus 缺省 idea / pending；blockState / abandonment / leaf 可随创建携带（leaf 引用的角色/地点 id 须已存在）。",
-      "- 通用：id 可选自选（^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$，重复报 duplicate_id）；本工具只新建，修改已有实体用 NovelEdit。建树自上而下分批：arc 先落地拿 id，scene 再挂靠。",
+      "- story_unit：title 必填（1-500 字）；parentId 缺省=顶层（必须引用已存在单元——不能引用同批先建项，多层结构分批建）；**层级最多 4 层（全书→幕→幕→场景），最底层场景必须带完整 leaf 计划，场景下不得再挂子节点**；intent 单元意图；synopsis 情节梗概（数百字量级，勿塞正文）；scope 层级（saga/arc/sequence/scene/custom——仅作工具参数，不得出现在作者可见文本）；planningStatus / realizationStatus 缺省 idea / pending；blockState / abandonment / leaf 可随创建携带（leaf 引用的角色/地点 id 须已存在）。",
+      "- 通用：id 可选自选（^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$，重复报 duplicate_id；id 仅作工具参数，不进作者可见文本）；本工具只新建，修改已有实体用 NovelEdit。建树自上而下分批：先建顶层幕拿到 id，再挂其下场景。",
       "",
       "## 返回",
       "items 形态：每项 { id: 变更id, status: \"applied\", version: 新 entityVersion }；自选 id 缺省由宿主生成并在结果回传；整批原子，任一项失败整批不落地。",
@@ -886,7 +991,7 @@ function novelWrite(handle: NovelHandle, requireApproval: boolean): ToolDef {
       "作者：新书，都市异能，先搭第一卷",
       "→ NovelWrite(kind=story_unit, values=[{ title:\"觉醒之弧\", scope:\"arc\", intent:\"主角发现能力并卷入第一场冲突\", synopsis:\"……\" }])",
       "→ NovelWrite(kind=story_unit, values=[{ title:\"雨夜觉醒\", scope:\"scene\", parentId:<上批返回的 arc id>, synopsis:\"雨夜遇袭，能力觉醒\", leaf:{…} }])",
-      "<reasoning>自上而下分批建树：arc 先落地拿到 id，scene 再挂靠；leaf 随场景创建即挂上，后续写作有一致性约束可依。</reasoning>",
+      "<reasoning>自上而下分批建树：顶层幕先落地拿到 id，场景再挂靠；场景设计随场景创建即挂上，后续写作有一致性约束可依。</reasoning>",
       "</example>",
     ].join("\n"),
     parameters: {
@@ -1122,6 +1227,15 @@ async function precheckEdit(
         if (parent !== undefined) assertExists(toolName, units, parent, "父大纲单元");
       }
       await assertReferencesExist(handle, toolName, collectReferences(items.map((i) => i.value)), units);
+      assertOutlineTreeShape(
+        toolName,
+        await outlineUnitNodes(handle),
+        items.map((item) => ({
+          unitId: item.id,
+          parentId: item.value?.parentId === undefined ? undefined : (item.value.parentId as string | null),
+          scope: str(item.value?.scope),
+        })),
+      );
       return;
     }
   }
@@ -1143,7 +1257,7 @@ function novelEdit(handle: NovelHandle, requireApproval: boolean): ToolDef {
       "  - paragraph：text（替换后的完整段落文本，非增量片段）；storyUnitId（移动到另一单元）；orderKey（重排）。",
       "  - volume：title；orderKey。",
       "  - chapter：title；orderKey；volumeId（调整归卷）；paragraphIds（全量替换有序选择——拆分/合并/重排/跨单元/中途收章都靠它，null 清空，引用段落须已存在）。来源提示 storyUnitId 创建后不可改。",
-      "  - story_unit：title；intent；synopsis；scope；planningStatus；realizationStatus；parentId（换父，null=移到顶层）；orderKey（兄弟重排）；blockState（null 清除）；abandonment（null 清除）；leaf（null 删整个计划；字段级替换，集合字段传 null 清空）。",
+      "  - story_unit：title；intent；synopsis；scope（把已有子节点的单元改为 scene 会被拒绝）；planningStatus；realizationStatus；parentId（换父，null=移到顶层；新位置超 4 层或挂到场景下会被拒绝）；orderKey（兄弟重排）；blockState（null 清除）；abandonment（null 清除）；leaf（null 删整个计划；字段级替换，集合字段传 null 清空）。",
       "",
       "## 返回",
       "items 形态（同 NovelWrite：变更 id + applied + 新 entityVersion）；baseRevision 预检过期时整批拒绝并附当前版本——重读后再提交，勿原样重试。",
@@ -1154,7 +1268,7 @@ function novelEdit(handle: NovelHandle, requireApproval: boolean): ToolDef {
       "→ NovelEdit(kind=story_unit, values=[",
       "  { id:<scene-A>, baseRevision:<v>, value:{ realizationStatus:\"completed\" } },",
       "  { id:<scene-B>, baseRevision:<v>, value:{ realizationStatus:\"in-progress\", planningStatus:\"ready\" } } ])",
-      "<reasoning>写完立即标 completed、下一个标 in-progress；父 arc 与全书进度由叶单元自动汇总，不手动改父单元。</reasoning>",
+      "<reasoning>写完立即标 completed、下一个标 in-progress；父幕与全书进度由叶单元自动汇总，不手动改父单元。</reasoning>",
       "</example>",
       "写/改正文用 kind=paragraph，不入大纲字段。先读后改。",
     ].join("\n"),

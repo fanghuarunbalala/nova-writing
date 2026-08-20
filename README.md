@@ -47,11 +47,18 @@
 | --- | --- |
 | ![对话主界面](docs/assets/demo-chat.png) | ![审批清单](docs/assets/demo-approval.png) |
 
-| AskUserQuestions 提问补充信息 | 内容展示区域（大纲 / 正文 / 人物地点） |
+| AskUserQuestions 提问补充信息 | 内容 · 大纲 |
 | --- | --- |
-| ![AskUserQuestions 提问补充信息](docs/assets/demo-plan.png) | ![内容展示区域](docs/assets/demo-content.png) |
+| ![AskUserQuestions 提问补充信息](docs/assets/demo-ask.png) | ![内容 · 大纲](docs/assets/demo-outline.png) |
 
-四种主题样式：宣纸白 / 墨夜 / 黛青 / 雪青。
+| 内容 · 正文 | 内容 · 人物档案 |
+| --- | --- |
+| ![内容 · 正文](docs/assets/demo-maintext.png) | ![内容 · 人物档案](docs/assets/demo-characters.png) |
+
+| 四种主题样式（宣纸白 / 墨夜 / 黛青 / 雪青） |
+| --- |
+| ![主题样式](docs/assets/theme-1.png) ![主题样式](docs/assets/theme-2.png) |
+| ![主题样式](docs/assets/theme-3.png) ![主题样式](docs/assets/theme-4.png) |
 
 ## 快速开始
 

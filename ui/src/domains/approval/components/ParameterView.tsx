@@ -52,13 +52,13 @@ function primitiveText(
   return String(value);
 }
 
-/** id 引用值 → 名称（未命中回退原值）；非引用字段保持枚举翻译。 */
+/** id 引用值 → 名称（未命中不回退内部 id，显示占位）；非引用字段保持枚举翻译。 */
 function refText(
   field: string,
   value: string,
   idNames: ReadonlyMap<string, string> | undefined,
 ): string {
-  if (isIdReferenceField(field)) return idNames?.get(value) ?? value;
+  if (isIdReferenceField(field)) return idNames?.get(value) ?? "未知实体";
   return paramValueLabel(field, value) ?? value;
 }
 

@@ -42,6 +42,10 @@ declare global {
   }
 }
 
+// 启动计时里程碑（console.info 经 main 的 console-message 桥按 [boot] 前缀转发）：
+// 此处 = import 图（@novel/ui barrel 全域）求值完成
+console.info("[boot] renderer modules evaluated");
+
 const bridge = (window.novelApi as { bridge?: unknown } | undefined)?.bridge;
 if (!bridge) {
   throw new Error("window.novelApi.bridge 未暴露（preload 未生效？）");
@@ -93,6 +97,13 @@ interface WorkspaceApi {
   listRecent(): Promise<readonly WorkspaceSessionDto[]>;
   open(reference: { referenceId: string; label: string }): Promise<WorkspaceSessionDto>;
   close(): Promise<void>;
+  /** 在新 GUI 实例中打开（当前实例不动；已打开时主进程弹窗告知并置前持有窗口） */
+  openInNewWindow(reference: { referenceId: string; label: string }): Promise<void>;
+  /** 取出"新窗口打开"派发的启动项目（取出即清，仅一次） */
+  takeStartupWorkspace(): Promise<{ referenceId: string; label: string } | undefined>;
+  /** 新手引导完成标记（主进程文件，跨实例一致可见） */
+  getOnboardingDone(): Promise<boolean>;
+  markOnboardingDone(): Promise<void>;
 }
 const workspaceTransport = electronIpcTransport({ endpoint: bridge as never, channel: "workspace-rpc" });
 const workspaceApi = wrap<WorkspaceApi>(workspaceTransport);
@@ -134,11 +145,14 @@ const platform: FrontendPlatform = {
 };
 
 // workspace 控制器：桥 main 侧目录选择器 + 定位器（经 workspace-rpc）。
+// openInNewWindow/takeStartupWorkspace：切换对话框"新窗口打开"两件套（派发 + 启动自动打开）。
 const workspaceController = new WorkspaceController({
   sessions: {
     listRecent: () => workspaceApi.listRecent(),
     open: (reference) => workspaceApi.open(reference),
     close: () => workspaceApi.close(),
+    openInNewWindow: (reference) => workspaceApi.openInNewWindow(reference),
+    takeStartupWorkspace: () => workspaceApi.takeStartupWorkspace(),
   },
   picker: {
     pickWorkspace: () => workspaceApi.pickWorkspace(),
@@ -184,8 +198,18 @@ const rendererLogger: Logger = {
   close: async () => {},
 };
 
+// 引导完成标记端口：localStorage 多实例互不可见 → 主进程文件持久化（NovelApp 门控用）
+const onboardingPort = {
+  isCompleted: () => workspaceApi.getOnboardingDone(),
+  markCompleted: () => workspaceApi.markOnboardingDone(),
+};
+
 function AppRoot() {
   const windowChrome = useWindowChrome();
+  useEffect(() => {
+    // 首帧 UI commit 后触发（useEffect 在 paint 后）：此前的窗口期由页内 boot-placeholder 覆盖
+    console.info("[boot] app mounted");
+  }, []);
   return (
     <StrictMode>
       <NovelApp
@@ -194,6 +218,7 @@ function AppRoot() {
         platform={platform}
         workspaceController={workspaceController}
         configurationClient={configurationClient}
+        onboardingPort={onboardingPort}
         windowChrome={windowChrome}
       />
     </StrictMode>
@@ -205,6 +230,7 @@ if (rootElement === null) {
   throw new Error("renderer root element 缺失");
 }
 const root = createRoot(rootElement);
+console.info("[boot] react root render start");
 root.render(<AppRoot />);
 
 // 不自动打开：NovelApp 无 current 时显示项目选择页，由用户 chooseAndOpen（走目录选择器）。

@@ -6,6 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Electron](https://img.shields.io/badge/Electron-43-9FEAF9?logo=electron&logoColor=9FEAF9)
 ![pnpm](https://img.shields.io/badge/pnpm-monorepo-F69220)
+![CI](https://github.com/fanghuarunbalala/nova-writing/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## 什么是 Nova Writing

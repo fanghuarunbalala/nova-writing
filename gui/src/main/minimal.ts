@@ -38,6 +38,8 @@ import {
   type CredentialCipher,
   resolveRuntimeAgents,
   serializeSkillsEnv,
+  listSkills,
+  PROJECT_SKILLS_DIR_NAME,
   createConsoleLogger,
   infoLog,
   type LLMessage,
@@ -398,8 +400,22 @@ async function main(): Promise<void> {
   // applyRuntimeEnv 之后赋值——renderer 首次 getRuntimeStatus 远晚于启动完成，值已定型。
   // 设置页据此提示回显模式（provider 修改需重启生效；spawner 在启动时一次决定不补建）
   let providerLive = false;
+  // 技能清单扫描（设置页「技能」面板）：应用级 userData/skills + 项目级 <workspace>/skills
+  //（workspace 随开合变化，闭包现取；禁用名单以 config 当前值为准）
+  const appSkillsRoot = join(app.getPath("userData"), "skills");
   const configServer = new ConfigServer(configStore, {
     runtimeStatus: () => ({ providerLive }),
+    skillsList: async () => {
+      const snapshot = await configStore.get();
+      const workspace = currentWorkspaceRoot;
+      return listSkills({
+        appRoot: appSkillsRoot,
+        ...(workspace !== undefined
+          ? { projectRoot: join(workspace, PROJECT_SKILLS_DIR_NAME) }
+          : {}),
+        disabled: [...(snapshot.skillsDisabled ?? [])],
+      });
+    },
   });
 
   // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*） +

@@ -73,6 +73,8 @@ const configurationClient = {
       return { providerLive: true };
     }
   },
+  // 技能清单（main 实时扫描两级 skills 目录）：旧 server 未暴露时 undefined → 面板显示未装配
+  skillsList: () => configApi.skillsList?.(),
 };
 
 interface WorkspaceSessionDto {

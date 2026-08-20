@@ -6,6 +6,7 @@
 
 import type { ProviderType, ThinkingLevel } from "../runtime/provider/types.js";
 import type { ThinkingMode } from "../runtime/provider/model-info.js";
+import type { SkillsListResult } from "../runtime/skill/listSkills.js";
 
 /** 凭据引用（配置只存引用，密钥经 CredentialCipher 加密落盘） */
 export type CredentialRef = string
@@ -159,4 +160,9 @@ export interface ConfigApi {
 	 * @returns provider 运行形态
 	 */
 	getRuntimeStatus?(): Promise<ProviderRuntimeStatus>
+	/**
+	 * 扫描技能目录并返回清单（可选：宿主注入扫描实现；未注入时方法不存在，设置页显示未装配）
+	 * @returns 技能清单（含生效/禁用状态与目录路径）
+	 */
+	skillsList?(): Promise<SkillsListResult>
 }

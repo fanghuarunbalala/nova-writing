@@ -6,6 +6,7 @@
 import { expose, type ExposedController } from "kkrpc";
 import type { RPCMessage, Transport } from "kkrpc";
 import type { ConfigApi, ProviderRuntimeStatus } from "../contract.js";
+import type { SkillsListResult } from "../../runtime/skill/listSkills.js";
 import { testConnection } from "../connectionTest.js";
 import type { ConfigStore } from "../store.js";
 
@@ -13,15 +14,24 @@ import type { ConfigStore } from "../store.js";
 export class ConfigServer {
 	private readonly store: ConfigStore;
 	private readonly runtimeStatus?: () => ProviderRuntimeStatus;
+	private readonly skillsList?: () => Promise<SkillsListResult>;
 	private controller?: ExposedController;
 
 	/**
 	 * @param store 存储实现（内存 / node 持久化）
 	 * @param deps.runtimeStatus provider 运行形态（宿主注入启动时快照；缺省不暴露 getRuntimeStatus）
+	 * @param deps.skillsList 技能清单扫描（宿主注入目录解析；缺省不暴露 skillsList）
 	 */
-	constructor(store: ConfigStore, deps?: { runtimeStatus?: () => ProviderRuntimeStatus }) {
+	constructor(
+		store: ConfigStore,
+		deps?: {
+			runtimeStatus?: () => ProviderRuntimeStatus;
+			skillsList?: () => Promise<SkillsListResult>;
+		},
+	) {
 		this.store = store;
 		this.runtimeStatus = deps?.runtimeStatus;
+		this.skillsList = deps?.skillsList;
 	}
 
 	/**
@@ -36,6 +46,7 @@ export class ConfigServer {
 			...(this.runtimeStatus === undefined
 				? {}
 				: { getRuntimeStatus: () => Promise.resolve(this.runtimeStatus!()) }),
+			...(this.skillsList === undefined ? {} : { skillsList: () => this.skillsList!() }),
 		};
 		this.controller = expose(api, transport);
 	}

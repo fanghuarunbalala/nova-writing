@@ -12,6 +12,7 @@ import type { ApplicationSettingsStore } from "./ApplicationSettingsStore.js";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
 import { ModelProviderSettingsPanel } from "./ModelProviderSettingsPanel.js";
 import { AgentSettingsPanel } from "./AgentSettingsPanel.js";
+import { SkillsSettingsPanel } from "./SkillsSettingsPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
 import styles from "./SettingsDialog.module.css";
 
@@ -72,6 +73,16 @@ export function SettingsDialog({
               Agent
             </button>
           ) : null}
+          {configuration !== undefined ? (
+            <button
+              type="button"
+              className={styles.navItem}
+              data-active={activeSectionId === "skills"}
+              onClick={() => setActiveSectionId("skills")}
+            >
+              技能
+            </button>
+          ) : null}
           <button
             type="button"
             className={styles.navItem}
@@ -101,6 +112,9 @@ export function SettingsDialog({
           ) : null}
           {activeSectionId === "agents" && configuration !== undefined ? (
             <AgentSettingsPanel configuration={configuration} />
+          ) : null}
+          {activeSectionId === "skills" && configuration !== undefined ? (
+            <SkillsSettingsPanel configuration={configuration} />
           ) : null}
           {activeSectionId === "appearance" ? <AppearanceSettingsPanel /> : null}
           {extensionSection !== undefined && ExtensionSection !== undefined ? (

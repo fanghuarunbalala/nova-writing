@@ -44,6 +44,27 @@ describe("config 域", () => {
 		await server.close();
 	});
 
+	it("getRuntimeStatus：宿主注入启动时快照；未注入回退 providerLive=true", async () => {
+		const store = new InMemoryConfigStore();
+		const [clientT, serverT] = createMemoryTransportPair();
+		const server = new ConfigServer(store, { runtimeStatus: () => ({ providerLive: false }) });
+		await server.start(serverT);
+		const handle = new ConfigHandle(clientT);
+
+		expect(await handle.getRuntimeStatus()).toEqual({ providerLive: false });
+		handle.dispose();
+		await server.close();
+
+		// 未注入：getRuntimeStatus 不经 RPC 暴露，客户端回退（视为已连接，维持现状文案）
+		const [clientT2, serverT2] = createMemoryTransportPair();
+		const server2 = new ConfigServer(store);
+		await server2.start(serverT2);
+		const handle2 = new ConfigHandle(clientT2);
+		expect(await handle2.getRuntimeStatus()).toEqual({ providerLive: true });
+		handle2.dispose();
+		await server2.close();
+	});
+
 	it("resolveSecret 宿主侧解析凭据明文（存储层专用，不经 ConfigApi）", async () => {
 		const store = new InMemoryConfigStore();
 		await store.mutate({

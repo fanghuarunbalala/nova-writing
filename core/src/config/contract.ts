@@ -127,6 +127,12 @@ export type ConnectionTestResult =
 	| { ok: true }
 	| { ok: false; error: string }
 
+/** provider 运行形态（启动时快照，会话期间不变；宿主未接线时客户端回退 providerLive=true） */
+export interface ProviderRuntimeStatus {
+	/** 启动时默认 profile 凭据已解析（对话 spawner 已创建）；false = 回显模式，provider 修改需重启生效 */
+	providerLive: boolean
+}
+
 /** config 对外 API（client wrap / server expose 共用） */
 export interface ConfigApi {
 	/**
@@ -145,4 +151,9 @@ export interface ConfigApi {
 	 * @returns 测试结果（失败附中文原因）
 	 */
 	test(input: ConnectionTestInput): Promise<ConnectionTestResult>
+	/**
+	 * 读取 provider 运行形态（可选：宿主注入启动时快照；未注入时方法不存在，客户端自行回退）
+	 * @returns provider 运行形态
+	 */
+	getRuntimeStatus?(): Promise<ProviderRuntimeStatus>
 }

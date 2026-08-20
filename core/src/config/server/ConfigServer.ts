@@ -5,20 +5,23 @@
 
 import { expose, type ExposedController } from "kkrpc";
 import type { RPCMessage, Transport } from "kkrpc";
-import type { ConfigApi } from "../contract.js";
+import type { ConfigApi, ProviderRuntimeStatus } from "../contract.js";
 import { testConnection } from "../connectionTest.js";
 import type { ConfigStore } from "../store.js";
 
 /** config RPC server */
 export class ConfigServer {
 	private readonly store: ConfigStore;
+	private readonly runtimeStatus?: () => ProviderRuntimeStatus;
 	private controller?: ExposedController;
 
 	/**
 	 * @param store 存储实现（内存 / node 持久化）
+	 * @param deps.runtimeStatus provider 运行形态（宿主注入启动时快照；缺省不暴露 getRuntimeStatus）
 	 */
-	constructor(store: ConfigStore) {
+	constructor(store: ConfigStore, deps?: { runtimeStatus?: () => ProviderRuntimeStatus }) {
 		this.store = store;
+		this.runtimeStatus = deps?.runtimeStatus;
 	}
 
 	/**
@@ -30,6 +33,9 @@ export class ConfigServer {
 			get: () => this.store.get(),
 			mutate: (m) => this.store.mutate(m),
 			test: (input) => testConnection(this.store, input),
+			...(this.runtimeStatus === undefined
+				? {}
+				: { getRuntimeStatus: () => Promise.resolve(this.runtimeStatus!()) }),
 		};
 		this.controller = expose(api, transport);
 	}

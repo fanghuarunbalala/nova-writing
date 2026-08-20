@@ -347,6 +347,31 @@
   color: var(--color-danger);
 }
 
+/* 回显模式常驻提示（启动时未连接真实模型：修改需重启生效） */
+.novel-provider-restart-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+.novel-provider-restart-note svg {
+  flex: none;
+  position: relative;
+  top: 1px;
+}
+
+.novel-provider-restart-note strong {
+  font-weight: var(--fw-semibold);
+  color: var(--color-warn);
+}
+
 /* ============ 设置表单公共（对齐 demo v0.9 setSection/setField/setInput/setSelect） ============ */
 .novel-set-section {
   display: flex;
@@ -714,4 +739,9 @@
 .novel-foot-hint svg {
   flex: none;
   color: var(--color-success);
+}
+
+/* 回显变体：警示图标随文案转 warn */
+.novel-foot-hint[data-warn="true"] svg {
+  color: var(--color-warn);
 }

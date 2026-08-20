@@ -4,6 +4,7 @@ import type {
   ConfigSnapshot,
   ConnectionTestInput,
   ConnectionTestResult,
+  ProviderRuntimeStatus,
 } from "@novel/core";
 
 /** config 客户端（桥 ConfigHandle：load 读 / mutate 写 / test 连接探活） */
@@ -27,4 +28,12 @@ export interface ApplicationConfigurationClient {
    * @returns 测试结果（失败附中文原因）
    */
   test?(input: ConnectionTestInput): Promise<ConnectionTestResult>;
+
+  /**
+   * 读取 provider 运行形态（启动时快照，会话期间不变）。
+   * providerLive=false 为回显模式：provider/密钥修改需重启程序生效。
+   * 可选：宿主未接线时设置页维持现状文案（视为已连接）。
+   * @returns provider 运行形态
+   */
+  runtimeStatus?(): Promise<ProviderRuntimeStatus>;
 }

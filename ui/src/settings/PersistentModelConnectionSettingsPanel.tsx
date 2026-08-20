@@ -1,6 +1,6 @@
 /** Persists Model Profiles (provider/model/baseUrl/credential/capabilities) and the default model. */
 import { useEffect, useState, type FormEvent } from "react";
-import { Check, ChevronDown, ChevronRight, Pencil, PlugZap, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, PlugZap, Plus, Trash2, TriangleAlert } from "lucide-react";
 // 运行时值必须走 browser-safe 的 /client 出口（根入口会拖入 zeromq 等 node 依赖 → renderer 白屏）
 import { ModelInfoRegistry } from "@novel/core/client";
 import type {
@@ -94,6 +94,8 @@ export function PersistentModelConnectionSettingsPanel({
   const [status, setStatus] = useState("正在读取配置…");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  // 启动时快照（会话期间不变）：false = 回显模式，provider 修改需重启生效
+  const [providerLive, setProviderLive] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -107,6 +109,13 @@ export function PersistentModelConnectionSettingsPanel({
         if (!active) return;
         setStatus(`读取失败：${getErrorCode(error)}`);
       },
+    );
+    // 运行形态查询失败静默（undefined = 未知 → 维持现状文案）
+    configuration.runtimeStatus?.().then(
+      (runtime) => {
+        if (active) setProviderLive(runtime.providerLive);
+      },
+      () => {},
     );
     return () => {
       active = false;
@@ -143,7 +152,11 @@ export function PersistentModelConnectionSettingsPanel({
       await configuration.mutate({ op: "model.setDefault", profileId });
       setDraft(undefined);
       setSnapshot(await configuration.load());
-      setStatus("已保存并设为默认 · 对新对话生效");
+      setStatus(
+        providerLive === false
+          ? "已保存并设为默认 · 重启程序后生效"
+          : "已保存并设为默认 · 对新对话生效",
+      );
     } catch (error) {
       setStatus(`保存失败：${getErrorCode(error)}`);
     } finally {
@@ -177,7 +190,11 @@ export function PersistentModelConnectionSettingsPanel({
     try {
       await configuration.mutate({ op: "model.setDefault", profileId });
       setSnapshot(await configuration.load());
-      setStatus("已设为默认模型 · 对新对话生效");
+      setStatus(
+        providerLive === false
+          ? "已设为默认模型 · 重启程序后生效"
+          : "已设为默认模型 · 对新对话生效",
+      );
     } catch (error) {
       setStatus(`更新失败：${getErrorCode(error)}`);
     } finally {
@@ -209,6 +226,14 @@ export function PersistentModelConnectionSettingsPanel({
           <p>模型服务与能力覆盖；密钥由 Host 凭据存储加密保存。</p>
         </div>
       </header>
+
+      {providerLive === false ? (
+        <p className="novel-provider-restart-note" role="note">
+          <TriangleAlert size={12} aria-hidden />
+          回显模式：应用启动时未连接真实模型，新对话不调用大模型。此处保存的修改需
+          <strong>重启程序</strong>后生效。
+        </p>
+      ) : null}
 
       <div className="novel-set-section">
         <b>模型服务</b>
@@ -525,9 +550,18 @@ export function PersistentModelConnectionSettingsPanel({
         </form>
       )}
 
-      <div className="novel-foot-hint">
-        <Check size={12} aria-hidden />
-        Agent 页的 Normal 档 = 此处默认服务，Fast 档在 Agent 页绑定 · 修改对新对话生效，运行中的对话维持原参数
+      <div className="novel-foot-hint" data-warn={providerLive === false ? "true" : undefined}>
+        {providerLive === false ? (
+          <>
+            <TriangleAlert size={12} aria-hidden />
+            当前为回显模式 · 此处修改需重启程序后生效；重启后新对话才会连接真实模型
+          </>
+        ) : (
+          <>
+            <Check size={12} aria-hidden />
+            Agent 页的 Normal 档 = 此处默认服务，Fast 档在 Agent 页绑定 · 修改对新对话生效，运行中的对话维持原参数
+          </>
+        )}
       </div>
 
       <p className="novel-provider-security-note" role="status">

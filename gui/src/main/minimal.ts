@@ -209,7 +209,7 @@ async function applyRuntimeEnv(configStore: NodeApplicationConfigStore): Promise
   infoLog(`[main] runtime settings resolved: ${Object.keys(resolved.agents).join(",")}`);
 }
 
-/** manager：有 provider key 时 spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
+/** manager：providerLive（启动时凭据已解析）spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
 function createManager(
   conversationsRoot: () => string | undefined,
   workspaceProvider: () => string | undefined,
@@ -217,6 +217,7 @@ function createManager(
     managerWs: { url: string; token: string; onConnected: Parameters<typeof createProcessSpawner>[1]["managerWs"]["onConnected"] };
     novelWs: { url: string; token: string };
   },
+  providerLive: boolean,
 ): ConversationManagerServer {
   // server 先声明：内存模式 factory 的 managerWait 需闭包引用（进程内直连同一队列）
   let server: ConversationManagerServer | undefined;
@@ -256,17 +257,16 @@ function createManager(
       return conv;
     },
   };
-  const spawner =
-    process.env.NOVEL_PROVIDER_API_KEY !== undefined
-      ? createProcessSpawner(childScript, {
-          managerWs: {
-            url: transports.managerWs.url,
-            token: transports.managerWs.token,
-            onConnected: transports.managerWs.onConnected,
-          },
-          novelWs: transports.novelWs,
-        })
-      : undefined;
+  const spawner = providerLive
+    ? createProcessSpawner(childScript, {
+        managerWs: {
+          url: transports.managerWs.url,
+          token: transports.managerWs.token,
+          onConnected: transports.managerWs.onConnected,
+        },
+        novelWs: transports.novelWs,
+      })
+    : undefined;
   server = new ConversationManagerServer(factory, spawner, {
     // 启动时无工作区：不扫描；open() 时经 rescope 重绑 <storeDir>/conversations
     storedirRoot: conversationsRoot(),
@@ -375,12 +375,19 @@ async function main(): Promise<void> {
     },
   });
   await configStore.load();
-  const configServer = new ConfigServer(configStore);
+  // provider 运行形态（启动时快照，会话期间不变）：holder 先建、ConfigServer 闭包引用，
+  // applyRuntimeEnv 之后赋值——renderer 首次 getRuntimeStatus 远晚于启动完成，值已定型。
+  // 设置页据此提示回显模式（provider 修改需重启生效；spawner 在启动时一次决定不补建）
+  let providerLive = false;
+  const configServer = new ConfigServer(configStore, {
+    runtimeStatus: () => ({ providerLive }),
+  });
 
-  // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*）+
+  // provider 配置：默认 model profile 的凭据解析为子进程 env（NOVEL_PROVIDER_*） +
   // Agent 运行参数（NOVEL_RUNTIME_SETTINGS）。设置页保存后经 onMutated 重写，
   // 对新 spawn 的对话生效（运行中对话维持启动时快照）。
   await applyRuntimeEnv(configStore);
+  providerLive = process.env.NOVEL_PROVIDER_API_KEY !== undefined;
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）
   const novelWs = await startNovelDbWsServer({ store: publishingStore, token: randomUUID() });
@@ -401,7 +408,7 @@ async function main(): Promise<void> {
       onConnected: (listener) => managerWs.onConversationConnected(listener),
     },
     novelWs: { url: novelWs.url, token: novelWs.token },
-  });
+  }, providerLive);
   managerHolder.manager = manager;
   // wait 队列变化 → 通知 renderer（Phase B 接线 onApprovalsChanged；此处留 hook）
   const uiNotifyHolder: { notify?: () => void } = {};

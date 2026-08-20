@@ -162,6 +162,8 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
   const [savedDraft, setSavedDraft] = useState<RuntimeDraft>();
   const [status, setStatus] = useState("正在读取配置…");
   const [saving, setSaving] = useState(false);
+  // 启动时快照（会话期间不变）：false = 回显模式，provider 修改需重启生效
+  const [providerLive, setProviderLive] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -178,6 +180,13 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
         if (!active) return;
         setStatus(`读取失败：${getErrorCode(error)}`);
       },
+    );
+    // 运行形态查询失败静默（undefined = 未知 → 维持现状文案）
+    configuration.runtimeStatus?.().then(
+      (runtime) => {
+        if (active) setProviderLive(runtime.providerLive);
+      },
+      () => {},
     );
     return () => {
       active = false;
@@ -202,7 +211,11 @@ export function AgentSettingsPanel({ configuration }: AgentSettingsPanelProps) {
       const next = toDraft(loaded);
       setDraft(next);
       setSavedDraft(next);
-      setStatus("已保存，对新对话生效（运行中的对话维持原参数）");
+      setStatus(
+        providerLive === false
+          ? "已保存 · 当前为回显模式，连接真实模型需重启程序"
+          : "已保存，对新对话生效（运行中的对话维持原参数）",
+      );
     } catch (error) {
       setStatus(`保存失败：${error instanceof Error ? error.message : getErrorCode(error)}`);
     } finally {

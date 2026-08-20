@@ -12,6 +12,7 @@ import type {
 	ConfigSnapshot,
 	ConnectionTestInput,
 	ConnectionTestResult,
+	ProviderRuntimeStatus,
 } from "../contract.js";
 
 /** config 客户端 handle */
@@ -48,6 +49,21 @@ export class ConfigHandle {
 	 */
 	async test(input: ConnectionTestInput): Promise<ConnectionTestResult> {
 		return call(() => this.api.test(input), { peer: "config" });
+	}
+
+	/**
+	 * 读取 provider 运行形态（宿主注入的启动时快照）。
+	 * server 未注入 / 查询失败回退 providerLive=true（视为已连接，维持现状文案）。
+	 * @returns provider 运行形态
+	 */
+	async getRuntimeStatus(): Promise<ProviderRuntimeStatus> {
+		try {
+			return await call(() => this.api.getRuntimeStatus?.() ?? Promise.resolve({ providerLive: true }), {
+				peer: "config",
+			});
+		} catch {
+			return { providerLive: true };
+		}
 	}
 
 	/** 释放 handle（断开通道） */

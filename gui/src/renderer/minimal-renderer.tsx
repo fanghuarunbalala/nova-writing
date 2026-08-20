@@ -65,6 +65,14 @@ const configurationClient = {
   load: () => configApi.get(),
   mutate: (m: ConfigMutation) => configApi.mutate(m),
   test: (input: ConnectionTestInput) => configApi.test(input),
+  // provider 运行形态（启动时快照）：旧 server 未暴露方法/查询失败回退 live=true（维持现状文案）
+  runtimeStatus: async () => {
+    try {
+      return await configApi.getRuntimeStatus?.();
+    } catch {
+      return { providerLive: true };
+    }
+  },
 };
 
 interface WorkspaceSessionDto {

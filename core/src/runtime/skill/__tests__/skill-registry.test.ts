@@ -113,6 +113,28 @@ describe("SkillRegistry", () => {
     expect(body).toBe("# 方法论\n步骤…\n");
     await rm(root, { recursive: true, force: true });
   });
+
+  it("readBundledFile：技能内相对路径可读；逃逸/绝对路径抛错；缺文件 undefined；超限截断附尾注", async () => {
+    const root = await makeSkillsRoot();
+    await writeSkill(root, "one", "one", "技能一");
+    await mkdir(join(root, "one", "references"), { recursive: true });
+    await writeFile(join(root, "one", "references", "schemas.md"), "# schema\n字段…\n", "utf8");
+    const registry = new SkillRegistry({ dirs: [{ root, source: "project" }] });
+    await registry.load();
+    const record = registry.get("one")!;
+    expect(await registry.readBundledFile(record, "references/schemas.md")).toContain("# schema");
+    expect(await registry.readBundledFile(record, "references/nope.md")).toBeUndefined();
+    await expect(registry.readBundledFile(record, "../other/SKILL.md")).rejects.toThrowError(/逃逸/);
+    await expect(registry.readBundledFile(record, "C:/x")).rejects.toThrowError(/逃逸/);
+    await expect(registry.readBundledFile(record, "")).rejects.toThrowError(/非法/);
+
+    // 超限截断：>512 KiB 附尾注
+    await writeFile(join(root, "one", "big.txt"), "x".repeat(512 * 1024 + 100), "utf8");
+    const truncated = await registry.readBundledFile(record, "big.txt");
+    expect(truncated!.length).toBeLessThan(512 * 1024 + 200);
+    expect(truncated).toContain("[已截断，原文件");
+    await rm(root, { recursive: true, force: true });
+  });
 });
 
 describe("renderSkillIndex", () => {

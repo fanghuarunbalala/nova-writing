@@ -101,6 +101,7 @@ export class AgentLoop {
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
       caseGuideProvider: config.caseGuideProvider,
+      skillsIndex: config.skillsIndex,
       beforeProviderCall: config.beforeProviderCall,
     });
     // 压缩边界事件桥接：onCompacted 置标记，runTurnLoop / 保险丝路径冲刷为 compacted 事件

@@ -3,3 +3,4 @@
 export * from "./SkillRegistry.js";
 export * from "./skillsEnv.js";
 export * from "./listSkills.js";
+export * from "./skillIndexSection.js";

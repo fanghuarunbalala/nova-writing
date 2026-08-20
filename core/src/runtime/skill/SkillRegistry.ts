@@ -6,7 +6,8 @@
  * 会话启动时构造加载一次，会话期内不可变（对齐工具面装配期确定语义）。
  */
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { realpath } from "node:fs/promises";
+import { join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 /** 技能来源层级 */
@@ -53,6 +54,12 @@ export const SKILL_DESCRIPTION_MAX_LENGTH = 1024;
 
 /** SKILL.md 正文读取上限（对齐 NovelGlobalConstraints 的 256 KiB） */
 export const SKILL_BODY_MAX_BYTES = 256 * 1024;
+
+/** 捆绑资源文件读取上限（对齐 runtime/files Read 的 512 KiB；超限截断附尾注） */
+export const BUNDLED_FILE_MAX_CHARS = 512 * 1024;
+
+/** 技能内相对路径长度上限 */
+const PATH_MAX = 1024;
 
 /** SKILL.md 文件名（开放标准固定） */
 export const SKILL_FILE_NAME = "SKILL.md";
@@ -183,6 +190,52 @@ export class SkillRegistry {
     const body = parsed?.body ?? raw;
     return body.length > SKILL_BODY_MAX_BYTES ? body.slice(0, SKILL_BODY_MAX_BYTES) : body;
   }
+
+  /**
+   * 读取技能捆绑资源文件（references/scripts 等技能内相对路径）。
+   * 技能级只读小沙盒：解析后不得逃逸技能目录（拒绝绝对路径与 `..`），
+   * realpath 防符号链接逃逸（对齐 runtime/files 的防护强度）。
+   * @param record 技能记录（须已发现）
+   * @param path 技能内相对路径（如 "references/schemas.md"）
+   * @returns 文件文本（超 512 KiB 截断并附尾注）；路径非法抛错、文件不存在返回 undefined
+   */
+  async readBundledFile(record: SkillRecord, path: string): Promise<string | undefined> {
+    if (path.length === 0 || path.includes("\0") || path.length > PATH_MAX) {
+      throw new Error(`非法的技能内路径: ${path}`);
+    }
+    const abs = resolve(record.dir, path);
+    const rel = relative(record.dir, abs);
+    if (rel === "" || rel.startsWith("..") || rel.split(sep)[0] === "..") {
+      throw new Error(`路径逃逸技能目录: ${path}`);
+    }
+    // symlink 防护：真实位置必须仍在技能目录内
+    const dirReal = await realpathSafe(record.dir);
+    const real = await realpathSafe(abs);
+    if (dirReal !== undefined && real !== undefined) {
+      const realRel = relative(dirReal, real);
+      if (realRel.startsWith("..") || realRel.split(sep)[0] === "..") {
+        throw new Error(`路径经符号链接逃逸技能目录: ${path}`);
+      }
+    }
+    let content: string;
+    try {
+      content = await readFile(abs, "utf8");
+    } catch {
+      return undefined;
+    }
+    return content.length > BUNDLED_FILE_MAX_CHARS
+      ? `${content.slice(0, BUNDLED_FILE_MAX_CHARS)}\n\n[已截断，原文件 ${content.length} 字符]`
+      : content;
+  }
+}
+
+/** realpath 包装：路径不存在返回 undefined */
+async function realpathSafe(p: string): Promise<string | undefined> {
+  try {
+    return await realpath(p);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -231,12 +284,14 @@ function parseSkillRecord(
 }
 
 /**
- * 渲染技能索引（skill 工具 promptDetail.guidance 内容）：仅 name + description
+ * 渲染技能索引（skill.index 动态段内容）：仅 name + description
  * 单行清单 + 使用指引，正文不进 prompt（渐进式披露第一层）。空清单返回空串（整段省略）。
- * @param skills 生效技能清单
+ * @param skills 生效技能条目（SkillRecord 或其 name/description 投影均可）
  * @returns 索引文本（空串 = 无技能，省略）
  */
-export function renderSkillIndex(skills: readonly SkillRecord[]): string {
+export function renderSkillIndex(
+  skills: readonly { readonly name: string; readonly description: string }[],
+): string {
   if (skills.length === 0) return "";
   const lines = [
     "# 技能（Skills）",

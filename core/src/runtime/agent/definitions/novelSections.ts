@@ -36,8 +36,9 @@ import {
   novelProseStandardSection,
   novelPublicationStandardSection,
 } from "../../prompt/sections/novelStandards.js";
+import { skillIndexSection } from "../../skill/skillIndexSection.js";
 
-/** novel 域段注册表（id@version；24 段：main 9 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3） */
+/** novel 域段注册表（id@version；25 段：main 10 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -50,6 +51,8 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   novelGlobalConstraintsSection,
   toolPolicySection,
   toolGuidanceSection,
+  // 技能索引（skill.index，渐进披露第一层；快照由宿主装配期注入，main recipe 引用）
+  skillIndexSection,
   // subagent 共享段（explorer/compose recipe 引用）
   contextReliabilitySection,
   completionContractSection,

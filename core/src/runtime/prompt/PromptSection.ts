@@ -31,6 +31,23 @@ export interface CaseGuideSnapshot {
 }
 
 /**
+ * 技能索引快照：会话启动时由宿主从 SkillRegistry.effective() 派生一次
+ * （会话期静态，非每调用读盘），skill.index 动态段渲染渐进披露第一层。
+ * Skills index snapshot: derived once at conversation start by the host from
+ * SkillRegistry.effective() (conversation-static, not read per call); the
+ * skill.index dynamic section renders the first progressive-disclosure layer.
+ */
+export interface SkillsIndexSnapshot {
+  /** 生效技能条目（仅 name + description，不含路径与正文） */
+  readonly entries: readonly {
+    /** 技能名 */
+    readonly name: string;
+    /** 简介 */
+    readonly description: string;
+  }[];
+}
+
+/**
  * 动态段渲染输入：LoopContext 每 provider call 组装（workdir/platform/modelId
  * 来自 LoopContext 自身状态与 run 配置），仅 novelGlobalConstraints 由宿主注入。
  * Dynamic section render input: assembled per provider call by LoopContext
@@ -51,6 +68,8 @@ export interface DynamicPromptSectionInput {
   readonly novelGlobalConstraints?: NovelGlobalConstraintsSnapshot;
   /** 案例引导快照（宿主每调用注入；缺失时规范段仅省略「参考案例」小节） */
   readonly caseGuide?: CaseGuideSnapshot;
+  /** 技能索引快照（宿主装配期注入一次、会话期静态；缺失或空时 skill.index 段省略） */
+  readonly skills?: SkillsIndexSnapshot;
 }
 
 /**

@@ -199,6 +199,17 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   if (opts.extraTools !== undefined) {
     capability.toolDefs.push(...opts.extraTools);
   }
+  // 技能索引快照（skill.index 动态段数据源）：装配期从生效清单派生一次，
+  // 会话期静态（registry 已 load 完成后调用）
+  const skillsIndex =
+    opts.skills !== undefined && opts.skills.registry.effective().length > 0
+      ? {
+          entries: opts.skills.registry.effective().map((s) => ({
+            name: s.name,
+            description: s.description,
+          })),
+        }
+      : undefined;
   const dispatcher = new MapToolDispatcher(capability.toolDefs);
   return new AgentLoop({
     workspace: opts.workspace,
@@ -218,6 +229,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     platform: opts.platform,
     novelConstraintsProvider: opts.novelConstraintsProvider,
     caseGuideProvider: opts.caseGuideProvider,
+    skillsIndex,
     composeState,
     beforeProviderCall: opts.beforeProviderCall,
   });

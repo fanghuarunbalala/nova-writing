@@ -12,8 +12,8 @@
  * novel.identity → novel.system → novel.doing-tasks → novel.actions →
  * novel.communication → core.runtime.protocol → novel.story_appeal →
  * novel.outline_standard → novel.prose_standard → novel.publication_standard →
- * tool.policy(dynamic) → tool.guidance(dynamic) → core.environment(dynamic) →
- * novel.global_constraints(dynamic)
+ * tool.policy(dynamic) → tool.guidance(dynamic) → skill.index(dynamic) →
+ * core.environment(dynamic) → novel.global_constraints(dynamic)
  */
 import {
   AgentCommunicationPolicy,
@@ -26,10 +26,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** Novel Agent 声明式定义（definitionVersion 1.3.0：接入 runtime.skills 技能组） */
+/** Novel Agent 声明式定义（definitionVersion 1.4.0：技能索引迁至 skill.index 专属动态段） */
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.3.0",
+  definitionVersion: "1.4.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -45,6 +45,7 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.publication_standard"),
     new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
+    new PromptSectionItem("skill.index"),
     new PromptSectionItem("core.environment"),
     new PromptSectionItem("novel.global_constraints"),
   ]),

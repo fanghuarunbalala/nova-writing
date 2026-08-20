@@ -247,7 +247,7 @@ interface McpServerConfig {
 
 M1–M5 全部落地，与原稿的三处实施性偏差（功能语义不变）：
 
-1. **技能索引注入通道**：原稿 §8.2 的「`skills.index` 独立动态段」实现为 `skill` 工具的 `promptDetail.guidance`——由既有 `tool.guidance` 动态段每 provider call 渲染，效果等价（索引仅含 name + description、空清单省略），省去 DynamicPromptSectionInput 的新增注入缝。
+1. **技能索引注入通道**：原稿 §8.2 的「`skills.index` 独立动态段」曾实施为 `skill` 工具的 `promptDetail.guidance`（省一个注入缝），后修订回归原稿设计——现落地为 **`skill.index` 专属动态段**（数据经 `LoopContext.skillsIndex` 装配期快照注入，会话期静态；`skill` 工具不再携带 promptDetail）。另按 F5 增补：`skill` 工具支持可选 `path` 参数读取技能捆绑资源（references/ 等技能内相对路径，技能级只读小沙盒 + symlink 防护，512 KiB 截断），修复应用级技能（`<userData>/skills`，含内置 skill-creator）捆绑文件在 workspace 沙盒外不可读的死角。
 2. **MCP 连接时序约束**：子进程须在向 manager register 报到前完成 MCP 连接（spawner 报到超时 15s 自 spawn 起算），故连接为**并行**执行且单台超时压至 8s；超时服务器记失败缺席，不阻断会话。
 3. **stdio 孤儿清理**：dev/独立脚本路径 stdin end 时显式 `close()` 后退出；托管路径（CMS kill 子进程）依赖 MCP stdio 规范的服务器自杀契约（stdin EOF 退出）。Windows `npx.cmd` 解析由 SDK 内置 cross-spawn 原生覆盖（本机实测 spawn+握手+调用 558ms）。
 

@@ -30,6 +30,8 @@ export interface StoryOutlineTreeNode {
    * 顶层幕用中文序数，其下用点分数字（序号段数即层级，动态计算）。
    */
   readonly ordinal: string;
+  /** title 自带编号前缀（「一、xxx」「1.1 xxx」）——脏数据警示，展示时不叠加动态序号 */
+  readonly numberedTitle: boolean;
   /** 层级超深（序号段数 > 3，即全书之下超过 3 层）——存量脏数据警示 */
   readonly overDepth: boolean;
   readonly blockState: StoryUnitBlockState | undefined;
@@ -64,6 +66,24 @@ export function ordinalLabel(ordinal: string): string {
   return ordinal.includes(".") ? `${ordinal} ` : `${ordinal}、`;
 }
 
+/**
+ * title 是否自带编号前缀（「一、」「1.1 」「1.1」「1、」等——LLM 落库脏数据）。
+ * 宽匹配、宁误判不漏判：误判（如「3.14 的浪漫」）只是该行少显示动态序号，
+ * 漏判则出现「三、一、xxx」双重编号。
+ */
+const ORDINAL_PREFIX_RE =
+  /^(?:[一二三四五六七八九十百零两]+[、．.]|\d+(?:\.\d+)*[\s、．.]?(?=\S))/;
+
+export function hasOrdinalPrefix(title: string): boolean {
+  return ORDINAL_PREFIX_RE.test(title.trimStart());
+}
+
+/** 序号 + 标题 → 显示文本；title 自带编号前缀时原样返回（不叠加动态序号） */
+export function composeTitle(ordinal: string, title: string): string {
+  if (hasOrdinalPrefix(title)) return title;
+  return `${ordinalLabel(ordinal)}${title}`;
+}
+
 /** 数字路径 → 序号（段数 1 → 中文序数；≥2 → 点分；>3 段 = 超深） */
 export function ordinalOfPath(path: readonly number[]): { ordinal: string; overDepth: boolean } {
   if (path.length === 0) return { ordinal: "", overDepth: false };
@@ -73,12 +93,13 @@ export function ordinalOfPath(path: readonly number[]): { ordinal: string; overD
 
 export const StoryOutlineTreeProjection = {
   build(units: readonly StoryUnit[]): readonly StoryOutlineTreeNode[] {
-    interface MutableNode extends Omit<StoryOutlineTreeNode, "children" | "depth" | "parentTitle" | "ordinal" | "overDepth"> {
+    interface MutableNode extends Omit<StoryOutlineTreeNode, "children" | "depth" | "parentTitle" | "ordinal" | "overDepth" | "numberedTitle"> {
       children: MutableNode[];
       depth: number;
       parentTitle: string | undefined;
       ordinal: string;
       overDepth: boolean;
+      numberedTitle: boolean;
     }
     const nodes = new Map<string, MutableNode>();
     for (const unit of units) {
@@ -95,6 +116,7 @@ export const StoryOutlineTreeProjection = {
         parentTitle: undefined,
         ordinal: "",
         overDepth: false,
+        numberedTitle: hasOrdinalPrefix(unit.title),
         blockState: unit.blockState,
         abandonment: unit.abandonment,
         blockedReason:

@@ -12,6 +12,7 @@
  *   批次 id imp-bNNNNNN（= 批文件名，manifest 引用；进度信号游标）
  *   段落 id imp-pNNNNNN（每自然段一条 Paragraph）
  *   卷 id imp-vol-NN / 章 id imp-ch-NNNN / 段落锚点单元 id imp-anchor
+ *   全书根 story unit id imp-saga（预建；ProjectImporter 的幕一律挂其下）
  */
 import { join } from "node:path";
 
@@ -60,3 +61,6 @@ export const IMPORT_ANCHOR_UNIT_ID = "imp-anchor";
 
 /** 锚点单元标题 */
 export const IMPORT_ANCHOR_UNIT_TITLE = "导入稿件";
+
+/** 全书根 story unit id（落库预建 scope=saga；ProjectImporter 的幕一律挂其下，杜绝游离顶层幕） */
+export const IMPORT_SAGA_UNIT_ID = "imp-saga";

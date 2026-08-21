@@ -148,6 +148,19 @@ describe("ProjectImportService", () => {
 			// 正文逐字一致
 			expect(structure.chapters[1]!.texts).toEqual(["转折", "雨停了，桥上有人等他。", "那人没有回头。"]);
 
+			// 预建全书根 saga（ProjectImporter 的幕一律挂其下）+ 段落锚点
+			const outline = (await store.query({ op: "outline.get" })) as {
+				units: Array<{ id: string; title: string; scope?: string; parentId?: string; orderKey: string }>;
+			};
+			const saga = outline.units.find((u) => u.id === "imp-saga");
+			expect(saga).toMatchObject({
+				title: "旧稿", // 源文件名（旧稿.txt）去扩展名
+				scope: "saga",
+				parentId: undefined,
+				orderKey: "0002",
+			});
+			expect(outline.units.find((u) => u.id === "imp-anchor")).toBeDefined();
+
 			// 拆分产物：批次文件 + manifest + import.json
 			const batch1 = readFileSync(batchFilePath(workspaceRoot, batchIdOf(1)), "utf8");
 			expect(batch1).toBe("启程\n\n夜色落下，他提刀出门。\n\n街上无人，只有风声。");

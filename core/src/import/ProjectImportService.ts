@@ -15,11 +15,13 @@ import { parseBookText, type ParsedBook, type ParsedChapter } from "../library/B
 import type { NovelStore } from "../novel/store.js";
 import type { NovelMutation } from "../novel/contract/mutation.js";
 import type { ParagraphId, PublicationVolumeId, StoryUnitId } from "../novel/model/id.js";
+import type { OrderKey } from "../novel/model/outline.js";
 import { readImportSource, type ImportSourceContent } from "./ImportSourceReader.js";
 import { ImportError } from "./ImportError.js";
 import {
 	IMPORT_ANCHOR_UNIT_ID,
 	IMPORT_ANCHOR_UNIT_TITLE,
+	IMPORT_SAGA_UNIT_ID,
 	batchFilePath,
 	batchIdOf,
 	importManifestPath,
@@ -162,8 +164,9 @@ export class ProjectImportService {
 			"utf8",
 		);
 
-		// ② novel.db：锚点单元 → 卷 → （每章：段落插入 → 章创建引用段落）
-		const mutations = buildMutations(resolved);
+		// ② novel.db：锚点单元 → 全书根 saga → 卷 → （每章：段落插入 → 章创建引用段落）
+		// 全书根标题用源文件名（去扩展名）：确定性可得，agent 解构时可按内容修正
+		const mutations = buildMutations(resolved, source.sourceName.replace(/\.(txt|zip)$/i, ""));
 		const totalChunks = Math.ceil(mutations.length / MUTATE_CHUNK);
 		let chunkSeq = 0;
 		for (let i = 0; i < mutations.length; i += MUTATE_CHUNK) {
@@ -465,14 +468,23 @@ function resolvePlan(parsed: ParsedBook, plan: ImportPlan): ResolvedPlan {
 	return { volumes, chapters };
 }
 
-/** 落库变更序列（锚点单元 → 卷 → 每章：段落插入 → 章创建） */
-function buildMutations(resolved: ResolvedPlan): NovelMutation[] {
+/** 落库变更序列（锚点单元 → 全书根 saga → 卷 → 每章：段落插入 → 章创建） */
+function buildMutations(resolved: ResolvedPlan, bookTitle: string): NovelMutation[] {
 	const mutations: NovelMutation[] = [
 		{
 			op: "outline.storyUnit.create",
 			id: IMPORT_ANCHOR_UNIT_ID,
 			title: IMPORT_ANCHOR_UNIT_TITLE,
 			scope: "custom",
+			planningStatus: "ready",
+			realizationStatus: "completed",
+		},
+		{
+			op: "outline.storyUnit.create",
+			id: IMPORT_SAGA_UNIT_ID,
+			title: bookTitle,
+			scope: "saga",
+			orderKey: "0002" as OrderKey,
 			planningStatus: "ready",
 			realizationStatus: "completed",
 		},

@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import type { StoryOutlineTreeNode } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
-import { ordinalLabel } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
+import { composeTitle } from "../../../domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import type { StoryOutlineTreeStore } from "../../../domains/novel/outline/store/StoryOutlineTreeStore.js";
 import {
   ABANDON_REASON_LABEL,
@@ -168,10 +168,11 @@ export function OutlineUnitInspectorPanel({
           <StatusChip variant={scope.variant} title={scope.label}>
             {scope.label}
           </StatusChip>
-          <h2 className={styles.title}>{`${ordinalLabel(unit.ordinal)}${unit.title}`}</h2>
+          <h2 className={styles.title}>{composeTitle(unit.ordinal, unit.title)}</h2>
         </div>
         <div className={styles.unitSub}>
           {unit.parentTitle !== undefined ? `父 ${unit.parentTitle}` : "顶层单元"}
+          {unit.numberedTitle ? " · 标题自带编号前缀（编号由界面按结构动态生成），建议改为纯标题" : ""}
           {unit.overDepth ? " · 层级超过 4 层（全书 → 幕 → 幕 → 场景），建议整理" : ""}
         </div>
         <div className={styles.statRow}>

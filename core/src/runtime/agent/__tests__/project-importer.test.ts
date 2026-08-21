@@ -23,12 +23,15 @@ function inMemoryHandle(store: NovelStore) {
 }
 
 function build() {
+	const handle = inMemoryHandle(new InMemoryNovelStore());
 	const loop = buildNovelAgent({
 		workspace: "C:/fake/workspace",
 		provider: {} as unknown as Provider,
-		handle: inMemoryHandle(new InMemoryNovelStore()),
+		handle,
 		conversationId: "conv-import-test",
 		definition: projectImporterAgentDefinition,
+		// novel.import 组（NovelImportText）：原始（未守卫）handle 写通道
+		importText: { handle: handle as never },
 	});
 	// AgentLoop.context 为 TS private（编译期），运行时属性可访问——取工具面断言
 	const context = loop as unknown as { context: { agentCapability: { toolDefs: ToolDef[] } } };
@@ -43,9 +46,9 @@ describe("ProjectImporter 定义与装配", () => {
 		expect(() => build()).not.toThrow();
 	});
 
-	it("工具面 = novel 后台子集：todo/files/entities 在，ask/compose/subagent 不在", () => {
+	it("工具面 = novel 后台子集：todo/files/entities/import 在，ask/compose/subagent 不在", () => {
 		const { tools } = build();
-		for (const name of ["TodoWrite", "Read", "Glob", "Write", "Edit", "NovelRead", "NovelWrite", "NovelEdit", "NovelDelete"]) {
+		for (const name of ["TodoWrite", "Read", "Glob", "Write", "Edit", "NovelRead", "NovelWrite", "NovelEdit", "NovelDelete", "NovelImportText"]) {
 			expect(tools.has(name), `缺少工具 ${name}`).toBe(true);
 		}
 		for (const name of ["AskUserQuestion", "EnterComposeMode", "ExitComposeMode", "Agent", "TaskOutput", "TaskStop", "LibraryRead"]) {

@@ -370,8 +370,12 @@ await skillRegistry.load();
 	}
 	// ProjectImporter 章卷一致守卫：handle 层拒绝卷/章/段落写（publication.* / paragraph.*）。
 	// novel.entities 的 NovelWrite 是 kind 分发通用工具（工具名级 deny 挡不住 kind），
-	// 在 handle 收口为确定性双保险——写库面只剩 outline.*/character.*/location.*
+	// 在 handle 收口为确定性双保险——写库面只剩 outline.*/character.*/location.*。
+	// 例外通道：NovelImportText（novel.import 组）持原始 handle 做确定性区间导入
+	// （paragraph.insert + 章回填；参数面无文本，正文从批次文件搬运）。
+	let importerRawHandle: NovelHandle | undefined;
 	if (isImporter) {
+		importerRawHandle = novelHandle;
 		novelHandle = guardImporterHandle(novelHandle);
 	}
 
@@ -722,6 +726,10 @@ await skillRegistry.load();
 			// ProjectImporter：novel 装配 + 派生定义（仅换 prompt 与工具面；后台无人值守，
 			// definition 已裁掉 ask/compose 组且 delegation disabled）
 			...(isImporter ? { definition: projectImporterAgentDefinition } : {}),
+			// novel.import 组（NovelImportText）：原始 handle 确定性写通道
+			...(isImporter && importerRawHandle !== undefined
+				? { importText: { handle: importerRawHandle } }
+				: {}),
 			conversationId,
 		listeners: journal !== undefined ? [journalListener(journal)] : undefined,
 		runMessages,

@@ -106,7 +106,9 @@ export function ProjectImportDialog({ open, api, onDismiss, onNotify, onImported
   const handlePick = async () => {
     setError(undefined);
     try {
+      console.info("[import-dialog] pick RPC start");
       const picked = await api.projectImport.pickImportFile();
+      console.info("[import-dialog] pick RPC resolved", JSON.stringify(picked));
       if (picked === null) return;
       setSourcePath(picked.sourcePath);
       setPreviewing(true);
@@ -115,12 +117,15 @@ export function ProjectImportDialog({ open, api, onDismiss, onNotify, onImported
         const previewApi = withCallOptions(api.projectImport, { timeout: PREVIEW_TIMEOUT_MS });
         const preview = await previewApi.previewImport(picked.sourcePath);
         setPlan(preview);
+        // 成功路径同样复位 previewing——busy = previewing || creating，泄漏会永久锁死弹窗
+        setPreviewing(false);
       } catch (err) {
         setPreviewing(false);
         setSourcePath(undefined);
         onNotify("danger", `解析失败：${errText(err)}`);
       }
     } catch (err) {
+      console.error("[import-dialog] pick RPC failed", err);
       onNotify("danger", `文件选择失败：${errText(err)}`);
     }
   };
@@ -148,14 +153,18 @@ export function ProjectImportDialog({ open, api, onDismiss, onNotify, onImported
     setError(undefined);
     try {
       // 任务式：RPC 即刻返回（落库在后台进程执行），终态经 createProgress 轮询
+      console.info("[import-dialog] create RPC start");
       const result = await api.projectImport.createProjectFromImport({ sourcePath, plan });
+      console.info("[import-dialog] create RPC resolved", JSON.stringify(result));
       if (result.canceled) {
+        console.info("[import-dialog] target pick canceled → unlock");
         setCreating(false);
         onNotify("info", "已取消选择项目位置");
         return;
       }
       // creating 维持 true——轮询 effect 驱动至终态后交回 onImported
     } catch (err) {
+      console.error("[import-dialog] create RPC failed", err);
       setCreating(false);
       setError(errText(err));
     }

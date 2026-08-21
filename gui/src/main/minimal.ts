@@ -4,6 +4,7 @@
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen } from "electron";
+import type { OpenDialogOptions, SaveDialogOptions } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -632,7 +633,7 @@ async function main(): Promise<void> {
         ? new BookImportService({ service: libraryService, spawner: analysisSpawner, libraryRoot })
         : undefined,
     pickFile: async () => {
-      const result = await dialog.showOpenDialog({
+      const result = await openDialogModal({
         title: "选择完本文本",
         properties: ["openFile"],
         filters: [{ name: "文本文档", extensions: ["txt"] }],
@@ -671,10 +672,11 @@ async function main(): Promise<void> {
   const projectImportFace = createProjectImportFace({
     service: projectImportService,
     runner: () => projectImportRunner,
+    logger: projectImportLogger,
     workspaceRoot: () => currentWorkspaceRoot,
     store: () => currentNovelStore,
     pickFile: async () => {
-      const result = await dialog.showOpenDialog({
+      const result = await openDialogModal({
         title: "选择要导入的书稿",
         properties: ["openFile"],
         filters: [{ name: "书稿文本", extensions: ["txt", "zip"] }],
@@ -687,19 +689,22 @@ async function main(): Promise<void> {
     allowedSources: () => allowedImportSources,
     // 新建项目目录：与「新建项目」同款 save 对话框（标题区分场景）
     createWorkspaceDir: async () => {
+      infoLog("[import-create] requesting target dir (save dialog)");
       const lastRoot = [...registryEntries].sort((a, b) =>
         b.lastOpenedAt.localeCompare(a.lastOpenedAt),
       )[0]?.workspaceRoot;
-      const result = await dialog.showSaveDialog({
+      const result = await saveDialogModal({
         title: "新建导入项目文件夹",
         buttonLabel: "新建并导入",
         defaultPath: lastRoot !== undefined ? join(dirname(lastRoot), "新建项目") : undefined,
         properties: ["createDirectory", "showHiddenFiles"],
       });
       if (result.canceled || result.filePath === undefined || result.filePath === "") {
+        infoLog("[import-create] target canceled → rpc will return {canceled:true}");
         return undefined;
       }
       const root = result.filePath;
+      infoLog(`[import-create] target picked root=${root}`);
       try {
         mkdirSync(root, { recursive: true });
       } catch (e) {
@@ -792,6 +797,36 @@ async function main(): Promise<void> {
 
   // 主窗口引用（IPC sender 校验 + 定向发送；窗口创建晚于端点注册）
   let mainWindow: BrowserWindow | undefined;
+
+  // 系统对话框统一挂主窗口（模态）：不挂窗口的非模态框在 Windows 会被主窗口压到
+  // 后面、用户找不到（表现：文件/保存框"看不见"，前端弹窗又在 pick/creating 期间
+  // 锁定 → 整个流程无法取消）。窗口未建/已销毁时退回非模态。上方 face 的 pickFile
+  // 等为惰性闭包，调用时 mainWindow 已赋值（同"窗口创建晚于端点注册"既有模式）。
+  // show/done 日志：诊断"对话框关闭后前端 RPC 未 resolve"类断链（时间戳对照）。
+  const openDialogModal = (options: OpenDialogOptions) => {
+    const win = mainWindow !== undefined && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    infoLog(`[dialog] show kind=open modal=${win !== undefined} title=${String(options.title ?? "")}`);
+    return (win !== undefined ? dialog.showOpenDialog(win, options) : dialog.showOpenDialog(options)).then(
+      (result) => {
+        infoLog(
+          `[dialog] done kind=open canceled=${result.canceled} picked=${result.filePaths[0] ?? "-"}`,
+        );
+        return result;
+      },
+    );
+  };
+  const saveDialogModal = (options: SaveDialogOptions) => {
+    const win = mainWindow !== undefined && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    infoLog(`[dialog] show kind=save modal=${win !== undefined} title=${String(options.title ?? "")}`);
+    return (win !== undefined ? dialog.showSaveDialog(win, options) : dialog.showSaveDialog(options)).then(
+      (result) => {
+        infoLog(
+          `[dialog] done kind=save canceled=${result.canceled} picked=${result.filePath ?? "-"}`,
+        );
+        return result;
+      },
+    );
+  };
 
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）。
   // 安全：入站消息仅接受主窗口 sender（防注入 frame/webview 冒名调用）；
@@ -1096,7 +1131,7 @@ async function main(): Promise<void> {
 
   const workspaceApi = {
     pickWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
-      const result = await dialog.showOpenDialog({
+      const result = await openDialogModal({
         title: "打开小说项目",
         properties: ["openDirectory", "createDirectory"],
       });
@@ -1111,7 +1146,7 @@ async function main(): Promise<void> {
       const lastRoot = [...registryEntries].sort((a, b) =>
         b.lastOpenedAt.localeCompare(a.lastOpenedAt),
       )[0]?.workspaceRoot;
-      const result = await dialog.showSaveDialog({
+      const result = await saveDialogModal({
         title: "新建项目文件夹",
         buttonLabel: "新建",
         defaultPath: lastRoot !== undefined ? join(dirname(lastRoot), "新建项目") : undefined,
@@ -1374,11 +1409,11 @@ async function main(): Promise<void> {
       typeof first === "object" && first !== null && "message" in first
         ? (first as { message: unknown }).message
         : args[1];
-    // 按级别分流：error/warning 进 stderr；[boot] 前缀的 info 一并转发（附启动相对毫秒，
-  // 其余 info 不转发避免污染输出）
+    // 按级别分流：error/warning 进 stderr；[boot]/[import-dialog] 前缀的 info 一并转发
+    // （附启动相对毫秒，其余 info 不转发避免污染输出）
     if (level === 3 || level === "error") console.error(`[renderer] ${String(message)}`);
     else if (level === 2 || level === "warning") console.warn(`[renderer] ${String(message)}`);
-    else if (String(message).startsWith("[boot]"))
+    else if (String(message).startsWith("[boot]") || String(message).startsWith("[import-dialog]"))
       console.log(`[renderer] ${String(message)} (+${Date.now() - bootT0}ms)`);
   });
   win.webContents.on("dom-ready", () => bootLog("renderer dom-ready"));

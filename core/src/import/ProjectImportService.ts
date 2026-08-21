@@ -13,14 +13,13 @@ import { dirname, join } from "node:path";
 import type { Logger } from "../log/Logger.js";
 import { parseBookText, type ParsedBook, type ParsedChapter } from "../library/BookTextParser.js";
 import type { NovelStore } from "../novel/store.js";
-import type { NovelMutation } from "../novel/contract/mutation.js";
+import type { NovelMutation, NovelRevision } from "../novel/contract/mutation.js";
 import type { ParagraphId, PublicationVolumeId, StoryUnitId } from "../novel/model/id.js";
 import type { OrderKey } from "../novel/model/outline.js";
 import { readImportSource, type ImportSourceContent } from "./ImportSourceReader.js";
 import { ImportError } from "./ImportError.js";
 import {
 	IMPORT_ANCHOR_UNIT_ID,
-	IMPORT_ANCHOR_UNIT_TITLE,
 	IMPORT_SAGA_UNIT_ID,
 	batchFilePath,
 	batchIdOf,
@@ -54,6 +53,10 @@ interface ImportManifestEntry {
 	readonly chapterTitle: string;
 	readonly chars: number;
 	readonly file: string;
+	/** 该批首段全书序（1 起；v2 骨架化导入起写入——段落随场景导入的坐标系） */
+	readonly paraStart?: number;
+	/** 该批末段全书序（含） */
+	readonly paraEnd?: number;
 }
 
 /** 落库用确认稿章（计划标题/归属 + 解析批次） */
@@ -135,7 +138,7 @@ export class ProjectImportService {
 		const resolved = resolvePlan(parsed, input.plan);
 		await this.assertEmptyStore(input.store);
 
-		// ① 拆分产物（agent 通读单元）：原文 + 批次文件 + manifest
+		// ① 拆分产物（agent 通读单元）：原文 + 批次文件 + manifest（含每批段落全书序区间）
 		await mkdir(importSourceDir(input.workspaceRoot), { recursive: true });
 		await mkdir(importParagraphsDir(input.workspaceRoot), { recursive: true });
 		const sourceFile = sanitizeFileName(source.sourceName);
@@ -143,18 +146,25 @@ export class ProjectImportService {
 		const manifest: ImportManifestEntry[] = [];
 		const totalBatches = resolved.chapters.reduce((n, c) => n + c.batches.length, 0);
 		let batchSeq = 0;
+		// 段落全书序游标：与 buildMutations 拆分同构（split("\n\n") + trim + 跳空），
+		// manifest 记录每批 [paraStart, paraEnd]——NovelImportText 区间导入的坐标系
+		let totalParagraphs = 0;
 		for (const chapter of resolved.chapters) {
 			for (const batch of chapter.batches) {
 				batchSeq += 1;
 				emit({ stage: "writing-files", done: batchSeq, total: totalBatches });
 				const id = batchIdOf(batchSeq);
 				await writeFile(batchFilePath(input.workspaceRoot, id), batch, "utf8");
+				const paraStart = totalParagraphs + 1;
+				totalParagraphs += batch.split("\n\n").filter((raw) => raw.trim().length > 0).length;
 				manifest.push({
 					id,
 					chapterNo: manifestChapterNo(resolved.chapters, chapter.key),
 					chapterTitle: chapter.title,
 					chars: batch.length,
 					file: `paragraphs/${id}.md`,
+					paraStart,
+					paraEnd: totalParagraphs,
 				});
 			}
 		}
@@ -164,7 +174,8 @@ export class ProjectImportService {
 			"utf8",
 		);
 
-		// ② novel.db：锚点单元 → 全书根 saga → 卷 → （每章：段落插入 → 章创建引用段落）
+		// ② novel.db 骨架：全书根 saga → 卷 → 章（空引用）。段落不预插——解构时经
+		// NovelImportText 随场景导入（归属 agent 判定、文本宿主从批次文件搬运）。
 		// 全书根标题用源文件名（去扩展名）：确定性可得，agent 解构时可按内容修正
 		const mutations = buildMutations(resolved, source.sourceName.replace(/\.(txt|zip)$/i, ""));
 		const totalChunks = Math.ceil(mutations.length / MUTATE_CHUNK);
@@ -179,7 +190,8 @@ export class ProjectImportService {
 		const stats: ImportStats = {
 			volumes: resolved.volumes.length,
 			chapters: resolved.chapters.length,
-			paragraphs: countParagraphs(mutations),
+			// 语义=全书待导入总段数（导入由解构会话随场景完成）
+			paragraphs: totalParagraphs,
 			batches: manifest.length,
 			chars: source.text.length,
 		};
@@ -282,6 +294,29 @@ export class ProjectImportService {
 		} catch {
 			// outline 读取失败：退回 journal 信号
 		}
+		// v2 段落信号（新结构硬信号）：库内已导入的最大段落序 → 反查覆盖批次——
+		// 随场景导入每落一段进度即前进（旧结构 manifest 无 paraStart 时自然跳过）
+		try {
+			const entries = await readManifestEntries(workspaceRoot);
+			if (entries.some((e) => e.paraStart !== undefined && e.paraEnd !== undefined)) {
+				const paragraphs = (await store.query({ op: "paragraphs.list" })) as ReadonlyArray<{ id: string }>;
+				let maxPara = 0;
+				for (const p of paragraphs) {
+					if (!p.id.startsWith("imp-p")) continue;
+					const n = Number(p.id.slice("imp-p".length));
+					if (Number.isInteger(n) && n > maxPara) maxPara = n;
+				}
+				if (maxPara > 0) {
+					const hit = entries.find((e) => maxPara >= e.paraStart! && maxPara <= e.paraEnd!);
+					if (hit !== undefined) {
+						const seq = Number(hit.id.slice("imp-b".length));
+						if (seq > maxSeq) maxSeq = seq;
+					}
+				}
+			}
+		} catch {
+			// manifest 缺失/读取失败：退回其他信号
+		}
 		// 诊断观测（不影响进度计算）：journal 是否被定位、现行正则命中数与宽匹配对照数
 		// —— slashMatches 持续为 0 而 anyMatches > 0 即坐实「Windows 反斜杠路径失配」；
 		// journalExists=false 即 journal 定位问题；两者皆 0 且 unitCount=0 即 agent 未产出。
@@ -354,6 +389,280 @@ export class ProjectImportService {
 			journalAnyMatches,
 		});
 		return result;
+	}
+
+	/**
+	 * 解构收尾迁移（status=analyzed 后由宿主调用）：把锚点（imp-anchor）下的导入段落
+	 * 改挂到覆盖区间对应的大纲单元——域模型要求段落挂最深层（场景级）单元；归属依据 =
+	 * 各单元 synopsis/intent 的「（覆盖 imp-bNNNNNN–imp-bNNNNNN）」区间（确定性解析，
+	 * LLM 不搬运正文）。未被任何区间覆盖的批次段落保留锚点（不丢数据）；幂等——重复
+	 * 执行按当前区间重放，storyUnitId 已正确的段落跳过。
+	 */
+	async migrateParagraphsToScenes(workspaceRoot: string, store: NovelStore): Promise<void> {
+		const manifest = await readManifestEntries(workspaceRoot);
+		if (manifest.length === 0) {
+			throw new ImportError("IMP_NOT_FOUND", "导入 manifest 缺失，无法迁移段落归属");
+		}
+		const outline = (await store.query({ op: "outline.get" })) as {
+			units?: ReadonlyArray<{
+				id: string;
+				parentId?: string;
+				orderKey: string;
+				synopsis?: string;
+				intent?: string;
+			}>;
+		};
+		const units = outline.units ?? [];
+		// 单元深度（根=0，每层 +1；环防护）：段落归「覆盖它的最深层单元」
+		const byId = new Map(units.map((u) => [u.id, u]));
+		const depthCache = new Map<string, number>();
+		const depthOf = (id: string): number => {
+			const cached = depthCache.get(id);
+			if (cached !== undefined) return cached;
+			let depth = 0;
+			let cursor = byId.get(id);
+			const seen = new Set<string>([id]);
+			while (cursor?.parentId !== undefined && !seen.has(cursor.parentId)) {
+				seen.add(cursor.parentId);
+				depth += 1;
+				cursor = byId.get(cursor.parentId);
+			}
+			depthCache.set(id, depth);
+			return depth;
+		};
+		// 每个单元的覆盖区间（多区间并集；锚点自身排除）
+		const rangesOf = new Map<string, Array<{ start: number; end: number }>>();
+		for (const unit of units) {
+			if (unit.id === IMPORT_ANCHOR_UNIT_ID) continue;
+			const ranges = parseCoverageRanges(`${unit.synopsis ?? ""}\n${unit.intent ?? ""}`);
+			if (ranges.length > 0) rangesOf.set(unit.id, ranges);
+		}
+		if (rangesOf.size === 0) {
+			this.logger?.info("import_analysis.migrate_skip", { reason: "no_coverage_ranges" });
+			return;
+		}
+		// 批次 → 段落区间（与 buildMutations 拆分同构：split("\n\n") + trim + 跳空）
+		let paragraphSeq = 0;
+		const rangesByBatch = new Map<number, { start: number; end: number }>();
+		for (const entry of manifest) {
+			const batch = await readFile(batchFilePath(workspaceRoot, entry.id), "utf8");
+			const start = paragraphSeq + 1;
+			for (const raw of batch.split("\n\n")) {
+				if (raw.trim().length > 0) paragraphSeq += 1;
+			}
+			const batchSeq = Number(entry.id.slice("imp-b".length));
+			rangesByBatch.set(batchSeq, { start, end: paragraphSeq });
+		}
+		// 校验：重建段落总数必须与库内导入段落数一致（不符保守中止——段落留锚点）
+		const paragraphs = (await store.query({ op: "paragraphs.list" })) as ReadonlyArray<{
+			id: string;
+			storyUnitId: string;
+			entityVersion: number;
+		}>;
+		const importParagraphs = paragraphs.filter((p) => p.id.startsWith("imp-p"));
+		if (paragraphSeq !== importParagraphs.length) {
+			throw new ImportError(
+				"IMP_IMPORT_FAILED",
+				`段落归属校验失败：拆分重放 ${paragraphSeq} 段 ≠ 库内 ${importParagraphs.length} 段（批文件可能与落库不一致），已保守中止迁移`,
+			);
+		}
+		const currentOf = new Map(
+			importParagraphs.map((p) => [p.id, { storyUnitId: p.storyUnitId, revision: p.entityVersion }]),
+		);
+		// 批次 → 目标单元（最深层覆盖者；同深并列取 orderKey 靠前——确定性）
+		const mutations: NovelMutation[] = [];
+		const targetOfBatch = new Map<number, string>();
+		for (const batchSeq of rangesByBatch.keys()) {
+			let target: string | undefined;
+			let targetDepth = -1;
+			let targetOrder = "";
+			for (const [unitId, ranges] of rangesOf) {
+				if (!ranges.some((r) => batchSeq >= r.start && batchSeq <= r.end)) continue;
+				const depth = depthOf(unitId);
+				const order = byId.get(unitId)?.orderKey ?? "";
+				if (depth > targetDepth || (depth === targetDepth && order < targetOrder)) {
+					target = unitId;
+					targetDepth = depth;
+					targetOrder = order;
+				}
+			}
+			if (target !== undefined) targetOfBatch.set(batchSeq, target);
+		}
+		// 仅对归属变化的段落发 update（幂等：已正确的跳过；baseRevision 乐观锁）
+		for (const [batchSeq, batchRange] of rangesByBatch) {
+			const target = targetOfBatch.get(batchSeq);
+			if (target === undefined) continue;
+			for (let seq = batchRange.start; seq <= batchRange.end; seq += 1) {
+				const id = paragraphIdOf(seq);
+				const current = currentOf.get(id);
+				if (current === undefined || current.storyUnitId === target) continue;
+				mutations.push({
+					op: "paragraph.update",
+					paragraphId: id as ParagraphId,
+					baseRevision: current.revision as NovelRevision,
+					storyUnitId: target as StoryUnitId,
+				});
+			}
+		}
+		for (let i = 0; i < mutations.length; i += MUTATE_CHUNK) {
+			await store.mutateBatch(mutations.slice(i, i + MUTATE_CHUNK));
+		}
+		const retained = importParagraphs.filter((p) => {
+			const seq = Number(p.id.slice("imp-p".length));
+			const batchHit = [...rangesByBatch.entries()].find(
+				([, r]) => seq >= r.start && seq <= r.end,
+			);
+			return batchHit === undefined || !targetOfBatch.has(batchHit[0]);
+		}).length;
+		this.logger?.info("import_analysis.migrated", {
+			moved: mutations.length,
+			retainedOnAnchor: retained,
+			targetUnits: [...new Set([...targetOfBatch.values()])],
+		});
+	}
+
+	/**
+	 * 段落区间导入（v2 解构通道：NovelImportText 工具确定性执行）：
+	 * 从批次文件重放段落原文，插入指定大纲单元并回填所属章引用。
+	 * - 坐标系 = 全书段落序（manifest 每批 paraStart/paraEnd；一段一句，split 同构）；
+	 * - 幂等：区间内已存在的段落（重试/续跑）跳过；
+	 * - 章回填按 manifest 章序 append（baseRevision 现查乐观锁）；
+	 * - 文本只从批次文件搬运（不经 LLM），超界/批文件漂移/旧结构 manifest 均报错。
+	 * @param input 工作区根 + store + 目标单元 + 区间 [startSeq, endSeq]
+	 * @returns 导入/跳过段数与回填章 id 列表
+	 */
+	async importParagraphRange(input: {
+		workspaceRoot: string;
+		store: NovelStore;
+		unitId: string;
+		startSeq: number;
+		endSeq: number;
+	}): Promise<{ imported: number; skipped: number; chapters: string[] }> {
+		let manifest: ImportManifestEntry[];
+		try {
+			manifest = await readManifestEntries(input.workspaceRoot);
+		} catch {
+			throw new ImportError("IMP_NOT_FOUND", "导入 manifest 缺失，无法导入段落");
+		}
+		if (manifest.length === 0 || manifest.some((e) => e.paraStart === undefined || e.paraEnd === undefined)) {
+			throw new ImportError(
+				"IMP_NOT_FOUND",
+				"manifest 为旧结构（无段落区间坐标）——该项目不支持区间导入，正文已在落库时导入",
+			);
+		}
+		const totalParas = manifest.at(-1)!.paraEnd!;
+		if (
+			!Number.isInteger(input.startSeq) ||
+			!Number.isInteger(input.endSeq) ||
+			input.startSeq < 1 ||
+			input.endSeq < input.startSeq ||
+			input.endSeq > totalParas
+		) {
+			throw new ImportError(
+				"IMP_INVALID_ARGUMENT",
+				`段落区间非法（${input.startSeq}–${input.endSeq}；全书共 ${totalParas} 段，序号 1 起）`,
+			);
+		}
+		const outline = (await input.store.query({ op: "outline.get" })) as {
+			units?: ReadonlyArray<{ id: string }>;
+		};
+		if (!(outline.units ?? []).some((u) => u.id === input.unitId)) {
+			throw new ImportError("IMP_INVALID_ARGUMENT", `目标大纲单元不存在（${input.unitId}）`);
+		}
+		// 区间涉及批次 → 段落文本 + 段→章映射（重放拆分与落库同构）
+		const textOf = new Map<number, string>();
+		const chapterOfPara = new Map<number, string>();
+		for (const e of manifest) {
+			const s = e.paraStart!;
+			const t = e.paraEnd!;
+			if (t < input.startSeq || s > input.endSeq) continue;
+			const batch = await readFile(batchFilePath(input.workspaceRoot, e.id), "utf8");
+			let seq = s;
+			for (const raw of batch.split("\n\n")) {
+				const text = raw.trim();
+				if (text.length === 0) continue;
+				if (seq >= input.startSeq && seq <= input.endSeq) {
+					textOf.set(seq, text);
+					chapterOfPara.set(seq, `imp-ch-${String(e.chapterNo).padStart(4, "0")}`);
+				}
+				seq += 1;
+			}
+			if (seq - 1 !== t) {
+				throw new ImportError(
+					"IMP_IMPORT_FAILED",
+					`批次 ${e.id} 段数与 manifest 不符（重放 ${seq - s} 段 ≠ 记录 ${t - s + 1} 段）——批文件可能被改动`,
+				);
+			}
+		}
+		if (textOf.size !== input.endSeq - input.startSeq + 1) {
+			throw new ImportError(
+				"IMP_IMPORT_FAILED",
+				`区间重放不完整（${textOf.size}/${input.endSeq - input.startSeq + 1} 段）——批文件可能损坏`,
+			);
+		}
+		// 幂等：已存在段落跳过（重试/续跑）
+		const paragraphs = (await input.store.query({ op: "paragraphs.list" })) as ReadonlyArray<{ id: string }>;
+		const existing = new Set(paragraphs.filter((p) => p.id.startsWith("imp-p")).map((p) => p.id));
+		// 章现状（回填 append + 乐观锁）
+		const pub = (await input.store.query({ op: "publication.get" })) as {
+			chapters?: ReadonlyArray<{ id: string; paragraphIds?: readonly string[]; entityVersion: number }>;
+		};
+		const chapterById = new Map((pub.chapters ?? []).map((c) => [c.id, c]));
+		const mutations: NovelMutation[] = [];
+		const affectedChapters = new Set<string>();
+		let imported = 0;
+		let skipped = 0;
+		for (let seq = input.startSeq; seq <= input.endSeq; seq += 1) {
+			const id = paragraphIdOf(seq);
+			if (existing.has(id)) {
+				skipped += 1;
+				continue;
+			}
+			// 导入正文无节奏标注：占位值（不影响正文展示；续写新段由 agent 正常标注）
+			mutations.push({
+				op: "paragraph.insert",
+				id,
+				storyUnitId: input.unitId as StoryUnitId,
+				text: textOf.get(seq)!,
+				rhythm: "setup",
+				intensity: 3,
+			});
+			imported += 1;
+			affectedChapters.add(chapterOfPara.get(seq)!);
+		}
+		// 章引用重算（非 append——后到的段也能落在正确位置）：受影响章的引用 =
+		// 该章段落区间（manifest 章分组）内**已存在**段落按全书序。插入与章更新同批，
+		// 原子落地；未导入段随后续区间导入自然补位（章引用渐进完整）。
+		const paraRangeOfChapter = new Map<string, Array<{ start: number; end: number }>>();
+		for (const e of manifest) {
+			const chId = `imp-ch-${String(e.chapterNo).padStart(4, "0")}`;
+			const list = paraRangeOfChapter.get(chId);
+			if (list === undefined) paraRangeOfChapter.set(chId, [{ start: e.paraStart!, end: e.paraEnd! }]);
+			else list.push({ start: e.paraStart!, end: e.paraEnd! });
+		}
+		const newIds = new Set(mutations.filter((m) => m.op === "paragraph.insert").map((m) => (m as { id: string }).id));
+		const visible = new Set([...existing, ...newIds]);
+		for (const chId of affectedChapters) {
+			const ch = chapterById.get(chId);
+			const ranges = paraRangeOfChapter.get(chId) ?? [];
+			const nextIds = ranges
+				.flatMap(({ start, end }) =>
+					Array.from({ length: end - start + 1 }, (_, i) => paragraphIdOf(start + i)),
+				)
+				.sort()
+				.filter((id) => visible.has(id));
+			if (ch === undefined || nextIds.length === (ch.paragraphIds ?? []).length) continue;
+			mutations.push({
+				op: "publication.chapter.update",
+				chapterId: chId as never,
+				baseRevision: ch.entityVersion as NovelRevision,
+				patch: { paragraphIds: nextIds as ParagraphId[] },
+			});
+		}
+		for (let i = 0; i < mutations.length; i += MUTATE_CHUNK) {
+			await input.store.mutateBatch(mutations.slice(i, i + MUTATE_CHUNK));
+		}
+		return { imported, skipped, chapters: [...affectedChapters] };
 	}
 
 	/** 空库校验（导入只面向全新项目；防把内容混入已有项目） */
@@ -468,17 +777,13 @@ function resolvePlan(parsed: ParsedBook, plan: ImportPlan): ResolvedPlan {
 	return { volumes, chapters };
 }
 
-/** 落库变更序列（锚点单元 → 全书根 saga → 卷 → 每章：段落插入 → 章创建） */
+/**
+ * 落库变更序列（v2 骨架化）：全书根 saga → 卷 → 章（空引用，段落引用由
+ * importParagraphRange 导入时回填）。段落不预插——归属由解构 agent 判定，
+ * 文本由宿主从批次文件搬运（NovelImportText 工具通道），逐字一致红线不破。
+ */
 function buildMutations(resolved: ResolvedPlan, bookTitle: string): NovelMutation[] {
 	const mutations: NovelMutation[] = [
-		{
-			op: "outline.storyUnit.create",
-			id: IMPORT_ANCHOR_UNIT_ID,
-			title: IMPORT_ANCHOR_UNIT_TITLE,
-			scope: "custom",
-			planningStatus: "ready",
-			realizationStatus: "completed",
-		},
 		{
 			op: "outline.storyUnit.create",
 			id: IMPORT_SAGA_UNIT_ID,
@@ -496,30 +801,9 @@ function buildMutations(resolved: ResolvedPlan, bookTitle: string): NovelMutatio
 			title: volume.title,
 		});
 	}
-	let paragraphSeq = 0;
 	let chapterSeq = 0;
 	for (const chapter of resolved.chapters) {
 		chapterSeq += 1;
-		// 段落粒度 = 自然段（一段一句，对齐 Paragraph 模型；批次以空行连接自然段）
-		const paragraphIds: string[] = [];
-		for (const batch of chapter.batches) {
-			for (const raw of batch.split("\n\n")) {
-				const text = raw.trim();
-				if (text.length === 0) continue;
-				paragraphSeq += 1;
-				const id = paragraphIdOf(paragraphSeq);
-				paragraphIds.push(id);
-				mutations.push({
-					op: "paragraph.insert",
-					id,
-					storyUnitId: IMPORT_ANCHOR_UNIT_ID as StoryUnitId,
-					text,
-					// 导入正文无节奏标注：占位值（不影响正文展示；续写新段由 agent 正常标注）
-					rhythm: "setup",
-					intensity: 3,
-				});
-			}
-		}
 		mutations.push({
 			op: "publication.chapter.create",
 			id: `imp-ch-${String(chapterSeq).padStart(4, "0")}`,
@@ -527,7 +811,6 @@ function buildMutations(resolved: ResolvedPlan, bookTitle: string): NovelMutatio
 				? { volumeId: volumeIdOfResolved(resolved, chapter.volumeKey) as PublicationVolumeId }
 				: {}),
 			title: chapter.title,
-			paragraphIds: paragraphIds as ParagraphId[],
 		});
 	}
 	return mutations;
@@ -548,11 +831,6 @@ function manifestChapterNo(chapters: readonly ResolvedChapter[], key: string): n
 	return index + 1;
 }
 
-/** 统计段落数（mutation 流中的 paragraph.insert 计数） */
-function countParagraphs(mutations: readonly NovelMutation[]): number {
-	return mutations.filter((m) => m.op === "paragraph.insert").length;
-}
-
 /** manifest 条数 */
 async function countManifestEntries(workspaceRoot: string): Promise<number> {
 	try {
@@ -561,6 +839,35 @@ async function countManifestEntries(workspaceRoot: string): Promise<number> {
 	} catch {
 		return 0;
 	}
+}
+
+/** manifest 全量条目（JSONL 顺序解析；读不到抛错——迁移对完整性敏感） */
+async function readManifestEntries(workspaceRoot: string): Promise<ImportManifestEntry[]> {
+	const raw = await readFile(importManifestPath(workspaceRoot), "utf8");
+	return raw
+		.split(/\r?\n/)
+		.filter((line) => line.trim().length > 0)
+		.map((line) => JSON.parse(line) as ImportManifestEntry);
+}
+
+/**
+ * 覆盖区间解析（段落迁移依据）：识别「imp-bNNNNNN–imp-bNNNNNN」成对端点
+ * （连接符宽容：en-dash / 全角破折 / 连字符 / 波浪 / 「至」）；不成对但紧跟
+ * 「覆盖」关键字的孤立 id 视为单点区间 [n, n] 兜底。
+ */
+function parseCoverageRanges(text: string): Array<{ start: number; end: number }> {
+	const ranges: Array<{ start: number; end: number }> = [];
+	for (const m of text.matchAll(/imp-b(\d{6})\s*(?:[–—~-]|至)\s*imp-b(\d{6})/g)) {
+		const start = Number(m[1]);
+		const end = Number(m[2]);
+		const [lo, hi] = start <= end ? [start, end] : [end, start];
+		ranges.push({ start: lo, end: hi });
+	}
+	for (const m of text.matchAll(/覆盖\s*imp-b(\d{6})(?!\s*(?:[–—~-]|至)\s*imp-b)/g)) {
+		const n = Number(m[1]);
+		if (!ranges.some((r) => n >= r.start && n <= r.end)) ranges.push({ start: n, end: n });
+	}
+	return ranges;
 }
 
 /** 路径 → 安全源文件名（对齐书库规则） */

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -300,6 +300,33 @@ describe("ImportFace（项目导入 RPC 编排）", () => {
 			);
 			release();
 			await waitTerminalJob(face);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("importProgress：analyzed 后暂不自动触发段落迁移（跨进程写冲突会崩主进程——0xC0000409 实测，待子进程化接入后恢复）", async () => {
+		const root = tmpRoot();
+		try {
+			const sourcePath = writeSampleTxt(root);
+			const spawner: ImportConversationSpawner = { async spawn() { return { conversationId: "c1" }; } };
+			const { face, service, workspaceRoot, session } = buildFace(root, sourcePath, { spawner });
+			const migrate = vi.spyOn(service, "migrateParagraphsToScenes").mockResolvedValue();
+			const plan = await service.prepare(sourcePath);
+			await service.apply({ workspaceRoot, store: session.store, sourcePath, plan });
+
+			// analyzed：不触发（暂停启用——见 importProgress 内注释）
+			await service.markStatus(workspaceRoot, { status: "analyzed" });
+			await face.importProgress();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(migrate).not.toHaveBeenCalled();
+
+			// 重试解构同样不触发
+			await face.retryImportAnalysis();
+			await service.markStatus(workspaceRoot, { status: "analyzed" });
+			await face.importProgress();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(migrate).not.toHaveBeenCalled();
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

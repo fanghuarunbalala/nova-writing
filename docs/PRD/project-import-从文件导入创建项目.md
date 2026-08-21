@@ -1,7 +1,9 @@
-# project-import-从文件导入创建项目 PRD —— v0.2.3
+# project-import-从文件导入创建项目 PRD —— v0.3
 
 > 状态：⏳ 待作者确认（确认后改 ✅ 已定稿）
-> 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；书库全景 [`library-完本解构.md`](./library-完本解构.md)（本功能与其刻意区分，见 §2）；域概念边界 [`../development/域模型规范.md`](../development/域模型规范.md）
+> 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；书库全景 [`library-完本解构.md`](./library-完本解构.md)（本功能与其刻意区分，见 §2）；域概念边界 [`../development/域模型规范.md`](../development/域模型规范.md)
+> v0.3 变更：**段落归属改为「随场景区间导入」（架构 v2）**——v0.2.4 的宿主事后迁移实测与解构子进程写库并发，触发 better-sqlite3 原生崩溃（0xC0000409），且「先全挂锚点再分拣」粒度为整批、场景边界错位。v2 重构：落库只建卷/章骨架+批次文件+manifest（每条含 paraStart/paraEnd 段落全书序区间）+预建 imp-saga，**不预插段落、不建锚点**；解构 agent 建完幕/场景后用专用工具 **NovelImportText**（novel.import 组，唯一经原始 handle 的受控写通道）按**段落区间**导入正文——参数只有 unitId+区间号（无文本字段），宿主从批次文件搬运原文（逐字一致红线不破）、章引用按 manifest 章区间重算回填（幂等、顺序恒正确）。场景边界精确到自然段（可跨批/跨章）；进度信号增加库内已导入段落序反查（硬信号）。旧结构项目（段落挂锚点）保留 `migrateParagraphsToScenes` 作手动兜底。prompt v2.0.0。
+> v0.2.4 变更：**补「解构收尾段落归属迁移」设计缺口**——导入落库时段落全挂锚点 `imp-anchor`（「导入稿件」），但域模型要求段落挂场景级单元，两者之间无衔接（agent 被 F6 三层守卫禁止碰段落，正文永久堆在锚点下）。新增宿主确定性迁移（见 F5「解构收尾迁移」）：`importProgress` 观察 `analyzed` 后按各单元覆盖区间批量 `paragraph.update` 改挂到最深层覆盖单元，未覆盖段落保留锚点，幂等可重放。同期：导入落库预建全书根 `imp-saga`（杜绝游离顶层幕）；宿主系统对话框模态化（修「弹窗无法取消」）；UI 大纲双重编号兜底（title 自带编号时不再叠加动态序号并示「含编号」chip）。
 > v0.2.3 变更：**修「解构进度恒零」真根因**——任务式导入完成后 `openDirect → workspaceApi.open → rebindWorkspace(同一 storeDir) → manager.rescope`，而 rescope 无条件 terminate 全部会话，刚派生、正在首次模型调用中的 ProjectImporter 被当场 SIGTERM（journal 停在 557 字节任务提示、status 永远 analyzing；此前「端点停滞」假说作废——全部卡死样本均为被杀）。修复：`rebindWorkspace` 对同一 storeDir 且库仍打开时幂等短路（不关库不 rescope）；PR #18 的「本进程持锁同项目幂等」不覆盖导入路径（bindFreshWorkspace 未持锁）。合并 origin/main（多实例/打开位置选择/MCP-Skills）时同步落地。
 > v0.2.2 变更：**修「解构进度恒零/一直进行中」**——磁盘实证根因：模型端点偶发停滞时 provider 请求悬挂（OpenAIProvider 未配超时 → openai SDK 默认单次 10 分钟 × 静默重试 2 次 ≈ 最长 30 分钟无日志无进度，journal 停在第 1 行）。修复：后台会话（ProjectImporter / BookAnalyst）provider 配 `timeoutMs=5 分钟 + maxRetries=1`（最坏 10 分钟内出结果、错误可见）；`ImportProgress` 新增 `stalled`（analyzing 且 journal / import.json 超 10 分钟无更新），进度浮标显示「疑似卡住」并提供重试（覆盖端点停滞与应用中途关闭两种中断）。附记：实证 agent 以正斜杠路径 Read、双信号在正常会话下可用（正常样本 42 次 Read 推进至第 7 轮）。
 > v0.2 变更：导入耗时操作（zip 解压/大文本解析/分批文件写/段落落库）全部移入独立后台子进程执行（`core/scripts/project-import-worker.mjs` + `ImportProcessRunner`，desktop-child 同款部署模式）——修复大文件导入时主进程事件循环被堵死、整个应用无响应的问题；预览与落库阶段进度经 `projectImport.createProgress` 轮询，导入对话框新增阶段文案 + 进度条动画。
@@ -57,15 +59,18 @@
 ### F4 确定性落库（章卷一致硬保证）
 
 - 只由宿主确定性代码写库，正文**逐字不改**（含章标记行余文，如「第一章 启程」的「启程」保留为首段）。
-- 落库顺序：锚点 story unit「导入稿件」（挂靠全部导入段落）→ 卷（仅有卷标记的；无卷标记则全部章不归卷）→ 每章先插段落（**自然段粒度，一段一句**，对齐 Paragraph 模型）再建章并引用段落 id。
+- 落库顺序（v0.3 骨架化）：全书根 saga（预建，title=源文件名去扩展名）→ 卷（仅有卷标记的；无卷标记则全部章不归卷）→ 章（空引用——正文引用由 NovelImportText 导入时按 manifest 章区间重算回填）。**段落不预插、不建锚点**——正文随解构时的场景区间导入（F5），逐字一致由批次文件搬运保证（含章标记行余文，如「第一章 启程」的「启程」保留为该章首段）。manifest 每条含 paraStart/paraEnd（批次段落全书序区间——导入坐标系）。
 - 仅面向**空项目**（已有卷/章/大纲即拒绝）；无章标记的书走 8000 字虚拟切章（复用书库解析器行为）。
 - **后台进程执行（v0.2）**：预览解析与落库（含 zip 解压、大文本解析、分批文件写、段落事务插入）全部在独立子进程完成（`ELECTRON_RUN_AS_NODE`，主进程零阻塞，窗口全程可交互）；子进程自开 novel.db 连接（先 `ensureWal`，WAL 多连接，BookAnalyst 直开 book.db 同款先例），完成即关。阶段进度（reading / parsing / writing-files n/m / writing-db n/m）经 `createProgress` 轮询驱动对话框动画；单任务串行（进行中再发起直接拒绝）。
 
 ### F5 解构必跑（ProjectImporter agent）
 
-- 新独立 agent `ProjectImporter`（导入解构分析师），**复用 novel 主 Agent 的装配机制**（definition 注入，同一工具组目录与 prompt 注册表），仅换 prompt + 裁剪工具面（保留 todo/files/entities，去掉 ask 与 compose——后台无人值守）。
-- 行为：通读 `.novel/import/` 的 manifest，按大轮并行读批次 → **增量**写当前项目 `novel.db`：大纲（全书→幕→场景，全部标记已实现；场景 synopsis 末尾附「（覆盖 imp-bXXXXXX–imp-bYYYYYY）」作进度信号）、人物卡、地点卡 → 收尾把 `import.json` 的 status 置 `analyzed`（异常置 `failed` 并写明原因）。
+- 新独立 agent `ProjectImporter`（导入解构分析师），**复用 novel 主 Agent 的装配机制**（definition 注入，同一工具组目录与 prompt 注册表），仅换 prompt + 裁剪工具面（保留 todo/files/entities/**import**，去掉 ask 与 compose——后台无人值守）。
+- 行为（v0.3 段落随场景导入）：通读 `.novel/import/` 的 manifest（含每批 paraStart/paraEnd 段落区间坐标系），按大轮并行读批次 → 建大纲（全书→幕→场景；幕挂预建 imp-saga、title 纯标题）+ 人物卡 + 地点卡 → **建完每个幕/场景立即用 NovelImportText 把其覆盖的段落区间导入**（参数 unitId+fromSeq/toSeq，宿主从批次文件搬运原文，一字不改；章引用自动重算回填）→ 收尾对账（各单元区间无缝覆盖全书=manifest 总段数）后把 `import.json` 的 status 置 `analyzed`（异常置 `failed` 并写明原因）。
+- **区间纪律**：全书段落从 1 起连续编号（自然段粒度）；兄弟单元区间连续衔接不重叠（下一单元从上一单元 toSeq+1 起）；场景边界精确到自然段（可跨批/跨章），与章节、批次都无结构对应。
+- **NovelImportText（novel.import 组）**：ProjectImporter 专用，不进主 agent。参数面**无文本字段**（unitId + 区间号）——正文只经宿主从批次文件搬运（决策 #1 红线）；经**原始（未守卫）handle** 写库（与解构会话其他写同通道、无新增并发面），通用工具直写 paragraph.\*/publication.\* 仍被守卫拦截；幂等（已导入段落跳过）；越界区间/不存在单元/旧结构 manifest（无段落坐标）报错。
 - 运行形态：后台会话、bypass、任务载荷自动驱动；采样独立面（设置页可为它单独配模型，缺省低思考档——抽取型任务低档实测快 4 倍且结论一致）。
+- 旧结构兜底（v0.2.4 及更早导入的项目，段落挂锚点）：`migrateParagraphsToScenes` 保留为手动迁移工具（不再自动触发——主进程写库与子进程并发的崩溃风险）。
 
 ### F6 章卷一致双保险
 

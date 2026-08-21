@@ -7,6 +7,7 @@
 import { basename } from "node:path";
 import { PROJECT_IMPORTER_AGENT_TYPE } from "../runtime/agent/definitions/ProjectImporterAgentDefinition.js";
 import type { NovelStore } from "../novel/store.js";
+import type { Logger } from "../log/Logger.js";
 import type { ProjectImportApi } from "../client/NovelApiClient.js";
 import { ProjectImportService } from "./ProjectImportService.js";
 import type { ProjectImportRunner } from "./ImportProcessRunner.js";
@@ -66,6 +67,8 @@ export interface ProjectImportFaceDeps {
 	workspaceRoot: () => string | undefined;
 	/** 当前工作区 novel store（进度 outline 信号；undefined = 无） */
 	store: () => NovelStore | undefined;
+	/** 诊断日志（RPC 链路节点观测；缺省 = 静默） */
+	logger?: Logger;
 }
 
 /**
@@ -76,6 +79,13 @@ export interface ProjectImportFaceDeps {
 export function createProjectImportFace(deps: ProjectImportFaceDeps): ProjectImportApi {
 	/** 任务式创建状态（终态保留至下次创建，供轮询方取结果） */
 	let job: ImportJobStatus | null = null;
+	/**
+	 * 解构收尾迁移防重入：importProgress 观察到 analyzed 后台触发一次段落归属迁移
+	 * （幂等重放；失败也置 done——service 内部已记日志，避免 3s 轮询反复重试）；
+	 * retryImportAnalysis 重置（重派生产出新区间后按新状态重放）。
+	 */
+	let migrationDone = false;
+	let migrationInFlight: Promise<void> | undefined;
 	const assertAllowed = (sourcePath: string): void => {
 		const allowed = deps.allowedSources?.() ?? new Set<string>();
 		if (!allowed.has(sourcePath)) {
@@ -175,20 +185,29 @@ export function createProjectImportFace(deps: ProjectImportFaceDeps): ProjectImp
 			sourcePath: string;
 			plan: ImportPlan;
 		}): Promise<ProjectImportCreateResult> {
+			deps.logger?.info("rpc_create.enter", { sourcePath: input.sourcePath });
 			assertAllowed(input.sourcePath);
 			if (job?.phase === "running") {
-				throw new ImportError("IMP_INVALID_ARGUMENT", "已有导入任务进行中，请稍候");
+				throw new ImportError("IMP_INVALID_ARGUMENT", "已有导入任务进行中，请稍后");
 			}
 			if (deps.createWorkspaceDir === undefined || deps.bindFreshWorkspace === undefined) {
 				throw new ImportError("IMP_INVALID_ARGUMENT", "宿主未提供项目创建能力");
 			}
 			const reference = await deps.createWorkspaceDir();
-			if (reference === undefined) return { canceled: true };
+			if (reference === undefined) {
+				// 此处返回后响应应即刻回传渲染进程——若前端仍未解锁，断点在传输层
+				deps.logger?.info("rpc_create.return_canceled", {});
+				return { canceled: true };
+			}
 			const session = await deps.bindFreshWorkspace(reference);
 			// 任务式启动：RPC 即刻返回引用（kkrpc 默认 30s 请求超时容不下分钟级落库）；
 			// 落库与解构派生在后台链执行，终态经 createProgress 轮询
+			// 任务式：RPC 即刻返回，终态（stats/error）经 createProgress 轮询取
 			job = { phase: "running", progress: deps.runner?.().activeJob() ?? null };
 			void runCreateJob(session, reference, input);
+			deps.logger?.info("rpc_create.return_started", {
+				referenceId: reference.referenceId,
+			});
 			return { canceled: false, reference };
 		},
 		async importProgress() {
@@ -204,7 +223,21 @@ export function createProjectImportFace(deps: ProjectImportFaceDeps): ProjectImp
 					unitCount: 0,
 				};
 			}
-			return deps.service.progress(root, store, deps.analysisJournalPath?.());
+			const progress = await deps.service.progress(root, store, deps.analysisJournalPath?.());
+			// 解构完成钩子（暂停启用）：analyzed 后在主进程直接批量改挂段落，与
+			// ProjectImporter 子进程的收尾写库（同库跨进程写）冲突——better-sqlite3
+			// 原生层崩溃（0xC0000409，实测复现）。迁移方法保留，待改为独立子进程
+			// 执行（与 apply 同款 worker 模式、错开 agent 会话生命周期）后再接入。
+			// if (progress.status === "analyzed" && !migrationDone && migrationInFlight === undefined) {
+			// 	migrationInFlight = deps.service
+			// 		.migrateParagraphsToScenes(root, store)
+			// 		.catch(() => {})
+			// 		.finally(() => {
+			// 			migrationDone = true;
+			// 			migrationInFlight = undefined;
+			// 		});
+			// }
+			return progress;
 		},
 		async createProgress() {
 			if (job === null) return null;
@@ -231,6 +264,8 @@ export function createProjectImportFace(deps: ProjectImportFaceDeps): ProjectImp
 				throw new ImportError("IMP_NOT_FOUND", "该项目没有导入记录（import.json 缺失）");
 			}
 			await deps.service.markStatus(root, { status: "analyzing" });
+			// 重派生：段落归属迁移随新解构结果重放（幂等）
+			migrationDone = false;
 			try {
 				const spawned = await spawner.spawn({
 					agentType: PROJECT_IMPORTER_AGENT_TYPE,

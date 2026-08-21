@@ -6,3 +6,4 @@ export * from "./todo.js";
 export * from "./skill.js";
 export * from "./subagent.js";
 export * from "./askUser.js";
+export * from "./externalTools.js";

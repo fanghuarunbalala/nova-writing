@@ -89,7 +89,8 @@
   align-items: center;
   gap: var(--space-10px);
   width: 100%;
-  padding: var(--space-10px) var(--space-3);
+  /* 右侧额外留白给绝对定位的删除钮（26px 按钮 + 呼吸空隙） */
+  padding: var(--space-10px) calc(var(--space-3) + var(--space-26px) + var(--space-2px)) var(--space-10px) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -139,4 +140,46 @@
   font-size: var(--fs-xs);
   color: var(--color-faint);
   word-break: break-all;
+}
+
+/* 删除入口（PRD workspace-删除项目）：绝对定位的兄弟元素（button 不可嵌套 button）；
+ * 当前项目已被 switchableRecent 过滤、列表项均可删，跨实例占用校验由主进程兜底 */
+.recentItemWrap {
+  position: relative;
+}
+
+.recentDelete {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: var(--space-26px);
+  height: var(--space-26px);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-faint);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+  opacity: 0.45;
+}
+
+.recentItemWrap:hover .recentDelete,
+.recentDelete:focus-visible {
+  opacity: 1;
+}
+
+.recentDelete:hover:not(:disabled) {
+  background: var(--color-danger-10);
+  color: var(--color-danger);
+}
+
+.recentDelete:disabled {
+  opacity: 0.3;
+  cursor: default;
 }

@@ -3,15 +3,20 @@
  *
  * 打开项目的模态弹窗（基于共享 Dialog 原语），两步式：
  * ① 选定项目（目录选择器 / 最近列表）→ ② 选择打开位置（当前窗口 / 新窗口）。
+ * 最近列表已过滤当前项目（切换目标排除自身），列表项另提供删除入口
+ * （PRD workspace-删除项目）：非当前项目经 danger 二次确认后彻底删除
+ * （应用数据 + 整个项目文件夹）；跨实例占用等校验由主进程兜底报错。
  */
 import { useState } from "react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Trash2 } from "lucide-react";
 import { Dialog } from "../../../shared/primitives/Dialog.js";
 import { Button } from "../../../shared/primitives/Button.js";
+import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import type {
   WorkspaceControllerSnapshot,
   WorkspaceReferenceView,
+  WorkspaceSessionView,
 } from "../controller/WorkspaceController.js";
 import styles from "./WorkspaceSelectionDialog.module.css";
 
@@ -25,6 +30,8 @@ export interface WorkspaceSelectionDialogProps {
   /** 在新 GUI 实例（独立窗口）中打开，当前窗口保持不动 */
   readonly onOpenInNewWindow: (reference: WorkspaceReferenceView) => void;
   readonly onCloseWorkspace: () => void;
+  /** 删除项目（仅非当前项目；经 danger 确认后调用）；返回是否成功 */
+  readonly onDeleteRecent: (workspaceId: string) => Promise<boolean>;
   readonly onDismiss: () => void;
 }
 
@@ -35,6 +42,7 @@ export function WorkspaceSelectionDialog({
   onOpen,
   onOpenInNewWindow,
   onCloseWorkspace,
+  onDeleteRecent,
   onDismiss,
 }: WorkspaceSelectionDialogProps) {
   const [pending, setPending] = useState<WorkspaceReferenceView | undefined>(undefined);
@@ -52,6 +60,20 @@ export function WorkspaceSelectionDialog({
       (currentId === undefined || workspace.id !== currentId) &&
       (currentRoot === undefined || workspace.rootPath !== currentRoot),
   );
+  // 删除确认弹窗（参照 ConversationDialogs 的 target/busy 模式）：busy 锁重复提交，
+  // 结束（无论成败）即关闭——失败详情经 controller error 通道展示在弹窗错误区
+  const [deleteTarget, setDeleteTarget] = useState<WorkspaceSessionView | undefined>(undefined);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const confirmDelete = async (): Promise<void> => {
+    if (deleteTarget === undefined || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await onDeleteRecent(deleteTarget.id);
+    } finally {
+      setDeleteBusy(false);
+      setDeleteTarget(undefined);
+    }
+  };
   return (
     <Dialog
       open={open}
@@ -151,7 +173,7 @@ export function WorkspaceSelectionDialog({
           ) : (
             <ul className={styles.recentList}>
               {switchableRecent.map((workspace) => (
-                <li key={workspace.id}>
+                <li key={workspace.id} className={styles.recentItemWrap}>
                   <button
                     type="button"
                     className={styles.recentItem}
@@ -168,12 +190,39 @@ export function WorkspaceSelectionDialog({
                       <span className={styles.recentId}>{workspace.id}</span>
                     </span>
                   </button>
+                  <button
+                    type="button"
+                    className={styles.recentDelete}
+                    disabled={busy}
+                    title="删除项目"
+                    aria-label={`删除项目 ${workspace.label}`}
+                    onClick={() => setDeleteTarget(workspace)}
+                  >
+                    <Icon icon={Trash2} size="sm" />
+                  </button>
                 </li>
               ))}
             </ul>
           )}
         </section>
       </div>
+      <ConfirmDialog
+        open={deleteTarget !== undefined}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(undefined);
+        }}
+        title="删除项目"
+        description={
+          deleteTarget !== undefined
+            ? `确定删除项目「${deleteTarget.label}」吗？将永久删除该项目的全部应用数据（小说内容、AI 会话记录等）和整个项目文件夹（含其中的全部文件），不可恢复。${
+                deleteTarget.rootPath !== undefined ? `项目文件夹：${deleteTarget.rootPath}` : ""
+              }`
+            : undefined
+        }
+        confirmLabel="删除"
+        busy={deleteBusy}
+        onConfirm={() => void confirmDelete()}
+      />
     </Dialog>
   );
 }

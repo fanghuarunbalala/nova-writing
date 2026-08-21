@@ -87,6 +87,46 @@
   animation: var(--anim-view-in) 0.5s 0.18s var(--ease-out) both;
 }
 
+.projItem {
+  position: relative;
+}
+
+/* 删除入口：绝对定位的兄弟元素（button 不可嵌套 button），默认半隐、悬停/聚焦显形 */
+.projDelete {
+  position: absolute;
+  top: var(--space-5px);
+  right: var(--space-5px);
+  display: grid;
+  place-items: center;
+  width: var(--space-26px);
+  height: var(--space-26px);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.projItem:hover .projDelete,
+.projDelete:focus-visible {
+  opacity: 1;
+}
+
+.projDelete:hover:not(:disabled) {
+  background: var(--color-danger-10);
+  color: var(--color-danger);
+}
+
+.projDelete:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .projCard {
   display: flex;
   align-items: center;

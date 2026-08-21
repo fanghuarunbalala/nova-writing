@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProjectSelectionPage } from "../../../src/domains/workspace/components/ProjectSelectionPage.js";
-import { WorkspaceSelectionDialog } from "../../../src/domains/workspace/components/WorkspaceSelectionDialog.js";
 import { WorkspaceFooting } from "../../../src/domains/workspace/components/WorkspaceFooting.js";
 import { WorkspaceLabel } from "../../../src/domains/workspace/components/WorkspaceLabel.js";
 import { WorkspaceRevisionMeta } from "../../../src/domains/workspace/components/WorkspaceRevisionMeta.js";
+import { WorkspaceSelectionDialog } from "../../../src/domains/workspace/components/WorkspaceSelectionDialog.js";
 
 describe("WorkspaceFooting", () => {
   it("renders label and meta and fires onClick", async () => {
@@ -71,6 +71,7 @@ describe("ProjectSelectionPage", () => {
         onChoose={onChoose}
         onCreate={onCreate}
         onOpenRecent={onOpenRecent}
+        onDeleteRecent={vi.fn(async () => true)}
       />,
     );
     // 品牌区 + 节标题（demo 欢迎页结构）
@@ -85,7 +86,8 @@ describe("ProjectSelectionPage", () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "打开其他项目…" }));
     expect(onChoose).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: /白昼计划/ }));
+    // 卡片主体按钮名以书名开头（右上角删除钮 aria-label 为「删除项目 白昼计划」，^ 区分）
+    await user.click(screen.getByRole("button", { name: /^白昼计划/ }));
     expect(onOpenRecent).toHaveBeenCalledWith("ws-1");
   });
 
@@ -96,6 +98,7 @@ describe("ProjectSelectionPage", () => {
         onChoose={vi.fn()}
         onCreate={vi.fn()}
         onOpenRecent={vi.fn()}
+        onDeleteRecent={vi.fn(async () => true)}
       />,
     );
     expect(screen.getByText(/还没有打开过项目/)).toBeInTheDocument();
@@ -109,12 +112,87 @@ describe("ProjectSelectionPage", () => {
         onChoose={vi.fn()}
         onCreate={vi.fn()}
         onOpenRecent={vi.fn()}
+        onDeleteRecent={vi.fn(async () => true)}
       />,
     );
     expect(screen.getByText("打开失败")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "打开其他项目…" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /白昼计划/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^白昼计划/ })).toBeDisabled();
+  });
+
+  it("confirms deletion via danger dialog before calling onDeleteRecent", async () => {
+    const user = userEvent.setup();
+    const onDeleteRecent = vi.fn(async () => true);
+    render(
+      <ProjectSelectionPage
+        snapshot={snapshot()}
+        onChoose={vi.fn()}
+        onCreate={vi.fn()}
+        onOpenRecent={vi.fn()}
+        onDeleteRecent={onDeleteRecent}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "删除项目 白昼计划" }));
+    // danger 确认弹窗：明示不可恢复 + 整个文件夹强删 + 完整路径核对
+    expect(screen.getByText(/不可恢复/)).toBeInTheDocument();
+    expect(screen.getByText(/整个项目文件夹（含其中的全部文件）/)).toBeInTheDocument();
+    expect(screen.getByText(/项目文件夹：D:\\books\\白昼计划/)).toBeInTheDocument();
+    expect(onDeleteRecent).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    expect(onDeleteRecent).toHaveBeenCalledWith("ws-1");
+  });
+});
+
+describe("WorkspaceSelectionDialog（删除项目）", () => {
+  const snapshot = (overrides = {}) => ({
+    revision: 1,
+    phase: "ready",
+    current: { id: "ws-cur", label: "当前书" },
+    recent: [
+      { id: "ws-cur", label: "当前书" },
+      { id: "ws-old", label: "旧书" },
+    ],
+    ...overrides,
+  });
+
+  function renderDialog(onDeleteRecent: (workspaceId: string) => Promise<boolean>) {
+    render(
+      <WorkspaceSelectionDialog
+        open
+        snapshot={snapshot()}
+        onPick={vi.fn(async () => undefined)}
+        onOpen={vi.fn()}
+        onOpenInNewWindow={vi.fn()}
+        onCloseWorkspace={vi.fn()}
+        onDeleteRecent={onDeleteRecent}
+        onDismiss={vi.fn()}
+      />,
+    );
+  }
+
+  it("filters the current workspace out (running protection) and offers deletion on the rest", () => {
+    renderDialog(vi.fn(async () => true));
+
+    // 当前项目不进切换列表（运行中保护从源头过滤），自然无其删除入口
+    expect(screen.queryByRole("button", { name: "删除项目 当前书" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "删除项目 旧书" })).toBeEnabled();
+  });
+
+  it("confirms deletion for a non-current workspace and wires onDeleteRecent", async () => {
+    const user = userEvent.setup();
+    const onDeleteRecent = vi.fn(async () => true);
+    renderDialog(onDeleteRecent);
+
+    await user.click(screen.getByRole("button", { name: "删除项目 旧书" }));
+    expect(screen.getByText(/确定删除项目「旧书」/)).toBeInTheDocument();
+    expect(screen.getByText(/整个项目文件夹（含其中的全部文件）/)).toBeInTheDocument();
+    expect(onDeleteRecent).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    expect(onDeleteRecent).toHaveBeenCalledWith("ws-old");
   });
 });
 
@@ -177,13 +255,14 @@ describe("WorkspaceSelectionDialog（打开位置选择）", () => {
     const onOpenInNewWindow = vi.fn();
     renderDialog({ onOpen, onOpenInNewWindow });
 
-    await user.click(screen.getByRole("button", { name: /第二本/ }));
+    // 列表项按钮名以书名开头（删除钮 aria-label 为「删除项目 第二本」，^ 区分）
+    await user.click(screen.getByRole("button", { name: /^第二本/ }));
     expect(screen.getByText(/打开《第二本》/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "在当前窗口打开" }));
     expect(onOpen).toHaveBeenCalledWith({ referenceId: "ws-2", label: "第二本" });
     expect(onOpenInNewWindow).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /第二本/ }));
+    await user.click(screen.getByRole("button", { name: /^第二本/ }));
     await user.click(screen.getByRole("button", { name: "取消" }));
     expect(screen.queryByText(/打开《第二本》/)).not.toBeInTheDocument();
     expect(onOpen).toHaveBeenCalledTimes(1);

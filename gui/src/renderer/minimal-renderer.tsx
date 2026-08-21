@@ -104,6 +104,8 @@ interface WorkspaceApi {
   /** 新手引导完成标记（主进程文件，跨实例一致可见） */
   getOnboardingDone(): Promise<boolean>;
   markOnboardingDone(): Promise<void>;
+  /** 删除项目（仅非当前项目；主进程彻底删除应用侧 storeDir 并移出注册表） */
+  delete(workspaceId: string): Promise<void>;
 }
 const workspaceTransport = electronIpcTransport({ endpoint: bridge as never, channel: "workspace-rpc" });
 const workspaceApi = wrap<WorkspaceApi>(workspaceTransport);
@@ -153,6 +155,7 @@ const workspaceController = new WorkspaceController({
     close: () => workspaceApi.close(),
     openInNewWindow: (reference) => workspaceApi.openInNewWindow(reference),
     takeStartupWorkspace: () => workspaceApi.takeStartupWorkspace(),
+    deleteWorkspace: (workspaceId) => workspaceApi.delete(workspaceId),
   },
   picker: {
     pickWorkspace: () => workspaceApi.pickWorkspace(),

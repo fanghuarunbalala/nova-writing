@@ -38,6 +38,9 @@ import { join } from "node:path";
 import { TodoIdleNudgePolicy } from "../nudge/definitions/todo.js";
 import { ComposeModeNudgePolicy } from "../nudge/definitions/compose.js";
 import { ProjectStageNudgePolicy } from "../nudge/definitions/project-stage.js";
+import { ExternalToolsNudgePolicy } from "../nudge/definitions/external-tools.js";
+import { DeferredToolRegistry } from "../tool/deferred/DeferredToolRegistry.js";
+import { createDeferredRejectionStub } from "../tool/definitions/externalTools.js";
 import type {
 	AskQuestionAnswer,
 	ConversationApprovalDecision,
@@ -99,8 +102,9 @@ export interface NovelAgentOptions {
   /** 技能注册表（runtime.skills 组 skill；缺省=未装配降级。宿主构造并 load 后注入） */
   skills?: { registry: SkillRegistry };
   /**
-   * 组外追加工具（装配期与 subagent 三工具同批注入 dispatcher 与 toolSchemes）：
-   * MCP 包装工具等宿主派生工具面。命名需避开内置工具（mcp__ 前缀）。
+   * 组外追加工具（docs/PRD/external-tools-接入.md 演进）：MCP 包装工具等宿主派生
+   * 工具面不再直进 dispatcher/toolSchemes——全部进延迟池（DeferredToolRegistry），
+   * 经 runtime.external 组 SearchExtraTools/ExecuteExtraTool 两步接入，装配期定死。
    */
   extraTools?: readonly ToolDef[];
   /** 书库服务（library.read 组）：main 暂不接入（定义已移除该组）；book-analyst 分支恢复 */
@@ -137,9 +141,15 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       composeState,
       designRoot: join(opts.workspace, ".novel", "design"),
     });
+  // 外部工具延迟池（MCP 包装工具等；docs/PRD/external-tools-接入.md）：
+  // 不进常驻工具面（toolSchemes / tool.policy 名单），由 runtime.external 组
+  // SearchExtraTools/ExecuteExtraTool 两步接入；受信免审、非受信内嵌审批。
+  // 可为空（无 MCP 工具时两工具照常装配，搜索返回「无延迟工具」，nudge no-op）
+  const externalRegistry = new DeferredToolRegistry(opts.extraTools ?? []);
   // nudge 实现目录：definition.nudgeEnablement.enabled ∩ 本目录 → 注入。
   // todo_idle / project_stage 恒可注入（project_stage 依赖 opts.handle，必传项）；
-  // compose_mode 依赖显式 composeState（hydrate 后注入，缺省不生效）。
+  // compose_mode 依赖显式 composeState（hydrate 后注入，缺省不生效）；
+  // external_tools 恒可注入（注册表为空时策略 no-op）。
   const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map<
     string,
     () => ContextNudgePolicy
@@ -148,6 +158,10 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     [
       "project_stage",
       () => new ProjectStageNudgePolicy({ handle: opts.handle }),
+    ],
+    [
+      "external_tools",
+      () => new ExternalToolsNudgePolicy({ registry: externalRegistry }),
     ],
     ...(opts.composeState === undefined
       ? []
@@ -181,6 +195,12 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       ...(opts.skills !== undefined ? { skills: opts.skills } : {}),
       ...(opts.library !== undefined ? { library: opts.library } : {}),
       ...(opts.importText !== undefined ? { importText: opts.importText } : {}),
+      // runtime.external 组：延迟池 + 会话 id + 审批通道（ExecuteExtraTool 内嵌审批用）
+      external: {
+        registry: externalRegistry,
+        ...(opts.conversationId === undefined ? {} : { conversationId: opts.conversationId }),
+        ...(opts.requestApproval === undefined ? {} : { requestApproval: opts.requestApproval }),
+      },
     }),
     nudgeCatalog,
     // 自动上下文压缩（docs/PRD/context-compact.md）：以 provider 闭包构造，
@@ -192,6 +212,9 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   // groupIds 契约不含 subagent 组。白名单由 definition.delegation 派生
   // （声明即生效，无平行常量；delegation 禁用时 allowedAgentTypes 恒空，
   // createSubagentTools 对空白名单抛错，误配即暴露）。
+  // 组外追加工具演进（docs/PRD/external-tools-接入.md）：extraTools（MCP 包装工具）
+  // 已在上方进延迟池（externalRegistry），不再直进 capability.toolDefs——
+  // 常驻工具面只含 runtime.external 组的两步工具（SearchExtraTools/ExecuteExtraTool）
   if (opts.subagent !== undefined) {
     capability.toolDefs.push(
       ...createSubagentTools({
@@ -200,10 +223,6 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
         allowedAgentTypes: definition.delegation.allowedAgentTypes,
       }),
     );
-  }
-  // 组外追加工具（MCP 包装工具等）：与 subagent 同批，装配期定死
-  if (opts.extraTools !== undefined) {
-    capability.toolDefs.push(...opts.extraTools);
   }
   // 技能索引快照（skill.index 动态段数据源）：装配期从生效清单派生一次，
   // 会话期静态（registry 已 load 完成后调用）
@@ -217,6 +236,11 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
         }
       : undefined;
   const dispatcher = new MapToolDispatcher(capability.toolDefs);
+  // 延迟工具直接调用拦截：stub 仅注册进 dispatcher（不进 toolSchemes，故不进
+  // 工具名单/provider call）——模型未经 SearchExtraTools 直接调用时抛错引导两步流程
+  for (const def of externalRegistry.list()) {
+    dispatcher.register(createDeferredRejectionStub(def));
+  }
   return new AgentLoop({
     workspace: opts.workspace,
     provider: opts.provider,

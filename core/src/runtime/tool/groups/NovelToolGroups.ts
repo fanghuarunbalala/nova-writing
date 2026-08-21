@@ -24,6 +24,12 @@ import { createNovelImportTextTool } from "../definitions/novelImportText.js";
 import { createLibraryReadTool } from "../definitions/library.js";
 import type { LibraryReadDeps } from "../definitions/library.js";
 import type { SkillRegistry } from "../../skill/SkillRegistry.js";
+import {
+  createExecuteExtraTool,
+  createSearchExtraToolsTool,
+} from "../definitions/externalTools.js";
+import type { ExecuteExtraToolApprovalChannel } from "../definitions/externalTools.js";
+import type { DeferredToolRegistry } from "../deferred/DeferredToolRegistry.js";
 
 /** runtime.todo：会话执行计划（TodoWrite） */
 export const NOVEL_TOOL_GROUP_TODO = new ToolGroupManifest({
@@ -108,6 +114,19 @@ export const NOVEL_TOOL_GROUP_IMPORT = new ToolGroupManifest({
   tools: ["NovelImportText"],
 });
 
+/**
+ * runtime.external：外部工具延迟加载两步模式（docs/PRD/external-tools-接入.md）——
+ * SearchExtraTools 发现 / ExecuteExtraTool 执行；MCP 工具经延迟池接入，
+ * 不进常驻工具面（toolSchemes / tool.policy 名单）。
+ */
+export const NOVEL_TOOL_GROUP_EXTERNAL = new ToolGroupManifest({
+  id: "runtime.external",
+  version: "1.0.0",
+  label: "Runtime External Tools",
+  description: "外部工具延迟加载（SearchExtraTools 发现 / ExecuteExtraTool 执行）",
+  tools: ["SearchExtraTools", "ExecuteExtraTool"],
+});
+
 /** Novel Agent 工具组目录：groupId → manifest（有序插入，与 definition.tools.groupIds 对齐） */
 export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = new Map([
   [NOVEL_TOOL_GROUP_TODO.id, NOVEL_TOOL_GROUP_TODO],
@@ -119,6 +138,7 @@ export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = 
   [NOVEL_TOOL_GROUP_ANALYST_FILES.id, NOVEL_TOOL_GROUP_ANALYST_FILES],
   [NOVEL_TOOL_GROUP_LIBRARY.id, NOVEL_TOOL_GROUP_LIBRARY],
   [NOVEL_TOOL_GROUP_IMPORT.id, NOVEL_TOOL_GROUP_IMPORT],
+  [NOVEL_TOOL_GROUP_EXTERNAL.id, NOVEL_TOOL_GROUP_EXTERNAL],
 ]);
 
 /** 工具组工厂选项（workspace / novel handle / todo 闭包 / compose 闭包） */
@@ -139,6 +159,18 @@ export interface NovelToolGroupResolverOptions {
   skills?: { registry: SkillRegistry };
   /** 书库服务（library.read 组 LibraryRead；workspace 同上作为书单访问控制根。缺省组装配报错） */
   library?: { deps: LibraryReadDeps };
+  /**
+   * 外部工具延迟池（runtime.external 组 SearchExtraTools/ExecuteExtraTool；
+   * 由 buildNovelAgent 注入——缺省组装配报错，对齐 novel.compose 先例）。
+   * registry 可为空（无 MCP 工具时两工具照常装配，搜索返回「无延迟工具」）。
+   */
+  external?: {
+    registry: DeferredToolRegistry;
+    /** 会话 id（ExecuteExtraTool 内嵌审批 requestId 归组用） */
+    conversationId?: string;
+    /** 审批征询通道（非受信目标执行前征询；缺省按「通道未装配」拒绝） */
+    requestApproval?: ExecuteExtraToolApprovalChannel;
+  };
   /** novel.entities 写工具审批覆盖（缺省 true=需审批；BookAnalyst 后台无人审批会话传 false，对齐 analyst.files 免审批先例） */
   entityApproval?: boolean;
   /**
@@ -201,6 +233,22 @@ export function createNovelToolGroupResolver(
         }
         return [
           createNovelImportTextTool({ workspaceRoot: options.workspace, handle: options.importText.handle }),
+        ];
+      },
+    ],
+    // runtime.external：外部工具延迟两步模式（缺省报错——buildNovelAgent 恒注入）
+    [
+      "runtime.external",
+      () => {
+        if (options.external === undefined) {
+          throw new TypeError("Tool Group runtime.external requires deferred registry");
+        }
+        return [
+          createSearchExtraToolsTool(options.external.registry),
+          createExecuteExtraTool(options.external.registry, {
+            conversationId: options.external.conversationId,
+            requestApproval: options.external.requestApproval,
+          }),
         ];
       },
     ],

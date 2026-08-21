@@ -26,10 +26,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** Novel Agent 声明式定义（definitionVersion 1.4.0：技能索引迁至 skill.index 专属动态段） */
+/** Novel Agent 声明式定义（definitionVersion 1.5.0：runtime.external 外部工具两步模式 + external_tools nudge） */
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.4.0",
+  definitionVersion: "1.5.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -55,6 +55,9 @@ export const novelAgentDefinition = new AgentDefinition({
       "runtime.files",
       "runtime.ask",
       "runtime.skills",
+      // 外部工具延迟两步模式（SearchExtraTools/ExecuteExtraTool）；MCP 工具经
+      // 延迟池接入，不进常驻工具面（docs/PRD/external-tools-接入.md）
+      "runtime.external",
       "novel.compose",
       "novel.entities",
       // library.read 暂不接入 main（避免污染主 agent 工具面）；开发在 book-analyst 分支
@@ -68,6 +71,6 @@ export const novelAgentDefinition = new AgentDefinition({
   runtimePolicyId: "default",
   /** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 实现目录后注入。 */
   nudgeEnablement: Object.freeze({
-    enabled: Object.freeze(["compose_mode", "todo_idle", "project_stage"]),
+    enabled: Object.freeze(["compose_mode", "todo_idle", "project_stage", "external_tools"]),
   }),
 });

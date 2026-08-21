@@ -8,7 +8,8 @@ import type { OpenDialogOptions, SaveDialogOptions } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { rm } from "node:fs/promises";
+import { basename, dirname, join, parse as parsePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import {
@@ -1021,6 +1022,18 @@ async function main(): Promise<void> {
       console.warn("[main] workspaces registry persist failed:", e);
     }
   };
+  // 删除项目专用：saveRegistry 是并集合并（只增不删），移除须重读磁盘按 id 过滤后回写，
+  // 并同步内存（另一实例恰在此窗口重开该项目会被其持锁——delete 前置 inspect 已拦）
+  const removeRegistryEntry = (workspaceId: string): void => {
+    try {
+      const entries = loadRegistryEntries().filter((entry) => entry.workspaceId !== workspaceId);
+      registryEntries.length = 0;
+      registryEntries.push(...entries);
+      writeFileSync(registryPath, JSON.stringify({ version: 1, entries }), "utf8");
+    } catch (e) {
+      console.warn("[main] workspaces registry removal persist failed:", e);
+    }
+  };
 
   // 允许 open 的 referenceId 白名单：仅 pickWorkspace（原生目录对话框）返回的路径可设为工作区，
   // 以及注册表中曾经授权过的路径（重启恢复）；渲染进程直传任意路径会被拒绝
@@ -1289,6 +1302,51 @@ async function main(): Promise<void> {
       } catch (e) {
         console.warn("[main] onboarding marker persist failed:", e);
       }
+    },
+    // 删除项目（PRD workspace-删除项目）：仅非当前项目可删——彻底删除应用侧 storeDir
+    // （novel.db + conversations/）与整个项目文件夹（含其中的用户文件），并移出注册表/
+    // 白名单。多实例下"正在运行"= 本实例当前项目（root 比对）或任一其他实例持有该项目
+    // 双开锁（inspect 探活）——均拒绝删除。文件系统根（极端场景：把盘根选作工作区）
+    // 绝不触碰。rm 走 fs.promises（libuv 线程池）：整棵数据树的同步遍历会冻结主进程事件
+    // 循环；失败容忍（杀毒/索引/资源管理器句柄占用），残留无副作用。先删数据后改注册表
+    // ——中途崩溃时条目仍在列表可重试，不会留下「列表已无但数据半删」的暗残留
+    delete: async (workspaceId: string): Promise<void> => {
+      const index = registryEntries.findIndex((e) => e.workspaceId === workspaceId);
+      if (index === -1) {
+        throw new Error(`项目不存在或已被删除: ${workspaceId}`);
+      }
+      const entry = registryEntries[index]!;
+      if (entry.workspaceRoot === currentWorkspaceRoot) {
+        throw new Error("该项目正在使用中，请先关闭后再删除");
+      }
+      const location = await locator.resolve(entry.workspaceRoot);
+      if (!location.storeDir.startsWith(storageRoot + sep)) {
+        throw new Error(`storeDir 越界，拒绝删除: ${location.storeDir}`);
+      }
+      // 跨实例占用检查：另一窗口正开着该项目（活进程持锁）→ 拒绝，防误删运行中项目
+      const lockStatus = WorkspaceDirLock.inspect(location.storeDir);
+      if (lockStatus !== undefined && lockStatus.alive) {
+        throw new Error(
+          lockStatus.holderPid === process.pid
+            ? "该项目正在当前窗口使用中，请先关闭后再删除"
+            : "该项目已在另一窗口打开，请先关闭该窗口后再删除",
+        );
+      }
+      try {
+        await rm(location.storeDir, { recursive: true, force: true });
+      } catch (e) {
+        console.warn("[main] workspace storeDir removal failed (leftover tolerated):", e);
+      }
+      // 整个项目文件夹（含用户文件）一并删除；文件系统根守卫——盘根绝不做 recursive rm
+      if (parsePath(entry.workspaceRoot).root !== entry.workspaceRoot) {
+        try {
+          await rm(entry.workspaceRoot, { recursive: true, force: true });
+        } catch (e) {
+          console.warn("[main] workspace folder removal failed (leftover tolerated):", e);
+        }
+      }
+      removeRegistryEntry(entry.workspaceId);
+      allowedWorkspaceReferences.delete(entry.workspaceRoot);
     },
   };
   expose(workspaceApi, electronIpcTransport({ endpoint, channel: WORKSPACE_CHANNEL }));

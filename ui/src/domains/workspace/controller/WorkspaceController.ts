@@ -53,6 +53,8 @@ export interface WorkspaceSessionPort {
   openInNewWindow?(reference: WorkspaceReferenceView): Promise<void>;
   /** 取出宿主派发的启动项目（他实例"新窗口打开"spawn 本实例时注入）；取出即清，仅一次 */
   takeStartupWorkspace?(): Promise<WorkspaceReferenceView | undefined>;
+  /** 删除项目（仅非当前项目；彻底删除应用侧数据并移出最近列表）。宿主未提供时删除入口报不可用 */
+  deleteWorkspace?(workspaceId: string): Promise<void>;
 }
 
 export interface WorkspaceControllerOptions {
@@ -300,6 +302,41 @@ export class WorkspaceController {
         return true;
       } catch {
         this.reject("WORKSPACE_CLOSE_FAILED", true, "Workspace 关闭失败");
+        return false;
+      }
+    });
+  }
+
+  /**
+   * 删除最近列表中的项目（PRD workspace-删除项目）：仅非当前项目可删；
+   * 成功后即时移出 recent（主进程已彻底删除应用侧 storeDir），失败置 error 列表不变。
+   */
+  deleteRecent(workspaceId: string): Promise<boolean> {
+    return this.runExclusive(async () => {
+      if (this.snapshot.current?.id === workspaceId) {
+        this.reject("WORKSPACE_DELETE_CURRENT_FORBIDDEN", false, "无法删除正在使用的项目");
+        return false;
+      }
+      if (this.snapshot.recent.every((workspace) => workspace.id !== workspaceId)) {
+        this.reject("WORKSPACE_RECENT_NOT_FOUND", false, "最近打开的项目不存在");
+        return false;
+      }
+      if (this.sessions.deleteWorkspace === undefined) {
+        this.reject("WORKSPACE_DELETE_UNAVAILABLE", false, "当前客户端尚未连接 Workspace 删除服务");
+        return false;
+      }
+      this.logger.info("workspace_controller.delete_started");
+      try {
+        await this.sessions.deleteWorkspace(workspaceId);
+        this.publish({
+          phase: this.snapshot.current === undefined ? "idle" : "ready",
+          recent: this.snapshot.recent.filter((workspace) => workspace.id !== workspaceId),
+          error: undefined,
+        });
+        this.logger.info("workspace_controller.delete_completed");
+        return true;
+      } catch {
+        this.reject("WORKSPACE_DELETE_FAILED", true, "删除项目失败");
         return false;
       }
     });

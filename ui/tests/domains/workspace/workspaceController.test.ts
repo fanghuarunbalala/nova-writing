@@ -2,6 +2,8 @@
  * WorkspaceController 新建项目入口（createAndOpen）行为：
  * 命名建目录成功 → 作为工作区打开；取消 → 静默回原状态；
  * 宿主未提供 / 建目录失败 → error 快照。
+ * 删除项目入口（deleteRecent，PRD workspace-删除项目）四态：
+ * 成功移出列表 / 当前项目禁删 / 端口缺失 / RPC 失败。
  */
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceController } from "../../../src/domains/workspace/controller/WorkspaceController.js";
@@ -245,5 +247,102 @@ describe("WorkspaceController 打开位置选择（当前窗口 / 新窗口）",
     await bare.controller.openStartupWorkspace();
     expect(bare.controller.getSnapshot().phase).toBe("idle");
     expect(bare.controller.getSnapshot().error).toBeUndefined();
+  });
+});
+
+describe("WorkspaceController.deleteRecent", () => {
+  /** 删除用控制器：recent 固定 ws-1/ws-2；current 经 notifyOpened 设为 ws-2（可选） */
+  function buildDeleteController(
+    options: {
+      deleteWorkspace?: (workspaceId: string) => Promise<void>;
+      current?: boolean;
+    } = {},
+  ) {
+    const controller = new WorkspaceController({
+      sessions: {
+        listRecent: async () => [
+          { id: "ws-1", label: "旧书" },
+          { id: "ws-2", label: "新书" },
+        ],
+        open: async () => ({ id: "x", label: "x" }),
+        close: async () => undefined,
+        ...(options.deleteWorkspace === undefined ? {} : { deleteWorkspace: options.deleteWorkspace }),
+      },
+    });
+    return {
+      controller,
+      prepare: async () => {
+        await controller.refresh();
+        if (options.current === true) {
+          controller.notifyOpened({ id: "ws-2", label: "新书" });
+        }
+      },
+    };
+  }
+
+  it("removes the workspace from recent on success", async () => {
+    const deleteWorkspace = vi.fn(async () => undefined);
+    const { controller, prepare } = buildDeleteController({ deleteWorkspace });
+    await prepare();
+
+    const ok = await controller.deleteRecent("ws-1");
+
+    expect(ok).toBe(true);
+    expect(deleteWorkspace).toHaveBeenCalledWith("ws-1");
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.recent.map((w) => w.id)).toEqual(["ws-2"]);
+    expect(snapshot.error).toBeUndefined();
+  });
+
+  it("refuses to delete the current workspace", async () => {
+    const deleteWorkspace = vi.fn(async () => undefined);
+    const { controller, prepare } = buildDeleteController({ deleteWorkspace, current: true });
+    await prepare();
+
+    const ok = await controller.deleteRecent("ws-2");
+
+    expect(ok).toBe(false);
+    expect(deleteWorkspace).not.toHaveBeenCalled();
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.error?.code).toBe("WORKSPACE_DELETE_CURRENT_FORBIDDEN");
+    expect(snapshot.recent.map((w) => w.id)).toEqual(["ws-1", "ws-2"]);
+  });
+
+  it("reports unavailable when host provides no deleteWorkspace port", async () => {
+    const { controller, prepare } = buildDeleteController();
+    await prepare();
+
+    const ok = await controller.deleteRecent("ws-1");
+
+    expect(ok).toBe(false);
+    expect(controller.getSnapshot().error?.code).toBe("WORKSPACE_DELETE_UNAVAILABLE");
+  });
+
+  it("keeps recent and reports error when the port rejects", async () => {
+    const { controller, prepare } = buildDeleteController({
+      deleteWorkspace: async () => {
+        throw new Error("该项目正在使用中，请先关闭后再删除");
+      },
+    });
+    await prepare();
+
+    const ok = await controller.deleteRecent("ws-1");
+
+    expect(ok).toBe(false);
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.error?.code).toBe("WORKSPACE_DELETE_FAILED");
+    expect(snapshot.recent.map((w) => w.id)).toEqual(["ws-1", "ws-2"]);
+  });
+
+  it("rejects unknown workspace ids before hitting the port", async () => {
+    const deleteWorkspace = vi.fn(async () => undefined);
+    const { controller, prepare } = buildDeleteController({ deleteWorkspace });
+    await prepare();
+
+    const ok = await controller.deleteRecent("ws-missing");
+
+    expect(ok).toBe(false);
+    expect(deleteWorkspace).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().error?.code).toBe("WORKSPACE_RECENT_NOT_FOUND");
   });
 });

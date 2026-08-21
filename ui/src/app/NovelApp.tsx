@@ -284,6 +284,7 @@ function NovelAppReady({
               onOpenRecent={(workspaceId) => {
                 void workspaceController.openRecent(workspaceId);
               }}
+              onDeleteRecent={(workspaceId) => workspaceController.deleteRecent(workspaceId)}
               onOpenGuide={openGuide}
             />
             <ProjectImportDialog
@@ -354,6 +355,7 @@ function NovelAppReady({
                     void workspaceController.closeCurrent();
                     setWorkspaceOpen(false);
                   }}
+                  onDeleteRecent={(workspaceId) => workspaceController.deleteRecent(workspaceId)}
                   onDismiss={() => setWorkspaceOpen(false)}
                 />
                 <SettingsDialog

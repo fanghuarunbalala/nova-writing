@@ -4,17 +4,20 @@
  * 启动时（未打开任何项目）的全屏欢迎页，对齐 docs/design/app-redesign-demo.html
  * 「启动 · 项目选择页」：品牌区（渐变圆点 + Novel + 标语）→ 「最近的项目」书封
  * 卡片列表 → 「新建项目 / 打开其他项目…」双按钮（新建走 save 型对话框命名建目录，
- * 打开走目录选择器选已有文件夹）。元素级联浮入（view-in 0.5s，0.05/0.12/0.18/0.24s
- * 依次）；进入 opening 阶段时整页缩放模糊退场（welcome-leave），后续由 NovelApp 的
- * 启动编排接管（分步加载遮罩 → 工作台 boot-in）。
+ * 打开走目录选择器选已有文件夹）。卡片右上角提供删除入口（PRD workspace-删除项目：
+ * 欢迎页无「当前项目」，全部可删；danger 二次确认明示不可恢复）。
+ * 元素级联浮入（view-in 0.5s，0.05/0.12/0.18/0.24s 依次）；进入 opening 阶段时
+ * 整页缩放模糊退场（welcome-leave），后续由 NovelApp 的启动编排接管（分步加载遮罩
+ * → 工作台 boot-in）。
  */
-import { ArrowRight, FileUp, FolderOpen, Plus } from "lucide-react";
-import type { CSSProperties } from "react";
+import { ArrowRight, FileUp, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { useState, type CSSProperties } from "react";
 import type {
   WorkspaceControllerSnapshot,
   WorkspaceSessionView,
 } from "../controller/WorkspaceController.js";
 import { Button } from "../../../shared/primitives/Button.js";
+import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import { formatRelativeTime } from "../../../shared/format/relativeTime.js";
 import styles from "./ProjectSelectionPage.module.css";
@@ -59,6 +62,8 @@ export interface ProjectSelectionPageProps {
   /** 从文件导入创建项目（txt / zip → 预览确认 → 建目录导入 → 打开） */
   readonly onImport?: () => void;
   readonly onOpenRecent: (workspaceId: string) => void;
+  /** 删除项目（仅应用侧数据，经 controller danger 确认后调用）；返回是否成功 */
+  readonly onDeleteRecent: (workspaceId: string) => Promise<boolean>;
   /** 重开新手引导向导（缺省隐藏入口） */
   readonly onOpenGuide?: () => void;
 }
@@ -69,6 +74,7 @@ export function ProjectSelectionPage({
   onCreate,
   onImport,
   onOpenRecent,
+  onDeleteRecent,
   onOpenGuide,
 }: ProjectSelectionPageProps) {
   const busy =
@@ -77,6 +83,20 @@ export function ProjectSelectionPage({
     snapshot.phase === "opening" ||
     snapshot.phase === "closing";
   const opening = snapshot.phase === "selecting" || snapshot.phase === "opening";
+  // 删除确认弹窗（参照 ConversationDialogs 的 target/busy 模式）：busy 锁重复提交，
+  // 结束（无论成败）即关闭——失败详情经 controller error 通道展示在页面错误区
+  const [deleteTarget, setDeleteTarget] = useState<WorkspaceSessionView | undefined>(undefined);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const confirmDelete = async (): Promise<void> => {
+    if (deleteTarget === undefined || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await onDeleteRecent(deleteTarget.id);
+    } finally {
+      setDeleteBusy(false);
+      setDeleteTarget(undefined);
+    }
+  };
   return (
     <div
       className={snapshot.phase === "opening" ? `${styles.page} ${styles.leave}` : styles.page}
@@ -96,7 +116,7 @@ export function ProjectSelectionPage({
             {snapshot.recent.map((workspace) => {
               const sub = formatSessionSub(workspace);
               return (
-                <li key={workspace.id}>
+                <li key={workspace.id} className={styles.projItem}>
                   <button
                     type="button"
                     className={styles.projCard}
@@ -113,6 +133,16 @@ export function ProjectSelectionPage({
                     <span className={styles.projOpen}>
                       打开 <Icon icon={ArrowRight} size="sm" />
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.projDelete}
+                    disabled={busy}
+                    title="删除项目"
+                    aria-label={`删除项目 ${workspace.label}`}
+                    onClick={() => setDeleteTarget(workspace)}
+                  >
+                    <Icon icon={Trash2} size="sm" />
                   </button>
                 </li>
               );
@@ -165,6 +195,23 @@ export function ProjectSelectionPage({
           </button>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={deleteTarget !== undefined}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(undefined);
+        }}
+        title="删除项目"
+        description={
+          deleteTarget !== undefined
+            ? `确定删除项目「${deleteTarget.label}」吗？将永久删除该项目的全部应用数据（小说内容、AI 会话记录等）和整个项目文件夹（含其中的全部文件），不可恢复。${
+                deleteTarget.rootPath !== undefined ? `项目文件夹：${deleteTarget.rootPath}` : ""
+              }`
+            : undefined
+        }
+        confirmLabel="删除"
+        busy={deleteBusy}
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   );
 }

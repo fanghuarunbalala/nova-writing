@@ -151,10 +151,12 @@ describe("StoryOutlineTreeProjection", () => {
     expect(hasOrdinalPrefix("1.1穿越苏醒")).toBe(true);
     expect(hasOrdinalPrefix("1、开篇")).toBe(true);
     expect(hasOrdinalPrefix("一．序")).toBe(true);
-    // 不误伤：无顿号/点分的纯文字标题
+    // 不误伤：无分隔符的纯文字 / 数字打头的普通标题（2-049 / 年份）
     expect(hasOrdinalPrefix("三体")).toBe(false);
     expect(hasOrdinalPrefix("一秒钟")).toBe(false);
     expect(hasOrdinalPrefix("觉醒之弧")).toBe(false);
+    expect(hasOrdinalPrefix("2-049抵达")).toBe(false);
+    expect(hasOrdinalPrefix("2023年大事记")).toBe(false);
     // 已知可容忍的误判：「3.14 的浪漫」形如点分编号 → 不叠加序号（少个前缀，无害不毁内容）
     expect(hasOrdinalPrefix("3.14 的浪漫")).toBe(true);
   });

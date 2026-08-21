@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProjectSelectionPage } from "../../../src/domains/workspace/components/ProjectSelectionPage.js";
-import { WorkspaceSelectionDialog } from "../../../src/domains/workspace/components/WorkspaceSelectionDialog.js";
 import { WorkspaceFooting } from "../../../src/domains/workspace/components/WorkspaceFooting.js";
 import { WorkspaceLabel } from "../../../src/domains/workspace/components/WorkspaceLabel.js";
 import { WorkspaceRevisionMeta } from "../../../src/domains/workspace/components/WorkspaceRevisionMeta.js";
@@ -256,13 +255,14 @@ describe("WorkspaceSelectionDialog（打开位置选择）", () => {
     const onOpenInNewWindow = vi.fn();
     renderDialog({ onOpen, onOpenInNewWindow });
 
-    await user.click(screen.getByRole("button", { name: /第二本/ }));
+    // 列表项按钮名以书名开头（删除钮 aria-label 为「删除项目 第二本」，^ 区分）
+    await user.click(screen.getByRole("button", { name: /^第二本/ }));
     expect(screen.getByText(/打开《第二本》/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "在当前窗口打开" }));
     expect(onOpen).toHaveBeenCalledWith({ referenceId: "ws-2", label: "第二本" });
     expect(onOpenInNewWindow).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /第二本/ }));
+    await user.click(screen.getByRole("button", { name: /^第二本/ }));
     await user.click(screen.getByRole("button", { name: "取消" }));
     expect(screen.queryByText(/打开《第二本》/)).not.toBeInTheDocument();
     expect(onOpen).toHaveBeenCalledTimes(1);

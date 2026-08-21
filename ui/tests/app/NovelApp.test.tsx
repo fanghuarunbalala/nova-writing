@@ -158,7 +158,8 @@ describe("NovelApp launch routing", () => {
     const user = userEvent.setup();
     const { controller, sessions } = buildController();
     render(<NovelApp api={buildApi()} platform={platform} workspaceController={controller} />);
-    await user.click(await screen.findByRole("button", { name: /白昼计划/ }));
+    // 卡片主体按钮名以书名开头（右上角删除钮 aria-label 为「删除项目 白昼计划」，^ 区分）
+    await user.click(await screen.findByRole("button", { name: /^白昼计划/ }));
     expect(sessions.open).toHaveBeenCalledWith({
       referenceId: "ws-1",
       label: "白昼计划",

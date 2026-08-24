@@ -270,8 +270,10 @@ const BUILTIN_MCP_NOVEL_FETCH_ID = "builtin:novel-fetch";
  * 内置 MCP 服务器预装（seed）：启动时把内置 novel-fetch（网文平台信息工具箱，
  * 当前支持起点）服务器配置种入 config——id 不存在时 upsert；已存在一律跳过
  * （用户编辑/禁用/删除优先，不覆盖不复活，对齐 seedBuiltinSkills 语义）。
- * 默认非受信（调用经 ExecuteExtraTool 内嵌审批）。server 入口随应用分发
- * （mcp-servers/novel-fetch/，PRD novel-fetch-外部工具）。
+ * 默认受信（免审批）：内置随应用分发 + 纯只读（fetch 公开页面），与内置工具
+ * NovelRead/Read/skill 免审一致；非受信审批语义保留给用户自添加的第三方服务器，
+ * 设置页可改回。server 入口随应用分发（mcp-servers/novel-fetch/，PRD
+ * novel-fetch-外部工具）。
  */
 async function seedBuiltinMcpServers(configStore: NodeApplicationConfigStore): Promise<void> {
   const snapshot = await configStore.get();
@@ -283,11 +285,14 @@ async function seedBuiltinMcpServers(configStore: NodeApplicationConfigStore): P
     server: {
       name: "novel-fetch",
       enabled: true,
-      trusted: false,
+      trusted: true,
       transport: {
         type: "stdio",
+        // Electron 主进程的 execPath 是 electron.exe——须以 Node 模式运行 .mjs
+        //（ELECTRON_RUN_AS_NODE=1；SDK env 为合并语义，PATH 等仍默认继承）
         command: process.execPath,
         args: [join(baseDir, "..", "..", "..", "mcp-servers", "novel-fetch", "index.mjs")],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
       },
     },
   });

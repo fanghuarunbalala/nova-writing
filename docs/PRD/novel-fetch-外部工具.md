@@ -1,4 +1,4 @@
-# 网文平台信息工具箱（novel-fetch MCP server）PRD —— v0.5
+# 网文平台信息工具箱（novel-fetch MCP server）PRD —— v0.6
 
 > 状态：✅ **已实施**（2026-08-24：`mcp-servers/novel-fetch/` server + gui 内置种子接入 + smoke test 7/7；core 全量 863 用例无回归、gui tsc 零新增）
 > 关联：[`external-tools-接入.md`](./external-tools-接入.md)（延迟加载框架，已合入 main——SearchExtraTools/ExecuteExtraTool 两步调用与 external_tools 纪元公告均由该框架承载）
@@ -54,7 +54,7 @@
 - 作为作者，我想知道现在月票榜/畅销榜上什么书火（题材、字数、简介），AI 直接查给我；
 - 作为作者，我想了解某本书的详情（简介/数据/更新状态）或某个作者写过什么作品；
 - 作为作者，我在起点看到一段喜欢的文字，贴个链接让 AI 抓回来给我看（按自然段分片，我来挑喜欢的）；
-- 作为作者，我希望这个工具开箱即用（默认注册，不用手动配置），但调用时有审批（非受信），不被静默外发请求。
+- 作为作者，我希望这个工具开箱即用（默认注册，不用手动配置），调用顺畅不打断（内置受信免审）；如我不放心可在设置页改回非受信（调用前审批）。
 
 ## 3. 流程图（必填）
 
@@ -65,7 +65,7 @@ flowchart TD
     C --> D[external_tools nudge<br/>纪元公告工具名单]
     D --> E[作者对话触发<br/>「查下月票榜」「抓下这段」]
     E --> F[SearchExtraTools<br/>select:novel_fetch]
-    F --> G[ExecuteExtraTool 执行<br/>非受信 → 内嵌审批]
+    F --> G[ExecuteExtraTool 执行<br/>受信 → 直执行免审<br/>（设置页可改非受信）]
     G --> H{action 分发}
     H --> I[search / book / rank / author]
     H --> J[chapter：分片列表<br/>每片 ≤300 字 带编号]
@@ -92,8 +92,9 @@ flowchart TD
 
 ### F2 应用默认注册（内置种子）
 
-- **形态**：gui 启动时 `seedBuiltinMcpServers`——config 中不存在 `builtin:novel-fetch` id 时 upsert（`enabled: true`、`trusted: false`、command=当前 Electron 的 node、args=server 入口绝对路径）；**已存在一律跳过**（用户编辑/禁用/删除优先，不覆盖不复活，对齐 seedBuiltinSkills 语义）。
-- **处理**：经既有 MCP 装配链路——`McpConnectionManager` 连接 → `wrapMcpTool` → `extraTools` → **DeferredToolRegistry**（延迟池，不进常驻工具面）→ `runtime.external` 组两步调用（SearchExtraTools 发现 / ExecuteExtraTool 执行，非受信内嵌审批）+ external_tools nudge 纪元公告（均为 external-tools 框架既有能力，零新机制）。
+- **形态**：gui 启动时 `seedBuiltinMcpServers`——config 中不存在 `builtin:novel-fetch` id 时 upsert（`enabled: true`、`trusted: true`、command=当前 Electron 二进制（以 `ELECTRON_RUN_AS_NODE=1` 的 Node 模式运行 .mjs——主进程 `process.execPath` 是 electron.exe，直接跑会 stdio 无响应超时）、args=server 入口绝对路径）；**已存在一律跳过**（用户编辑/禁用/删除优先，不覆盖不复活，对齐 seedBuiltinSkills 语义）。
+- **默认受信（免审批）依据**：审批语义的设计本意是防用户自添加第三方服务器的"外部副作用不可知"（wrapMcpTool 注释）；novel-fetch 应用内置随分发 + 纯只读（fetch 公开页面返回文本），与内置工具 NovelRead/Read/skill 免审一致；设置页可改回非受信。注意 trusted 修改为**会话快照语义**（onMutated 重写 env 只对下一个 spawn 的对话生效，运行中会话维持旧快照——与 provider 设置同款）。
+- **处理**：经既有 MCP 装配链路——`McpConnectionManager` 连接 → `wrapMcpTool` → `extraTools` → **DeferredToolRegistry**（延迟池，不进常驻工具面）→ `runtime.external` 组两步调用（SearchExtraTools 发现 / ExecuteExtraTool 执行，受信直执行）+ external_tools nudge 纪元公告（均为 external-tools 框架既有能力，零新机制）。
 - **异常**：server 连接失败/工具不可用 → 延迟池为空或缺失该工具，会话不受影响（框架既有语义）。
 
 ## 5. 边界与非目标（本期不做）
@@ -105,7 +106,7 @@ flowchart TD
 
 - [x] `mcp-servers/novel-fetch/` 独立可运行（smoke test，`core/scripts/novel-fetch-smoke.mjs`）：5 action 真实调用各返回结构化结果；VIP/非法 URL/缺参/未知榜单各有明确中文错误或 schema 校验报错。
 - [x] 域名白名单：非起点 URL 拒绝；畸形 URL 拒绝；60s 同目标 URL 防重；单请求 15s 超时。
-- [x] 默认注册：内置种子 upsert（已存在跳过、删除不复活）+ 延迟池注册（不进常驻工具面）+ 两步调用（SearchExtraTools → ExecuteExtraTool 内嵌审批）链路成立。
+- [x] 默认注册：内置种子 upsert（已存在跳过、删除不复活；`trusted: true` 默认受信免审）+ 延迟池注册（不进常驻工具面）+ 两步调用（SearchExtraTools → ExecuteExtraTool 受信直执行）链路成立。
 - [x] core 全量测试无回归（863 用例）；gui tsc 零新增错误（对照既有 1 个 renderer 错误）。
 
 ## 7. 开放问题

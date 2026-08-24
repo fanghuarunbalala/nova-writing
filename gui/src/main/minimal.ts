@@ -4,9 +4,10 @@
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen } from "electron";
+import type { OpenDialogOptions, SaveDialogOptions } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { basename, dirname, join, parse as parsePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +34,9 @@ import {
   BookImportService,
   createLibraryFace,
   LibraryService,
+  ProjectImportService,
+  createProjectImportFace,
+  ImportProcessRunner,
   electronIpcTransport,
   startConversationManagerWsServer,
   startNovelDbWsServer,
@@ -88,6 +92,8 @@ const rendererHtml = existsSync(join(baseDir, "minimal.html"))
   ? join(baseDir, "minimal.html")
   : join(baseDir, "..", "minimal", "minimal.html");
 const childScript = join(baseDir, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
+/** 项目导入后台进程脚本（耗时解析/落库不堵主进程事件循环；布局表达式同 childScript） */
+const importWorkerScript = join(baseDir, "..", "..", "..", "core", "scripts", "project-import-worker.mjs");
 /** 内置技能根（gui/resources/builtin-skills；启动时预装到 userData/skills，已存在跳过） */
 const builtinSkillsRoot = join(baseDir, "..", "..", "..", "gui", "resources", "builtin-skills");
 const IPC_CHANNEL = "novel-rpc";
@@ -628,7 +634,7 @@ async function main(): Promise<void> {
         ? new BookImportService({ service: libraryService, spawner: analysisSpawner, libraryRoot })
         : undefined,
     pickFile: async () => {
-      const result = await dialog.showOpenDialog({
+      const result = await openDialogModal({
         title: "选择完本文本",
         properties: ["openFile"],
         filters: [{ name: "文本文档", extensions: ["txt"] }],
@@ -642,11 +648,186 @@ async function main(): Promise<void> {
     analysisJournalPath: analysisJournalPathOf,
   });
   infoLog(`[main] library root: ${libraryRoot}`);
+
+  // ── 项目导入（欢迎页「从文件导入创建项目」）：确定性导入 + ProjectImporter 后台解构 ──
+  // 与书库区分：内容直接落进新项目 novel.db（可继续写作）。依赖的 workspace 机制
+  // （locator/registry/rebindWorkspace）在下方声明——钩子为惰性求值闭包，调用时已就绪。
+  // 耗时操作（zip 解压/大文本解析/分批落库）经独立子进程执行——主进程零阻塞，
+  // 阶段进度经 projectImport.createProgress 轮询（对话框动画）。
+  // 导入链路日志（worker spawn/阶段/stderr 转发/终态 + 解构进度观测）——console JSON
+  const projectImportLogger = createConsoleLogger().child({ component: "project_import" });
+  const projectImportService = new ProjectImportService({ logger: projectImportLogger });
+  const projectImportRunner = new ImportProcessRunner({
+    workerScript: importWorkerScript,
+    logger: projectImportLogger,
+  });
+  const allowedImportSources = new Set<string>();
+  let importAnalysisConversationId: string | undefined;
+  /** 解构会话 journal 路径（Read 批次调用 = 确定性进度信号） */
+  const importJournalPathOf = (): string | undefined => {
+    const root = currentJournalDir;
+    return importAnalysisConversationId === undefined || root === undefined
+      ? undefined
+      : join(root, importAnalysisConversationId, "journal.jsonl");
+  };
+  const projectImportFace = createProjectImportFace({
+    service: projectImportService,
+    runner: () => projectImportRunner,
+    logger: projectImportLogger,
+    workspaceRoot: () => currentWorkspaceRoot,
+    store: () => currentNovelStore,
+    pickFile: async () => {
+      const result = await openDialogModal({
+        title: "选择要导入的书稿",
+        properties: ["openFile"],
+        filters: [{ name: "书稿文本", extensions: ["txt", "zip"] }],
+      });
+      const path = result.canceled ? undefined : result.filePaths[0];
+      if (path === undefined) return null;
+      allowedImportSources.add(path);
+      return path;
+    },
+    allowedSources: () => allowedImportSources,
+    // 新建项目目录：与「新建项目」同款 save 对话框（标题区分场景）
+    createWorkspaceDir: async () => {
+      infoLog("[import-create] requesting target dir (save dialog)");
+      const lastRoot = [...registryEntries].sort((a, b) =>
+        b.lastOpenedAt.localeCompare(a.lastOpenedAt),
+      )[0]?.workspaceRoot;
+      const result = await saveDialogModal({
+        title: "新建导入项目文件夹",
+        buttonLabel: "新建并导入",
+        defaultPath: lastRoot !== undefined ? join(dirname(lastRoot), "新建项目") : undefined,
+        properties: ["createDirectory", "showHiddenFiles"],
+      });
+      if (result.canceled || result.filePath === undefined || result.filePath === "") {
+        infoLog("[import-create] target canceled → rpc will return {canceled:true}");
+        return undefined;
+      }
+      const root = result.filePath;
+      infoLog(`[import-create] target picked root=${root}`);
+      try {
+        mkdirSync(root, { recursive: true });
+      } catch (e) {
+        console.warn("[main] create import workspace directory failed:", root, e);
+        throw new Error(`无法在所选位置创建文件夹：${root}`);
+      }
+      allowedWorkspaceReferences.add(root);
+      return { referenceId: root, label: basename(root) };
+    },
+    // 绑定全新工作区（不登记最近列表——commit 才登记；rollback 清库删目录）
+    bindFreshWorkspace: async (reference) => {
+      const workspaceRoot = reference.referenceId;
+      const location = await locator.resolve(workspaceRoot);
+      await rebindWorkspace(location.storeDir);
+      currentWorkspaceRoot = location.workspaceRoot;
+      rebindLibraryService();
+      projectImportLogger.info("import_workspace.bound", {
+        workspaceRoot: location.workspaceRoot,
+        storeDir: location.storeDir,
+      });
+      return {
+        workspaceRoot: location.workspaceRoot,
+        store: requireNovelStore(),
+        // 后台进程执行 apply 时子进程自开该文件（WAL 多连接；完成即关）
+        dbPath: join(location.storeDir, "novel.db"),
+        commit: async () => {
+          const lastOpenedAt = new Date().toISOString();
+          const existing = registryEntries.find((e) => e.workspaceId === location.workspaceId);
+          if (existing !== undefined) {
+            existing.label = reference.label;
+            existing.lastOpenedAt = lastOpenedAt;
+          } else {
+            registryEntries.push({
+              workspaceId: location.workspaceId,
+              workspaceRoot: location.workspaceRoot,
+              label: reference.label,
+              lastOpenedAt,
+            });
+          }
+          saveRegistry();
+          projectImportLogger.info("import_workspace.committed", { workspaceId: location.workspaceId });
+        },
+        rollback: async () => {
+          try {
+            currentNovelStore?.close();
+          } catch (e) {
+            console.warn("[main] novel store close failed on import rollback:", e);
+          }
+          await rebindWorkspace(undefined);
+          currentWorkspaceRoot = undefined;
+          rebindLibraryService();
+          allowedWorkspaceReferences.delete(workspaceRoot);
+          rmSync(location.storeDir, { recursive: true, force: true });
+          rmSync(workspaceRoot, { recursive: true, force: true });
+        },
+      };
+    },
+    spawner: () =>
+      (process.env.NOVEL_PROVIDER_API_KEY ?? "").trim() !== "" && currentWorkspaceRoot !== undefined
+        ? {
+            spawn: (opts) => {
+              projectImportLogger.info("import_analysis.spawn", { agentType: opts.agentType });
+              return manager.spawnConversation(opts).then(
+                (ref) => {
+                  projectImportLogger.info("import_analysis.registered", {
+                    conversationId: ref.conversationId,
+                  });
+                  importAnalysisConversationId = ref.conversationId;
+                  return { conversationId: ref.conversationId };
+                },
+                (err: unknown) => {
+                  projectImportLogger.error("import_analysis.spawn_failed", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  throw err;
+                },
+              );
+            },
+          }
+        : undefined,
+    spawnUnavailableReason: () =>
+      (process.env.NOVEL_PROVIDER_API_KEY ?? "").trim() === ""
+        ? "模型 provider 未配置——内容已导入，配置模型后可重试解构"
+        : "解构会话不可用（需已打开工作区）",
+    analysisJournalPath: importJournalPathOf,
+  });
+
   // journalDir 传函数形态：history 代读随 workspace 重绑现取当前会话根
-  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: () => currentJournalDir, library: libraryFace });
+  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: () => currentJournalDir, library: libraryFace, projectImport: projectImportFace });
 
   // 主窗口引用（IPC sender 校验 + 定向发送；窗口创建晚于端点注册）
   let mainWindow: BrowserWindow | undefined;
+
+  // 系统对话框统一挂主窗口（模态）：不挂窗口的非模态框在 Windows 会被主窗口压到
+  // 后面、用户找不到（表现：文件/保存框"看不见"，前端弹窗又在 pick/creating 期间
+  // 锁定 → 整个流程无法取消）。窗口未建/已销毁时退回非模态。上方 face 的 pickFile
+  // 等为惰性闭包，调用时 mainWindow 已赋值（同"窗口创建晚于端点注册"既有模式）。
+  // show/done 日志：诊断"对话框关闭后前端 RPC 未 resolve"类断链（时间戳对照）。
+  const openDialogModal = (options: OpenDialogOptions) => {
+    const win = mainWindow !== undefined && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    infoLog(`[dialog] show kind=open modal=${win !== undefined} title=${String(options.title ?? "")}`);
+    return (win !== undefined ? dialog.showOpenDialog(win, options) : dialog.showOpenDialog(options)).then(
+      (result) => {
+        infoLog(
+          `[dialog] done kind=open canceled=${result.canceled} picked=${result.filePaths[0] ?? "-"}`,
+        );
+        return result;
+      },
+    );
+  };
+  const saveDialogModal = (options: SaveDialogOptions) => {
+    const win = mainWindow !== undefined && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    infoLog(`[dialog] show kind=save modal=${win !== undefined} title=${String(options.title ?? "")}`);
+    return (win !== undefined ? dialog.showSaveDialog(win, options) : dialog.showSaveDialog(options)).then(
+      (result) => {
+        infoLog(
+          `[dialog] done kind=save canceled=${result.canceled} picked=${result.filePath ?? "-"}`,
+        );
+        return result;
+      },
+    );
+  };
 
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）。
   // 安全：入站消息仅接受主窗口 sender（防注入 frame/webview 冒名调用）；
@@ -906,9 +1087,17 @@ async function main(): Promise<void> {
     }
   };
 
+  /** 当前已绑定的 storeDir（与 currentNovelStore 配对；rebindWorkspace 幂等短路判定用） */
+  let currentStoreDir: string | undefined;
+
   /** 数据库与会话目录随 workspace 重绑：关旧库 → 开新库（<storeDir>/novel.db）→ manager rescope；
-   *  storeDir undefined（关闭工作区）= 全部清空回空态。open 返回前完成，渲染端随后 refetch 即新数据 */
+   *  storeDir undefined（关闭工作区）= 全部清空回空态。open 返回前完成，渲染端随后 refetch 即新数据。
+   *  同 storeDir 且库仍打开 = 幂等重开直接返回——rescope 会无条件 terminate 全部会话，
+   *  「导入创建 → openDirect 同项目」若重复 rebind 会把刚派生的 ProjectImporter 解构会话当场杀掉 */
   const rebindWorkspace = async (storeDir: string | undefined): Promise<void> => {
+    if (storeDir !== undefined && storeDir === currentStoreDir && currentNovelStore !== undefined) {
+      return;
+    }
     try {
       currentNovelStore?.close();
     } catch (e) {
@@ -916,10 +1105,12 @@ async function main(): Promise<void> {
     }
     currentNovelStore = undefined;
     currentJournalDir = undefined;
+    currentStoreDir = undefined;
     if (storeDir !== undefined) {
       currentJournalDir = join(storeDir, "conversations");
       mkdirSync(currentJournalDir, { recursive: true });
       currentNovelStore = new SqliteNovelStore(join(storeDir, "novel.db"));
+      currentStoreDir = storeDir;
     }
     await manager.rescope(currentJournalDir);
   };
@@ -953,7 +1144,7 @@ async function main(): Promise<void> {
 
   const workspaceApi = {
     pickWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
-      const result = await dialog.showOpenDialog({
+      const result = await openDialogModal({
         title: "打开小说项目",
         properties: ["openDirectory", "createDirectory"],
       });
@@ -968,7 +1159,7 @@ async function main(): Promise<void> {
       const lastRoot = [...registryEntries].sort((a, b) =>
         b.lastOpenedAt.localeCompare(a.lastOpenedAt),
       )[0]?.workspaceRoot;
-      const result = await dialog.showSaveDialog({
+      const result = await saveDialogModal({
         title: "新建项目文件夹",
         buttonLabel: "新建",
         defaultPath: lastRoot !== undefined ? join(dirname(lastRoot), "新建项目") : undefined,
@@ -1276,11 +1467,11 @@ async function main(): Promise<void> {
       typeof first === "object" && first !== null && "message" in first
         ? (first as { message: unknown }).message
         : args[1];
-    // 按级别分流：error/warning 进 stderr；[boot] 前缀的 info 一并转发（附启动相对毫秒，
-  // 其余 info 不转发避免污染输出）
+    // 按级别分流：error/warning 进 stderr；[boot]/[import-dialog] 前缀的 info 一并转发
+    // （附启动相对毫秒，其余 info 不转发避免污染输出）
     if (level === 3 || level === "error") console.error(`[renderer] ${String(message)}`);
     else if (level === 2 || level === "warning") console.warn(`[renderer] ${String(message)}`);
-    else if (String(message).startsWith("[boot]"))
+    else if (String(message).startsWith("[boot]") || String(message).startsWith("[import-dialog]"))
       console.log(`[renderer] ${String(message)} (+${Date.now() - bootT0}ms)`);
   });
   win.webContents.on("dom-ready", () => bootLog("renderer dom-ready"));

@@ -58,13 +58,21 @@ export function scopeView(scope: StoryUnitScope | undefined) {
 /**
  * synopsis 覆盖区间脱敏：解析产物的「（覆盖 <bookId>-pXXXXXX–pYYYYYY）」
  * （GUI 进度信号，原文保留在数据层）显示为「（覆盖正文 pXXXXXX–pYYYYYY）」。
+ * 入参兼容 null（历史数据/InMemory 直写可能带 null——.replace 对 null 崩）。
  */
-export function formatSynopsisDisplay(synopsis: string | undefined): string {
-  if (synopsis === undefined) return "";
-  return synopsis.replace(
-    /（覆盖\s*[^\s（）]+-(p[0-9A-Za-z]+)\s*[–—-]\s*[^\s（）]+-(p[0-9A-Za-z]+)\s*）/g,
-    "（覆盖正文 $1–$2）",
-  );
+export function formatSynopsisDisplay(synopsis: string | null | undefined): string {
+  if (synopsis == null) return "";
+  return synopsis
+    .replace(
+      // 书库解析标记：「（覆盖 <bookId>-pXXXXXX–pYYYYYY）」
+      /（覆盖\s*[^\s（）]+-(p[0-9A-Za-z]+)\s*[–—-]\s*[^\s（）]+-(p[0-9A-Za-z]+)\s*）/g,
+      "（覆盖正文 $1–$2）",
+    )
+    .replace(
+      // 项目导入解构标记：「（覆盖 imp-bXXXXXX–imp-bYYYYYY）」
+      /（覆盖\s*imp-b([0-9]+)\s*[–—-]\s*imp-b([0-9]+)\s*）/g,
+      "（覆盖正文 批次 $1–$2）",
+    );
 }
 
 /** 派生实现态：pending + blockState → blocked（与 core rollup 口径一致） */

@@ -18,8 +18,9 @@ import type {
 	RuntimeSettings,
 } from "./contract.js";
 
-/** 参与运行参数解析的 agentType 全集（novel=主创作 / Explore=探索 / Compose=起草） */
-export const RUNTIME_AGENT_TYPES = ["novel", "Explore", "Compose"] as const;
+/** 参与运行参数解析的 agentType 全集（novel=主创作 / Explore=探索 / Compose=起草 /
+ *  ProjectImporter=项目导入解构——设置页可为各 agent 独立覆盖模型与采样） */
+export const RUNTIME_AGENT_TYPES = ["novel", "Explore", "Compose", "ProjectImporter"] as const;
 
 /** Agent 覆盖中引用 Fast 档位的保留值 */
 export const FAST_PROFILE_REF = "fast";
@@ -192,6 +193,12 @@ export function validateRuntimeSettings(
 	};
 }
 
+/** agent 缺省思考档位：解构型后台任务（ProjectImporter）low——抽取型任务 high 只加延迟
+ *  （书库 BookAnalyst 实测 1 万字 high 695s / low 174s 且结论一致）；创作系缺省 high */
+function defaultThinkingOf(agentType: string): ThinkingLevel {
+	return agentType === "ProjectImporter" ? "low" : "high";
+}
+
 /** profile 删除后的引用清理：fastProfileId / agents[].profileId 指向被删 profile 时摘除 */
 export function removeProfileReferences(
 	settings: RuntimeSettings | undefined,
@@ -293,7 +300,7 @@ export async function resolveRuntimeAgents(
 		agents[agentType] = {
 			...profile,
 			...(temperature !== undefined ? { temperature } : {}),
-			thinking: override?.thinking ?? defaults?.thinking ?? "high",
+			thinking: override?.thinking ?? defaults?.thinking ?? defaultThinkingOf(agentType),
 			maxTokens: override?.maxTokens ?? defaults?.maxTokens ?? 8192,
 		};
 	}

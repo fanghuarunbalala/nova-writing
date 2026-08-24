@@ -20,6 +20,7 @@ import { createComposeTools } from "../definitions/compose.js";
 import { createAskUserTool } from "../definitions/askUser.js";
 import type { AskUserChannel } from "../definitions/askUser.js";
 import { createNovelEntityTools } from "../definitions/novel.js";
+import { createNovelImportTextTool } from "../definitions/novelImportText.js";
 import { createLibraryReadTool } from "../definitions/library.js";
 import type { LibraryReadDeps } from "../definitions/library.js";
 import type { SkillRegistry } from "../../skill/SkillRegistry.js";
@@ -103,6 +104,16 @@ export const NOVEL_TOOL_GROUP_LIBRARY = new ToolGroupManifest({
   tools: ["LibraryRead"],
 });
 
+/** novel.import：导入书稿正文区间落库（ProjectImporter 专用——段落随场景导入） */
+export const NOVEL_TOOL_GROUP_IMPORT = new ToolGroupManifest({
+  id: "novel.import",
+  version: "1.0.0",
+  label: "Novel Import Text",
+  description:
+    "导入解构专用（NovelImportText：批次文件原文按段落区间落库到指定单元；参数无文本，宿主搬运）",
+  tools: ["NovelImportText"],
+});
+
 /**
  * runtime.external：外部工具延迟加载两步模式（docs/PRD/external-tools-接入.md）——
  * SearchExtraTools 发现 / ExecuteExtraTool 执行；MCP 工具经延迟池接入，
@@ -126,6 +137,7 @@ export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = 
   [NOVEL_TOOL_GROUP_ENTITIES.id, NOVEL_TOOL_GROUP_ENTITIES],
   [NOVEL_TOOL_GROUP_ANALYST_FILES.id, NOVEL_TOOL_GROUP_ANALYST_FILES],
   [NOVEL_TOOL_GROUP_LIBRARY.id, NOVEL_TOOL_GROUP_LIBRARY],
+  [NOVEL_TOOL_GROUP_IMPORT.id, NOVEL_TOOL_GROUP_IMPORT],
   [NOVEL_TOOL_GROUP_EXTERNAL.id, NOVEL_TOOL_GROUP_EXTERNAL],
 ]);
 
@@ -161,6 +173,12 @@ export interface NovelToolGroupResolverOptions {
   };
   /** novel.entities 写工具审批覆盖（缺省 true=需审批；BookAnalyst 后台无人审批会话传 false，对齐 analyst.files 免审批先例） */
   entityApproval?: boolean;
+  /**
+   * novel.import 组装配（ProjectImporter 专用）：原始（未守卫）handle——导入工具的
+   * 确定性写通道（paragraph.insert + 章回填）；workspace 用顶层 workspace 字段。
+   * 缺省=未装配（组不在 definition.groupIds 即不解析，无降级必要）。
+   */
+  importText?: { handle: NovelHandle };
 }
 
 /**
@@ -206,6 +224,17 @@ export function createNovelToolGroupResolver(
           options.handle,
           options.entityApproval !== undefined ? { requireApproval: options.entityApproval } : undefined,
         ),
+    ],
+    [
+      "novel.import",
+      () => {
+        if (options.importText === undefined) {
+          throw new TypeError("Tool Group novel.import requires importText deps (raw handle)");
+        }
+        return [
+          createNovelImportTextTool({ workspaceRoot: options.workspace, handle: options.importText.handle }),
+        ];
+      },
     ],
     // runtime.external：外部工具延迟两步模式（缺省报错——buildNovelAgent 恒注入）
     [

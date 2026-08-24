@@ -5,10 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { NovelApiClient, StoryOutlineSnapshot, StoryUnit } from "@novel/core";
-import { StoryOutlineTreeProjection } from "../../../src/domains/novel/outline/projection/StoryOutlineTreeProjection.js";
+import { StoryOutlineTreeProjection, composeTitle, hasOrdinalPrefix } from "../../../src/domains/novel/outline/projection/StoryOutlineTreeProjection.js";
 import { StoryOutlineTreeStore } from "../../../src/domains/novel/outline/store/StoryOutlineTreeStore.js";
 import { StoryOutlineTree } from "../../../src/domains/novel/outline/components/StoryOutlineTree.js";
 import { StoryOutlineTreeLegend } from "../../../src/domains/novel/outline/components/StoryOutlineTreeLegend.js";
+import { formatSynopsisDisplay } from "../../../src/domains/novel/outline/outlineStatus.js";
 import { OutlineUnitInspectorPanel } from "../../../src/shell/inspector/panels/OutlineUnitInspectorPanel.js";
 import { StatusChip } from "../../../src/shared/primitives/StatusChip.js";
 
@@ -119,6 +120,45 @@ describe("StoryOutlineTreeProjection", () => {
   it("falls back missing scope to custom", () => {
     const tree = StoryOutlineTreeProjection.build([unit({ id: "u", title: "未标" })]);
     expect(tree[0].scope).toBe("custom");
+  });
+
+  it("marks numberedTitle and composeTitle skips dynamic ordinal for prefixed titles", () => {
+    const dirtyUnits: readonly StoryUnit[] = [
+      unit({ id: "sg", title: "全书", scope: "saga", orderKey: "0000" }),
+      // LLM 落库脏数据：title 自带编号前缀
+      unit({ id: "a1", title: "一、觉醒与灰雾", parentId: "sg", scope: "arc", orderKey: "0001" }),
+      unit({ id: "a2", title: "卷入党事件", parentId: "sg", scope: "arc", orderKey: "0002" }),
+      unit({ id: "s1", title: "1.1 穿越苏醒", parentId: "a1", scope: "scene", orderKey: "0001" }),
+    ];
+    const tree = StoryOutlineTreeProjection.build(dirtyUnits);
+    const [a1, a2] = tree[0].children;
+    expect(a1.numberedTitle).toBe(true);
+    expect(a2.numberedTitle).toBe(false);
+    expect(tree[0].children[0].children[0].numberedTitle).toBe(true);
+    // 带「三、」动态序号也不双重叠加——修复「三、一、觉醒与灰雾」显示错乱
+    expect(composeTitle("三", "一、觉醒与灰雾")).toBe("一、觉醒与灰雾");
+    expect(composeTitle("1.2", "1.1 穿越苏醒")).toBe("1.1 穿越苏醒");
+    // 无前缀正常叠加
+    expect(composeTitle("一", "卷入党事件")).toBe("一、卷入党事件");
+    expect(composeTitle("1.1", "穿越苏醒")).toBe("1.1 穿越苏醒");
+  });
+
+  it("hasOrdinalPrefix matches prefix variants and tolerates known false positives", () => {
+    // 命中：中文序数（含组合）/ 点分数字（有无空格）/ 阿拉伯 + 顿号 / 全角点
+    expect(hasOrdinalPrefix("一、觉醒与灰雾")).toBe(true);
+    expect(hasOrdinalPrefix("二十一、大结局")).toBe(true);
+    expect(hasOrdinalPrefix("1.1 穿越苏醒")).toBe(true);
+    expect(hasOrdinalPrefix("1.1穿越苏醒")).toBe(true);
+    expect(hasOrdinalPrefix("1、开篇")).toBe(true);
+    expect(hasOrdinalPrefix("一．序")).toBe(true);
+    // 不误伤：无分隔符的纯文字 / 数字打头的普通标题（2-049 / 年份）
+    expect(hasOrdinalPrefix("三体")).toBe(false);
+    expect(hasOrdinalPrefix("一秒钟")).toBe(false);
+    expect(hasOrdinalPrefix("觉醒之弧")).toBe(false);
+    expect(hasOrdinalPrefix("2-049抵达")).toBe(false);
+    expect(hasOrdinalPrefix("2023年大事记")).toBe(false);
+    // 已知可容忍的误判：「3.14 的浪漫」形如点分编号 → 不叠加序号（少个前缀，无害不毁内容）
+    expect(hasOrdinalPrefix("3.14 的浪漫")).toBe(true);
   });
 
   it("findPath returns the unit path", () => {
@@ -265,6 +305,31 @@ describe("outline components", () => {
     expect(onToggleExpand).toHaveBeenCalledWith("arc-v1");
   });
 
+  it("renders dirty numbered titles without ordinal stacking + 「含编号」chip", () => {
+    const dirty = [
+      unit({ id: "sg", title: "全书", scope: "saga", orderKey: "0000" }),
+      unit({ id: "a1", title: "一、觉醒与灰雾", parentId: "sg", scope: "arc", orderKey: "0001" }),
+      unit({ id: "s1", title: "1.1 穿越苏醒", parentId: "a1", scope: "scene", orderKey: "0001" }),
+    ];
+    const tree = StoryOutlineTreeProjection.build(dirty);
+    render(
+      <StoryOutlineTree
+        workspaceId="w1"
+        tree={tree}
+        expansionState={new Map([["sg", true], ["a1", true]])}
+        selectedUnitId="s1"
+        onSelectUnit={() => {}}
+        onToggleExpand={() => {}}
+      />,
+    );
+    // 游离/带编号 title 不再叠加动态序号（修复「三、一、觉醒与灰雾」双重编号）
+    expect(screen.getByText("一、觉醒与灰雾")).toBeInTheDocument();
+    expect(screen.getByText("1.1 穿越苏醒")).toBeInTheDocument();
+    expect(screen.queryByText(/一、一、/)).not.toBeInTheDocument();
+    // 脏数据警示 chip（与「超深」同款）
+    expect(screen.getAllByText("含编号").length).toBe(2);
+  });
+
   it("renders legend with hierarchy line and both status axes", () => {
     render(<StoryOutlineTreeLegend />);
     expect(screen.getByText(/全书 → 幕（一、\/ 1.1 \/ 1.1.1，最多 4 层）→ 场景/)).toBeInTheDocument();
@@ -307,5 +372,18 @@ describe("OutlineUnitInspectorPanel 单元段落卡", () => {
     // 空态：引导到对话写入
     rerender(view([]));
     expect(screen.getByText(/暂无段落/)).toBeInTheDocument();
+  });
+});
+
+describe("formatSynopsisDisplay（null 安全与标记脱敏）", () => {
+  it("null / undefined 不抛错返回空串（可空列 null 读回的渲染回归）", () => {
+    expect(formatSynopsisDisplay(null)).toBe("");
+    expect(formatSynopsisDisplay(undefined)).toBe("");
+  });
+
+  it("项目导入 imp-b 批次标记脱敏显示", () => {
+    expect(formatSynopsisDisplay("开端（覆盖 imp-b000001–imp-b000003）")).toBe(
+      "开端（覆盖正文 批次 000001–000003）",
+    );
   });
 });

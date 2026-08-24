@@ -44,3 +44,23 @@ describe("SqliteNovelStore", () => {
 		rmSync(dbPath, { force: true });
 	});
 });
+
+	it("可空可选列读回归一：未提供的可选字段读回 undefined 而非 null（null 透传曾致大纲渲染崩溃）", async () => {
+		const store = new SqliteNovelStore(":memory:");
+		await store.mutate({ op: "outline.storyUnit.create", orderKey: "a", title: "第一章" });
+		const outline = (await store.query({ op: "outline.get" })) as {
+			units: { intent: unknown; synopsis: unknown; scope: unknown }[];
+		};
+		expect(outline.units[0].intent).toBeUndefined();
+		expect(outline.units[0].synopsis).toBeUndefined();
+		expect(outline.units[0].scope).toBeUndefined();
+		await store.mutate({ op: "character.create", input: { name: "张三" } });
+		const characters = (await store.query({ op: "characters.list" })) as {
+			summary: unknown;
+			initialState: unknown;
+			authorNotes: unknown;
+		}[];
+		expect(characters[0].summary).toBeUndefined();
+		expect(characters[0].initialState).toBeUndefined();
+		expect(characters[0].authorNotes).toBeUndefined();
+	});

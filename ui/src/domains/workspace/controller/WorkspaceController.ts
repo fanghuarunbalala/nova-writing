@@ -197,6 +197,14 @@ export class WorkspaceController {
     });
   }
 
+  /**
+   * 打开指定引用（「从文件导入创建项目」等流程拿到引用后进入常规打开编排；
+   * 语义同 open，保留独立命名入口）。
+   */
+  openDirect(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView | undefined> {
+    return this.open(reference);
+  }
+
   /** 仅选择目录（不打开）：切换对话框"先选定项目、再选打开位置"的第一步 */
   pickWorkspaceReference(): Promise<WorkspaceReferenceView | undefined> {
     return this.runExclusive(async () => {

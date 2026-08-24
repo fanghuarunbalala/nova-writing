@@ -30,6 +30,8 @@ export interface StoryOutlineTreeNode {
    * 顶层幕用中文序数，其下用点分数字（序号段数即层级，动态计算）。
    */
   readonly ordinal: string;
+  /** title 自带编号前缀（「一、xxx」「1.1 xxx」）——脏数据警示，展示时不叠加动态序号 */
+  readonly numberedTitle: boolean;
   /** 层级超深（序号段数 > 3，即全书之下超过 3 层）——存量脏数据警示 */
   readonly overDepth: boolean;
   readonly blockState: StoryUnitBlockState | undefined;
@@ -64,6 +66,27 @@ export function ordinalLabel(ordinal: string): string {
   return ordinal.includes(".") ? `${ordinal} ` : `${ordinal}、`;
 }
 
+/**
+ * title 是否自带编号前缀（「一、xxx」「1.1 xxx」「1、」等——LLM 落库脏数据）。
+ * 宽匹配、宁误判不漏判，但数字前缀必须以明确分隔符收尾：
+ * - 中文序数 + 分隔符（一、二．三.）；
+ * - 单段数字 + 分隔符（1、2.）——「2-049抵达」「2023年」这类数字打头的普通标题不识别；
+ * - 点分编号（1.1 / 2.3.1，至少两段）后接非数字——「1.1穿越苏醒」无空格也命中
+ *   （「3.14 的浪漫」形如点分编号，误判仅少展示序号，可容忍）。
+ */
+const ORDINAL_PREFIX_RE =
+  /^(?:[一二三四五六七八九十百零两]+[、．.]|\d+[、．.]|\d+(?:\.\d+)+[\s、．.]?(?=\D))/;
+
+export function hasOrdinalPrefix(title: string): boolean {
+  return ORDINAL_PREFIX_RE.test(title.trimStart());
+}
+
+/** 序号 + 标题 → 显示文本；title 自带编号前缀时原样返回（不叠加动态序号） */
+export function composeTitle(ordinal: string, title: string): string {
+  if (hasOrdinalPrefix(title)) return title;
+  return `${ordinalLabel(ordinal)}${title}`;
+}
+
 /** 数字路径 → 序号（段数 1 → 中文序数；≥2 → 点分；>3 段 = 超深） */
 export function ordinalOfPath(path: readonly number[]): { ordinal: string; overDepth: boolean } {
   if (path.length === 0) return { ordinal: "", overDepth: false };
@@ -73,12 +96,13 @@ export function ordinalOfPath(path: readonly number[]): { ordinal: string; overD
 
 export const StoryOutlineTreeProjection = {
   build(units: readonly StoryUnit[]): readonly StoryOutlineTreeNode[] {
-    interface MutableNode extends Omit<StoryOutlineTreeNode, "children" | "depth" | "parentTitle" | "ordinal" | "overDepth"> {
+    interface MutableNode extends Omit<StoryOutlineTreeNode, "children" | "depth" | "parentTitle" | "ordinal" | "overDepth" | "numberedTitle"> {
       children: MutableNode[];
       depth: number;
       parentTitle: string | undefined;
       ordinal: string;
       overDepth: boolean;
+      numberedTitle: boolean;
     }
     const nodes = new Map<string, MutableNode>();
     for (const unit of units) {
@@ -95,6 +119,7 @@ export const StoryOutlineTreeProjection = {
         parentTitle: undefined,
         ordinal: "",
         overDepth: false,
+        numberedTitle: hasOrdinalPrefix(unit.title),
         blockState: unit.blockState,
         abandonment: unit.abandonment,
         blockedReason:

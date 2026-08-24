@@ -109,6 +109,11 @@ export interface NovelAgentOptions {
   extraTools?: readonly ToolDef[];
   /** 书库服务（library.read 组）：main 暂不接入（定义已移除该组）；book-analyst 分支恢复 */
   library?: { deps: LibraryReadDeps };
+  /**
+   * novel.import 组装配（ProjectImporter 专用）：原始（未守卫）handle——
+   * NovelImportText 的确定性写通道。definition.groupIds 含 novel.import 时必传。
+   */
+  importText?: { handle: NovelHandle };
   /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
   subagent?: Omit<SubagentToolsOptions, "agents" | "allowedAgentTypes">;
   /** 自动压缩阈值覆盖（设置页 RuntimeSettings.compaction；缺省项用策略默认值） */
@@ -189,6 +194,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
         : {}),
       ...(opts.skills !== undefined ? { skills: opts.skills } : {}),
       ...(opts.library !== undefined ? { library: opts.library } : {}),
+      ...(opts.importText !== undefined ? { importText: opts.importText } : {}),
       // runtime.external 组：延迟池 + 会话 id + 审批通道（ExecuteExtraTool 内嵌审批用）
       external: {
         registry: externalRegistry,

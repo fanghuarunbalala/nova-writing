@@ -144,6 +144,18 @@ export function createProcessSpawner(
 					unsubscribe();
 					// 报到超时：kill 子进程避免孤儿（不 kill 会留下驻留进程 + manager 侧状态不一致）
 					child.kill();
+					// 超时 kill 留痕：与 exit handler 的「异常退出 (signal=SIGTERM)」对上因果
+					if (transports.logger !== undefined) {
+						transports.logger.warn("runtime.process.report_timeout", {
+							conversationId: opts.conversationId,
+							agentType: opts.agentType,
+							timeoutMs: CONNECT_TIMEOUT_MS,
+						});
+					} else {
+						console.warn(
+							`[runtime] conversation ${opts.conversationId}（agentType=${opts.agentType}）${CONNECT_TIMEOUT_MS}ms 内未报到，已 kill`,
+						);
+					}
 					reject(new Error(`conversation ${opts.conversationId} 连接报到超时`));
 				}, CONNECT_TIMEOUT_MS);
 				const unsubscribe = transports.managerWs.onConnected((connected) => {

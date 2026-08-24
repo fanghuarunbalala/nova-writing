@@ -8,7 +8,7 @@
  * platform/commandSource/configurationClient 保留在 props 表面（组合层契约）；
  * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入（Phase B）。
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Logger, NovelApiClient } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 import type { ApplicationCommandSource } from "../command/index.js";
@@ -33,6 +33,9 @@ import {
   NovelOverviewStore,
   NotificationStore,
   ProjectSelectionPage,
+  ProjectImportDialog,
+  ImportAnalysisIndicator,
+  ProjectImportStatusStore,
   LaunchOverlay,
   LaunchProgressStore,
   ScheduleStore,
@@ -153,6 +156,41 @@ function NovelAppReady({
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  // 从文件导入创建项目（欢迎页入口；对话框自管流程，成功后交回常规打开编排）
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  // 导入解构进度（当前项目 analyzing 期间 3s 轮询；右下角浮标 + 完成/失败 toast）
+  const projectImportStatus = useMemo(
+    () => new ProjectImportStatusStore({ api, logger }),
+    [api, logger],
+  );
+  const currentWorkspaceId = workspaceSnapshot.current?.id;
+  useEffect(() => {
+    if (currentWorkspaceId === undefined) {
+      projectImportStatus.detach();
+      return;
+    }
+    projectImportStatus.attach();
+    return () => projectImportStatus.detach();
+  }, [currentWorkspaceId, projectImportStatus]);
+  const importStatusSnapshot = useExternalStore(projectImportStatus);
+  const prevImportStatusRef = useRef(importStatusSnapshot.progress?.status);
+  useEffect(() => {
+    const prev = prevImportStatusRef.current;
+    prevImportStatusRef.current = importStatusSnapshot.progress?.status;
+    if (importStatusSnapshot.progress?.status === undefined) return;
+    if (prev !== "analyzing") return;
+    if (importStatusSnapshot.progress.status === "analyzed") {
+      toastStore.push({
+        kind: "success",
+        text: "导入解构完成——大纲 / 人物 / 地点已就绪，可以继续写作了",
+      });
+    } else if (importStatusSnapshot.progress.status === "failed") {
+      toastStore.push({
+        kind: "danger",
+        text: "导入解构未完成——正文与章卷不受影响，可在右下角重试",
+      });
+    }
+  }, [importStatusSnapshot, toastStore]);
   // 模型配置状态（回声模式判定）：无 configurationClient 的宿主恒视为已配置
   const [modelConfigured, setModelConfigured] = useState(true);
   // 书库视图（试验功能，NOVEL_LIBRARY=1 才开启）：向导按此决定是否介绍
@@ -242,11 +280,30 @@ function NovelAppReady({
               onCreate={() => {
                 void workspaceController.createAndOpen();
               }}
+              onImport={() => setImportDialogOpen(true)}
               onOpenRecent={(workspaceId) => {
                 void workspaceController.openRecent(workspaceId);
               }}
               onDeleteRecent={(workspaceId) => workspaceController.deleteRecent(workspaceId)}
               onOpenGuide={openGuide}
+            />
+            <ProjectImportDialog
+              open={importDialogOpen}
+              api={api}
+              onDismiss={() => setImportDialogOpen(false)}
+              onNotify={(kind, text) => toastStore.push({ kind, text })}
+              onImported={(reference, stats, spawnSkipped) => {
+                setImportDialogOpen(false);
+                const head = `已导入 ${stats.chapters} 章 · ${stats.paragraphs} 段 · ${stats.chars.toLocaleString()} 字`;
+                toastStore.push({
+                  kind: "success",
+                  text:
+                    spawnSkipped !== undefined
+                      ? `${head} · ${spawnSkipped}`
+                      : `${head} · 解构已在后台启动，进度见右下角`,
+                });
+                void workspaceController.openDirect(reference);
+              }}
             />
             <OnboardingWizard
               open={guideOpen}
@@ -319,6 +376,9 @@ function NovelAppReady({
             }
           />
         )}
+        {workspaceSnapshot.current !== undefined ? (
+          <ImportAnalysisIndicator store={projectImportStatus} />
+        ) : null}
         {launchSnapshot.phase !== "idle" ? (
           <LaunchOverlay snapshot={launchSnapshot} />
         ) : null}

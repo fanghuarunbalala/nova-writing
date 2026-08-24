@@ -12,7 +12,7 @@ import { Icon } from "../../../shared/primitives/Icon.js";
 import { StatusChip } from "../../../shared/primitives/StatusChip.js";
 import { EmptyState } from "../../../shared/primitives/EmptyState.js";
 import { Spinner } from "../../../shared/primitives/Spinner.js";
-import { ordinalLabel, ordinalOfPath } from "../../novel/outline/projection/StoryOutlineTreeProjection.js";
+import { composeTitle, hasOrdinalPrefix, ordinalOfPath } from "../../novel/outline/projection/StoryOutlineTreeProjection.js";
 import { formatSynopsisDisplay } from "../../novel/outline/outlineStatus.js";
 import type { LibraryStore, LibrarySnapshot } from "../store/LibraryStore.js";
 import styles from "./library.module.css";
@@ -47,8 +47,8 @@ const RHYTHM_LABEL: Record<string, string> = {
  * synopsis 覆盖区间脱敏（共享实现见 outlineStatus.formatSynopsisDisplay）：
  * 「（覆盖 <bookId>-pXXXXXX–pYYYYYY）」→「（覆盖正文 pXXXXXX–pYYYYYY）」。
  */
-function formatSynopsis(synopsis: string | undefined): string {
-	if (synopsis === undefined) return "—";
+function formatSynopsis(synopsis: string | null | undefined): string {
+	if (synopsis == null) return "—";
 	return formatSynopsisDisplay(synopsis);
 }
 
@@ -171,10 +171,15 @@ export function OutlinePane({ bookId, snapshot, store, onOpenCharacter, onOpenLo
 			onClick={() => store.selectUnit(node.unit.id)}
 		>
 			<span className={styles.tick} aria-hidden="true" />
-			<span className={styles.title}>{`${ordinalLabel(node.ordinal)}${node.unit.title}`}</span>
+			<span className={styles.title}>{composeTitle(node.ordinal, node.unit.title)}</span>
 			<StatusChip variant="faint" compact>
 				{SCOPE_LABEL[node.unit.scope ?? "custom"] ?? "单元"}
 			</StatusChip>
+			{hasOrdinalPrefix(node.unit.title) ? (
+				<StatusChip variant="danger" compact title="标题自带编号前缀（编号由界面按结构动态生成），建议改为纯标题">
+					含编号
+				</StatusChip>
+			) : null}
 			{node.overDepth ? (
 				<StatusChip variant="danger" compact title="层级超过 4 层（全书 → 幕 → 幕 → 场景），建议整理">
 					超深
@@ -198,10 +203,10 @@ export function OutlinePane({ bookId, snapshot, store, onOpenCharacter, onOpenLo
 				<div className={styles.paraCard}>
 					<div className={styles.paraHead}>
 						<StatusChip variant="accent">{SCOPE_LABEL[selected.unit.scope ?? "custom"] ?? "单元"}</StatusChip>
-						<h3 style={{ margin: 0, fontSize: "var(--fs-h2)", fontWeight: "var(--fw-semibold)" }}>{`${ordinalLabel(selected.ordinal)}${selected.unit.title}`}</h3>
+						<h3 style={{ margin: 0, fontSize: "var(--fs-h2)", fontWeight: "var(--fw-semibold)" }}>{composeTitle(selected.ordinal, selected.unit.title)}</h3>
 					</div>
 					<div className={styles.chapterMeta}>
-						{parent !== undefined ? `父 ${ordinalLabel(parent.ordinal)}${parent.unit.title}` : "顶层单元"}
+						{parent !== undefined ? `父 ${composeTitle(parent.ordinal, parent.unit.title)}` : "顶层单元"}
 						{selected.overDepth ? " · 层级超过 4 层（全书 → 幕 → 幕 → 场景），建议整理" : ""}
 					</div>
 					<p className={styles.progressNote} style={{ marginTop: "var(--space-2)" }}>

@@ -194,7 +194,7 @@ function UnitDetailBody(ctx: DirectoryDetailContext) {
       ) : null}
       <DetailSec label="意图">{unit.intent ?? "（尚未填写——这个单元要达成什么）"}</DetailSec>
       <DetailSec label="梗概">
-        {unit.synopsis !== undefined && unit.synopsis !== ""
+        {unit.synopsis != null && unit.synopsis !== ""
           ? formatSynopsisDisplay(unit.synopsis)
           : "（尚未填写情节梗概）"}
       </DetailSec>

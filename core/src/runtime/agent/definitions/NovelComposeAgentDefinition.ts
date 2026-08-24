@@ -62,4 +62,8 @@ export const novelComposeAgentDefinition = new AgentDefinition({
   delegation: new AgentDelegationPolicy({ mode: "disabled", allowedAgentTypes: [] }),
   communication: new AgentCommunicationPolicy("ephemeral_subagent"),
   runtimePolicyId: "default",
+  /** max_turn：轮次预算两级提醒（子代理 20 轮耗尽 = 成果整个丢失，止损价值高） */
+  nudgeEnablement: Object.freeze({
+    enabled: Object.freeze(["max_turn"]),
+  }),
 });

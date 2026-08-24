@@ -33,7 +33,11 @@ function cfgOf(loop: ReturnType<typeof build>) {
   return (
     loop as unknown as {
       config: {
-        agentCapability: { systemSections: unknown[]; toolDefs: Array<{ name: string }> };
+        agentCapability: {
+          systemSections: unknown[];
+          toolDefs: Array<{ name: string }>;
+          nudgePolicies: Array<{ constructor: { name: string } }>;
+        };
         toolDispatcher: { dispatch: (ctx: unknown, call: ToolCall) => Promise<string> };
         conversationId?: string;
         agentId?: string;
@@ -56,6 +60,13 @@ describe("buildNovelExplorerAgent 装配", () => {
   it("systemSections 7 段（跳过 conversationBehavior 与 novel 创作 4 段；tool.policy/tool.guidance 收尾）", () => {
     const cfg = cfgOf(build());
     expect(cfg.agentCapability.systemSections).toHaveLength(7);
+  });
+
+  it("nudge 接线：max_turn（子代理目录仅此一项）", () => {
+    const cfg = cfgOf(build());
+    expect(cfg.agentCapability.nudgePolicies.map((n) => n.constructor.name)).toEqual([
+      "MaxTurnNudgePolicy",
+    ]);
   });
 
   it("config 盖章 conversationId + agentId，且无 listeners（live-only）", () => {

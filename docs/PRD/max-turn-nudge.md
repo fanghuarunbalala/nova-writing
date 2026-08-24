@@ -221,6 +221,11 @@ curTurn=99（remaining=1）：注入 final「这是最后一轮，不要再调�
 | 3 | 子代理侧三个设计说明入 F9（live-only 兼容 / 每任务新实例 / 窗口适配） | 子代理 loop 一次性 + 不落 journal，与主 agent 生命周期差异需要显式交代 |
 | 4 | O3/O4 从开放问题移除并并入正文 | 已随生效范围定稿解决 |
 
-## 11. 实施落地记录（定稿后补）
+## 11. 实施落地记录（v0.3 实施完成回填）
 
-- （实现后回填：实施偏差 / 文案定稿 / 测试实际例数。）
+- **实施偏差**：无——两级窗口 / 塌缩规则 / 纪元基线修复 / 五 agent 接线均按方案落地。
+- **策略单测**：`max-turn-nudge.test.ts` 实际 18 例（方案 17 例 + clear 兜底独立成例）全绿。
+- **装配断言**：6 处——`novel-agent.test.ts` 接线断言扩 max_turn（无/有 composeState 两分支）；`novel-explorer.test.ts` / `novel-compose.test.ts`（子代理目录仅 max_turn）；`book-analyst.test.ts` / `project-importer.test.ts`（todo_idle + max_turn 声明序）。
+- **typecheck**：0 错误（过程中修一处 BookAnalystAgent Map 构造缺显式泛型的推断报错，对齐 NovelAgent.ts 写法）。
+- **全量回归备注**：core 883 passed / 2 failed——失败 2 例为 `ImportProcessRunner`「真实 worker 脚本」用例，已用干净工作区（stash 后）验证为**预存环境问题**（子进程退出 IMP_IMPORT_FAILED），与本功能无关。附带发现：同步最新 main 后需 `pnpm install`（`fflate` 为 PR #22 新增依赖，缺失会导致 12 个测试文件级失败）。
+- **提交拆分**：① docs(prd) v0.3 生效范围定稿；② feat(core) 策略 + 单测 18 例；③ feat(core) 全 agent 接线 + 装配断言（本提交）。

@@ -1,8 +1,9 @@
-# max_turn nudge（轮次预算提醒）PRD —— v0.2
+# max_turn nudge（轮次预算提醒）PRD —— v0.3
 
 > 关联文档：`external-tools-接入.md`（F5 nudge 纪元状态机）、`project-stage-nudge.md`（nudge 生命周期规格）。
 > 复用机制：`ContextNudgePolicy` 双通道 + 纪元状态机 + nudge 标记清扫 + seed-scan 幂等（`core/src/runtime/nudge/`）。
-> v0.1 → v0.2：单级提醒改为**两级递进**（warn + final）——final 级直接针对"最后一轮仍发 tool_call → 熔断抛异常"的最坏失败模式；补 wire 归一化/UI 说明；剩余轮次口径明确化。变更明细见 §10。
+> v0.1 → v0.2：单级提醒改为**两级递进**（warn + final）——final 级直接针对"最后一轮仍发 tool_call → 熔断抛异常"的最坏失败模式；补 wire 归一化/UI 说明；剩余轮次口径明确化。
+> v0.2 → v0.3：**生效范围扩为全部 agent**（用户定稿）——主 / ProjectImporter / BookAnalyst / Explore / Compose 五个 agent + resume 通道，装配矩阵与接线明细见 F8/F9。变更明细见 §10。
 
 ## 1. 背景与目标
 
@@ -128,22 +129,35 @@ curTurn=99（remaining=1）：注入 final「这是最后一轮，不要再调�
 - UI：无特殊处理，与 external_tools 等现有 nudge 消息同规则流动展示。
 - 模型侧辨识框架：`context.reliability` 静态段（v1.1.0，主/子代理 recipe 均含）已说明 `<system-reminder>` 语义，无需新增静态段。
 
-### F8 装配
+### F8 装配（v0.3：全部 agent）
 
-- `core/src/runtime/agent/NovelAgent.ts` `nudgeCatalog`（≈153-164 行）注册：`"max_turn" → () => new MaxTurnNudgePolicy()`。
-- `core/src/runtime/agent/definitions/NovelAgentDefinition.ts:73-74` `nudgeEnablement.enabled` 增加 `"max_turn"`。
-- 生效集 = `enabled ∩ nudgeCatalog`（`AgentAssembler.resolveNudges`），随 AgentDefinition 持久化。
+五个 agent 的 nudge 装配矩阵（`AgentAssembler.resolveNudges` = `enabled ∩ nudgeCatalog`，两侧都加才生效）：
 
-### F9 适用范围
+| Agent | builder | nudgeCatalog 来源 | 接线改动 |
+| --- | --- | --- | --- |
+| Novel（主） | `buildNovelAgent` | `NovelAgent.ts` nudgeCatalog（4 项） | catalog + definition.enabled 各加 `max_turn` |
+| ProjectImporter | `buildNovelAgent` 换 definition（entrypoint:728） | 复用主 agent catalog | 仅 definition.enabled 加 `max_turn` |
+| BookAnalyst | `buildBookAnalystAgent`（自有 catalog，现仅 todo_idle） | `BookAnalystAgent.ts` | catalog + definition.enabled 各加 |
+| Explore | `buildNovelSubagent` | **现状不传 catalog**（assembler 默认空 Map） | `NovelSubagent.ts` 新建子代理 catalog（仅 max_turn）+ definition 声明 enabled |
+| Compose | `buildNovelSubagent` | 同上 | 同上 |
 
-- **v1 只启用主 agent（NovelAgent）**。子代理与 resume 通道不在 v1 启用范围（理由与后续优先级见 O3/O4）。
+- 子代理 catalog **只放 `max_turn`**：external_tools（依赖 DeferredToolRegistry/MCP）、project_stage（依赖 novel-db 异步查询）、compose_mode（依赖 composeState）均需要子代理 builder 没有的构造依赖，不在本次扩大。
+- resume 通道（entrypoint `resumePendingRun({maxTurns: 8})`）复用主 agent 装配的同一个 loop → 自动生效，零接线（remaining 按恢复预算 8 计算）。
+
+### F9 适用范围（v0.3：全部 agent）
+
+- **五个 agent 全部启用**：主 / ProjectImporter / BookAnalyst / Explore / Compose；resume 通道经主 agent loop 自动生效。
+- **子代理侧设计说明**：
+  1. live-only 兼容：子代理 loop 不落 journal，nudge 消息只进内存消息流（appendRunMessages 无 listener 依赖）；事件桥/UI 可见性沿用现有行为，不做特殊处理。
+  2. 每任务新实例：SubagentRuntime 每任务经 builder 新建 loop → 策略每任务新实例 → "每 run 每级一次"语义天然成立；seed-scan 在一次性 loop 上空转，无害。
+- **窗口适配**：子代理 maxTurns=20 → warn 第 17 轮（remaining=3）/ final 第 19 轮；resume maxTurns=8 → warn 第 5 轮 / final 第 7 轮——两级递进在短预算下依然成立（同轮双门塌缩兜底 maxTurn≤1）。
 
 ## 5. 边界与非目标
 
 - 不改变 `maxTurns` 语义、默认值、硬熔断行为；**不软化熔断路径本身**（异常收口 → 优雅降级）——final 级提醒已把大部分耗尽场景转化为正常收口，模型不服从时维持现状兜底，错误信息本身对用户是有效信号。
 - 不做三级及以上递进（两级已覆盖"预警 + 止损"两个语义位）。
 - 不做阈值可配化 UI / 配置项（v1 常量，见 O1）。
-- 不启用子代理与 resume 通道（v1，见 O3/O4）。
+- 不扩大子代理 catalog 的其他 nudge（见 F8）。
 - 不引入新的通道或持久化机制——全部复用现有 nudge 基建。
 
 ## 6. 验收标准
@@ -157,34 +171,34 @@ curTurn=99（remaining=1）：注入 final「这是最后一轮，不要再调�
 7. 新 run 开始（curTurn 回 0）：两级标志复位，第二个 run 各窗口正常注入。
 8. 压缩发生（纪元变化）且窗口期仍在：清扫后按各自窗口重注，不重复堆积；压缩发生在出窗口后：不重注。
 9. 重启 seed-scan：当前 run 已含对应标记 → 对应级不重发；标记在旧 run（非当前）→ 不阻塞当前 run 注入。
-10. 装配：`nudgeEnablement.enabled` 含 `max_turn`，assembler 生效集包含该策略。
+10. 装配：五个 agent 的 `nudgeEnablement.enabled` 均含 `max_turn`，assembler 生效集包含该策略（主/Importer 经 buildNovelAgent、BookAnalyst 自有 catalog、Explore/Compose 经 NovelSubagent catalog）。
 11. 全部用例走 `makeLoop` / `makeRun` 替身模式（对齐 `external-tools-nudge.test.ts`），不依赖真实 provider；两个渲染函数有独立纯函数用例。
 
 ## 7. 开放问题
 
 - **O1 阈值可配化**：`WARN_WINDOW=3` 是否进 `AgentRuntimeOverride` / AgentDefinition（v1 常量，有真实需求再开）。
-- **O2 warn 文案的窗口是否需要按任务类型调**：长文创作 3 轮可能偏紧（正文推进链长），观察实际效果再调。
-- **O3 resume 通道**：`resumePendingRun` 硬编码 `maxTurns: 8` 的恢复场景是否需要（v1 不启用，恢复流程语义另行评估）。
-- **O4 子代理（优先级最高的后续项）**：`SubagentRuntime` 默认 20 轮，耗尽抛异常意味着**子代理成果整个丢失**（比主 agent 更疼）——final 级"立即总结回报"对 Explore/Compose 价值极高。v1 因装配面差异（子代理走独立 recipe/装配链）暂不启用，建议 v1.1 跟进。
+- **O2 warn 文案的窗口是否需要按任务类型调**：长文创作 3 轮可能偏紧（正文推进链长），观察实际效果再调。（v0.2 的 O3 resume / O4 子代理已在 v0.3 并入正文生效范围，不再是开放问题。）
 
 ## 8. 技术设计要点
 
 - 新文件：`core/src/runtime/nudge/definitions/max-turn.ts`——`MaxTurnNudgePolicy implements ContextNudgePolicy`，零外部依赖；构造可选注入 `warnWindow`（默认 3，测试用）。
 - 状态：`warnInjected` / `finalInjected` / `seeded` / `lastCompactionGeneration` / `lastMessageCount`。
+- **纪元基线偏离 external-tools 模板（有意）**：external-tools 的纪元基线从 0 起算、seed 后仍做失配复位——对它无害（压缩后重发公告本就是正确行为）。本策略首求值（含重启恢复）把 `lastCompactionGeneration` 基线定为**当前值**，否则重启已压缩会话时 generation 失配会把 seed 置位的标志误复位 → warn 重发。
 - 与 external-tools 策略的差异点（实现时注意）：
   1. 门控从「curTurn===0 每纪元一次」改为「两级窗口 + 每 run 每级一次」；
   2. 复位增加 run 边界（curTurn===0）；
   3. seed-scan 只扫当前 run（`loop.runs` 末尾）而非全部 run；
   4. 两个标记（seed-scan 区分两级）。
+- 子代理接线：`NovelSubagent.ts` 建 `nudgeCatalog = new Map([["max_turn", () => new MaxTurnNudgePolicy()]])` 传 AgentAssembler。
 - 单测文件：`core/src/runtime/nudge/__tests__/max-turn-nudge.test.ts`（对齐 external-tools-nudge.test.ts 的 makeLoop/makeRun 模式）。
 
 ## 9. 实施步骤
 
-1. `definitions/max-turn.ts`：双标记 + `DEFAULT_WARN_WINDOW` + `renderMaxTurnText` / `renderMaxTurnFinalText` + `MaxTurnNudgePolicy`。
-2. `__tests__/max-turn-nudge.test.ts`：覆盖 §6 验收 1-9 + 渲染纯函数用例。
-3. `NovelAgent.ts` nudgeCatalog 注册 + `NovelAgentDefinition.ts` enabled 声明。
-4. 装配级断言（`agent-assembler.test.ts` / `novel-agent.test.ts` 模式）。
-5. 全量单测 + CI 校验；回填 §10 落地记录。
+1. `definitions/max-turn.ts`：双标记 + `DEFAULT_WARN_WINDOW` + `renderMaxTurnText` / `renderMaxTurnFinalText` + `MaxTurnNudgePolicy`（含纪元基线修复）。
+2. `__tests__/max-turn-nudge.test.ts`：覆盖 §6 验收 1-9 + 渲染纯函数 + 子代理典型窗口（maxTurn=20）用例。
+3. 全 agent 接线（7 处）：`NovelAgent.ts` catalog、`NovelAgentDefinition.ts` / `ProjectImporterAgentDefinition.ts` / `BookAnalystAgentDefinition.ts` enabled、`BookAnalystAgent.ts` catalog、`NovelSubagent.ts` 子代理 catalog、`NovelExplorerAgentDefinition.ts` / `NovelComposeAgentDefinition.ts` enabled 声明。
+4. 装配级断言（`novel-agent.test.ts` 接线断言扩 + 子代理/BookAnalyst 装配断言）。
+5. 全量单测 + typecheck + CI 校验；回填 §11 落地记录。
 
 ## 10. v0.1 → v0.2 变更记录（评审驱动）
 
@@ -197,6 +211,15 @@ curTurn=99（remaining=1）：注入 final「这是最后一轮，不要再调�
 | 5 | 非目标增加"不软化熔断路径"并说明理由 | final 级已转化大部分场景；异常对不服从场景是有效信号，软化属过度设计 |
 | 6 | O4 子代理升级为最高优先级后续项 | SubagentRuntime 耗尽 = 子代理成果整个丢失，final 级对其价值高于主 agent |
 | 7 | 验收标准从 10 条扩到 11 条 | 补 final 级 / 两级共存 / 塌缩边界 / 渲染纯函数用例 |
+
+### v0.2 → v0.3（用户评审定稿：所有 agent 生效）
+
+| # | 变更 | 理由 |
+| --- | --- | --- |
+| 1 | 生效范围从「仅主 agent」扩为全部 5 个 agent + resume 通道 | 用户定稿；子代理耗尽 = 成果整个丢失，final 级对其价值高于主 agent（原 O4 论证） |
+| 2 | F8 装配改写为五 agent 装配矩阵 | 调研发现三条装配路径（buildNovelAgent 共用 / BookAnalyst 自有 / NovelSubagent 无 catalog 需新建），接线明细落表 |
+| 3 | 子代理侧三个设计说明入 F9（live-only 兼容 / 每任务新实例 / 窗口适配） | 子代理 loop 一次性 + 不落 journal，与主 agent 生命周期差异需要显式交代 |
+| 4 | O3/O4 从开放问题移除并并入正文 | 已随生效范围定稿解决 |
 
 ## 11. 实施落地记录（定稿后补）
 

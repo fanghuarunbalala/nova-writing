@@ -111,6 +111,12 @@ importers:
         specifier: 8.2.0
         version: 8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
 
+  mcp-servers/novel-fetch:
+    dependencies:
+      '@modelcontextprotocol/server':
+        specifier: ^2.0.0
+        version: 2.0.0
+
   ui:
     dependencies:
       '@novel/core':

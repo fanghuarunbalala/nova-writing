@@ -263,6 +263,42 @@ async function applyMcpEnv(configStore: NodeApplicationConfigStore): Promise<voi
   process.env.NOVEL_MCP_SERVERS = serializeMcpEnv(servers);
 }
 
+/** 内置 MCP 服务器 id（种子幂等键；用户删除后不复活） */
+const BUILTIN_MCP_NOVEL_FETCH_ID = "builtin:novel-fetch";
+
+/**
+ * 内置 MCP 服务器预装（seed）：启动时把内置 novel-fetch（网文平台信息工具箱，
+ * 当前支持起点）服务器配置种入 config——id 不存在时 upsert；已存在一律跳过
+ * （用户编辑/禁用/删除优先，不覆盖不复活，对齐 seedBuiltinSkills 语义）。
+ * 默认受信（免审批）：内置随应用分发 + 纯只读（fetch 公开页面），与内置工具
+ * NovelRead/Read/skill 免审一致；非受信审批语义保留给用户自添加的第三方服务器，
+ * 设置页可改回。server 入口随应用分发（mcp-servers/novel-fetch/，PRD
+ * novel-fetch-外部工具）。
+ */
+async function seedBuiltinMcpServers(configStore: NodeApplicationConfigStore): Promise<void> {
+  const snapshot = await configStore.get();
+  const exists = (snapshot.mcpServers ?? []).some((s) => s.id === BUILTIN_MCP_NOVEL_FETCH_ID);
+  if (exists) return;
+  await configStore.mutate({
+    op: "mcp.upsert",
+    serverId: BUILTIN_MCP_NOVEL_FETCH_ID,
+    server: {
+      name: "novel-fetch",
+      enabled: true,
+      trusted: true,
+      transport: {
+        type: "stdio",
+        // Electron 主进程的 execPath 是 electron.exe——须以 Node 模式运行 .mjs
+        //（ELECTRON_RUN_AS_NODE=1；SDK env 为合并语义，PATH 等仍默认继承）
+        command: process.execPath,
+        args: [join(baseDir, "..", "..", "..", "mcp-servers", "novel-fetch", "index.mjs")],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      },
+    },
+  });
+  infoLog("[main] builtin mcp server seeded: novel-fetch");
+}
+
 /** manager：providerLive（启动时凭据已解析）spawnConversation 走子进程（真实 provider，novel-db 经 kkrpc/ws）；否则回退内存回显 loop */
 function createManager(
   conversationsRoot: () => string | undefined,
@@ -527,6 +563,9 @@ async function main(): Promise<void> {
         .join(",")}`,
     );
   }
+  // 内置 MCP 服务器预装（novel-fetch 网文平台信息工具箱；已存在跳过，不覆盖不复活）。
+  // 须在 applyMcpEnv 之前：首次启动先落盘再进 env
+  await seedBuiltinMcpServers(configStore);
   // provider 运行形态（启动时快照，会话期间不变）：holder 先建、ConfigServer 闭包引用，
   // applyRuntimeEnv 之后赋值——renderer 首次 getRuntimeStatus 远晚于启动完成，值已定型。
   // 设置页据此提示回显模式（provider 修改需重启生效；spawner 在启动时一次决定不补建）

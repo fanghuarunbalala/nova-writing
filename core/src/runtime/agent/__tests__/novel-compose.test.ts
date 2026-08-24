@@ -42,6 +42,7 @@ function cfgOf(loop: ReturnType<typeof build>) {
         agentCapability: {
           systemSections: Array<{ id: string; kind: string } & PromptSection>;
           toolDefs: Array<{ name: string }>;
+          nudgePolicies: Array<{ constructor: { name: string } }>;
         };
         toolDispatcher: { dispatch: (ctx: unknown, call: ToolCall) => Promise<string> };
         conversationId?: string;
@@ -53,6 +54,13 @@ function cfgOf(loop: ReturnType<typeof build>) {
 }
 
 describe("buildNovelComposeAgent 装配", () => {
+  it("nudge 接线：max_turn（子代理目录仅此一项）", () => {
+    const cfg = cfgOf(build());
+    expect(cfg.agentCapability.nudgePolicies.map((n) => n.constructor.name)).toEqual([
+      "MaxTurnNudgePolicy",
+    ]);
+  });
+
   it("工具名精确 = 9 只读名单（与 explorer 同构，无写/删/Agent）", () => {
     const cfg = cfgOf(build());
     const names = cfg.agentCapability.toolDefs.map((t) => t.name);

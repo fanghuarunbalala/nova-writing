@@ -149,7 +149,7 @@ describe("buildNovelAgent 组装", () => {
     expect(result).toContain("写第一章");
   });
 
-  it("nudge 接线：todo_idle/project_stage/external_tools 恒注入；compose_mode 需 composeState（enabled ∩ 目录）", () => {
+  it("nudge 接线：todo_idle/max_turn/project_stage/external_tools 恒注入；compose_mode 需 composeState（enabled ∩ 目录）", () => {
     const withoutCompose = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -160,6 +160,7 @@ describe("buildNovelAgent 组装", () => {
       "TodoIdleNudgePolicy",
       "ProjectStageNudgePolicy",
       "ExternalToolsNudgePolicy",
+      "MaxTurnNudgePolicy",
     ]);
     const withCompose = buildNovelAgent({
       workspace: "/ws",
@@ -169,12 +170,13 @@ describe("buildNovelAgent 组装", () => {
       composeState: new ComposeModeStateProvider(),
     });
     const capCompose = (withCompose as unknown as { config: { agentCapability: { nudgePolicies: Array<{ constructor: { name: string } }> } } }).config.agentCapability;
-    // enabled 声明序：compose_mode 在前
+    // enabled 声明序：compose_mode 在前，max_turn 收尾
     expect(capCompose.nudgePolicies.map((n) => n.constructor.name)).toEqual([
       "ComposeModeNudgePolicy",
       "TodoIdleNudgePolicy",
       "ProjectStageNudgePolicy",
       "ExternalToolsNudgePolicy",
+      "MaxTurnNudgePolicy",
     ]);
   });
 

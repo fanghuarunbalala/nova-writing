@@ -24,6 +24,7 @@ import type { Logger } from "../../log/Logger.js";
 import type { LoopContextListener } from "../loop/types.js";
 import type { LLMessage } from "../provider/types.js";
 import { TodoIdleNudgePolicy } from "../nudge/definitions/todo.js";
+import { MaxTurnNudgePolicy } from "../nudge/definitions/max-turn.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 
 /** BookAnalyst agent 类型（入口 agentType 分发键） */
@@ -65,8 +66,12 @@ export function buildBookAnalystAgent(opts: BookAnalystAgentOptions): AgentLoop 
     mutate: (m) => opts.store.mutate(m),
     mutateBatch: (ms) => opts.store.mutateBatch(ms),
   } as NovelHandle;
-  const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map([
+  const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map<
+    string,
+    () => ContextNudgePolicy
+  >([
     ["todo_idle", () => new TodoIdleNudgePolicy()],
+    ["max_turn", () => new MaxTurnNudgePolicy()],
   ]);
   const assembler = new AgentAssembler({
     definition: bookAnalystAgentDefinition,

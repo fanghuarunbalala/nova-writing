@@ -1,6 +1,6 @@
-# 网文平台信息工具箱（novel-fetch MCP server）PRD —— v0.6
+# 网文平台信息工具箱（novel-fetch MCP server）PRD —— v0.7
 
-> 状态：✅ **已实施**（2026-08-24：`mcp-servers/novel-fetch/` server + gui 内置种子接入 + smoke test 7/7；core 全量 863 用例无回归、gui tsc 零新增）
+> 状态：✅ **已实施**（2026-08-24：server + 内置种子 + smoke test 9/9——v0.7 新增 catalog 目录浏览与防重复用；core 全量无回归、gui tsc 零新增）
 > 关联：[`external-tools-接入.md`](./external-tools-接入.md)（延迟加载框架，已合入 main——SearchExtraTools/ExecuteExtraTool 两步调用与 external_tools 纪元公告均由该框架承载）
 > 一句话：**网文平台信息工具箱** MCP server（`mcp-servers/novel-fetch/`，单工具 `novel_fetch` 5 action：search/book/rank/author/chapter，**当前支持起点中文网**），应用**默认注册**（内置种子，开箱即用）——经移动端 SSR pageContext 通路免浏览器现场取数，供作者查书/扫榜/查作者作品/抓章节分片；即取即用不缓存全文，规避版权风险。
 > 技术参考：`oh-story-claudecode/skills/story-long-scan/scripts/qidian-rank-scraper.js`（起点移动端 SSR 通路先例）
@@ -33,6 +33,7 @@
 | book | `/book/{bid}/` → `bookInfo` | ✅ 书名/作者/分类/标签/简介/字数/状态/月票/推荐票/收藏/VIP/签约/最新更新齐全 |
 | search | `/search?kw=` → `bookInfo.records[]` | ✅ 书名/作者名关键词均可搜（注意：`bookInfo` 是 `{total, records}` 包装，非裸数组） |
 | author | `/author/{id}`（**无尾斜杠**，带斜杠 404）→ `allBook` + `info` | ✅ 作者名（先搜索拿 id）/作者页 URL/纯 id 三种入参均可 |
+| catalog | `/book/{bid}/catalog/` → `vs[]`（卷数组）+ `chapterTotalCnt` | ✅ 卷名 `vN`/章数 `cCnt`/**卷级 VIP 标记 `hS`**；每章 `cN`/`id`（cid）/`cnt`/`sS`（章级订阅标记）——诡秘之主 9 卷 1418 章实测 |
 | chapter | `/book/{bid}/{cid}` → `chapterInfo.content` | ✅ 正文在 `content` 字段（HTML）；VIP 书未订阅返回**限免试读片段**（非空） |
 
 实测发现的关键事实（实现已处理）：
@@ -68,8 +69,11 @@ flowchart TD
     F --> G[ExecuteExtraTool 执行<br/>受信 → 直执行免审<br/>（设置页可改非受信）]
     G --> H{action 分发}
     H --> I[search / book / rank / author]
-    H --> J[chapter：分片列表<br/>每片 ≤300 字 带编号]
+    H --> I2[catalog：卷概览+最近章<br/>或指定卷章节列表]
     I --> K[(结构化结果进对话)]
+    I2 --> L2[作者选章<br/>（链接直接可用）]
+    L2 --> J
+    H --> J[chapter：分片列表<br/>每片 ≤300 字 带编号]
     J --> L[作者挑选片段<br/>对话内直接使用]
 ```
 
@@ -80,14 +84,15 @@ flowchart TD
 - **形态**：Node 独立进程（stdio），MCP SDK v2（`serveStdio` 工厂模式 + `fromJsonSchema`，免 zod）；挂 pnpm workspace。
 - **数据通路**：移动端 SSR pageContext（§0 已验证）；iPhone UA + `Accept-Encoding: identity` + 15s 超时。
 - **工具**：`novel_fetch`（单工具多 action）：
-  - **输入 schema**：`action`（必填，枚举 search/book/rank/author/chapter）+ 各 action 对应参数（`kw` / `url` / `book_id` / `author` / `rank_type` / `page`），宽松 schema（required 仅 action）；
+  - **输入 schema**：`action`（必填，枚举 search/book/catalog/rank/author/chapter）+ 各 action 对应参数（`kw` / `url` / `book_id` / `author` / `rank_type` / `page` / `volume`），宽松 schema（required 仅 action）；
   - **action 清单**：
     - `search`：`kw` → 书/作者搜索结果（书 10 条带简介，作者 5 条带 id）；
-    - `book`：`book_id` 或书页 URL → 书详情（含月票/推荐票/收藏/VIP/签约/最新更新）；
+    - `book`：`book_id` 或书页 URL → 书详情（含月票/推荐票/收藏/VIP/签约 + 最近 5 章链接 + catalog 提示）；
+    - `catalog`：`book_id` 或书页 URL + 可选 `volume`（卷序号 1 起）→ **目录浏览**——缺省返回卷概览（卷名/章数/免费·VIP 标记）+ 最近 10 章；指定 volume 返回该卷全部章节；每章输出 `https://m.qidian.com/book/{bid}/{cid}` 链接**可直接传给 action=chapter**（打通书页 → 选章 → 分片的闭环）；
     - `rank`：`rank_type`（9 种：yuepiao/recom/hotsales/readindex/newbook/sign/newauthor/newfans/sanjiang）+ 可选 `page` → TOP 列表（每条带 book_id，可接 action=book）；
     - `author`：作者名（内部先搜索拿 id）/作者页 URL/纯 id → 作品列表；
     - `chapter`：章节页 URL（移动端 `/book/{bid}/{cid}` 与 PC `/chapter/{bid}/{cid}/` 双形态）→ 正文按自然段分片（每片 ≤300 字、带编号与 30 字预览），作者挑选后对话内直接使用。
-  - **边界**：域名白名单 `*.qidian.com`（非起点拒绝）；VIP 未订阅返回限免试读 + 明示提示；**60s 同目标 URL 防重**；不缓存；失败降级中文错误与建议。
+  - **边界**：域名白名单 `*.qidian.com`（非起点拒绝）；VIP 未订阅返回限免试读 + 明示提示；**60s 同目标 URL 防重复用**（窗口内重复请求直接复用上次结果——catalog 概览→指定卷等连续同页调用不报错；进程内内存对象不落盘、不跨进程）；失败降级中文错误与建议。
 - **配置**：`package.json`；无鉴权（本地 stdio）。
 
 ### F2 应用默认注册（内置种子）
@@ -104,8 +109,8 @@ flowchart TD
 
 ## 6. 验收标准
 
-- [x] `mcp-servers/novel-fetch/` 独立可运行（smoke test，`core/scripts/novel-fetch-smoke.mjs`）：5 action 真实调用各返回结构化结果；VIP/非法 URL/缺参/未知榜单各有明确中文错误或 schema 校验报错。
-- [x] 域名白名单：非起点 URL 拒绝；畸形 URL 拒绝；60s 同目标 URL 防重；单请求 15s 超时。
+- [x] `mcp-servers/novel-fetch/` 独立可运行（smoke test，`core/scripts/novel-fetch-smoke.mjs`）：6 action 真实调用各返回结构化结果（含 catalog 卷概览与指定卷两用例——章节链接形态可直接传 chapter）；VIP/非法 URL/缺参/未知榜单各有明确中文错误或 schema 校验报错。
+- [x] 域名白名单：非起点 URL 拒绝；畸形 URL 拒绝；60s 同目标 URL 防重复用（连续同页调用返回结果而非报错）；单请求 15s 超时。
 - [x] 默认注册：内置种子 upsert（已存在跳过、删除不复活；`trusted: true` 默认受信免审）+ 延迟池注册（不进常驻工具面）+ 两步调用（SearchExtraTools → ExecuteExtraTool 受信直执行）链路成立。
 - [x] core 全量测试无回归（863 用例）；gui tsc 零新增错误（对照既有 1 个 renderer 错误）。
 
@@ -113,7 +118,7 @@ flowchart TD
 
 - 起点页面结构若改版，解析需随之维护（接受；降级文案已覆盖）。
 - MCP server 随应用分发的路径假设（dev 源码树相对路径 `baseDir` 上溯三级）——打包形态（asar/额外资源）待 gui 打包方案确定后适配。
-- 60s 防重窗口的体感（author 的 id/URL 双形态归一到同一目标地址）——实测观察是否需要缩短。
+- 60s 防重复用窗口的实效体感（含 author 的 id/URL 双形态归一到同一目标地址）——实测观察是否需要缩短。
 - 分片限长 300 字——对齐未来 memory prose 限长的预留值，本期无消费方约束。
 
 ## 8. 演进路径（后续，本期均不做）

@@ -53,6 +53,8 @@ try {
   } else {
     results.push(await call("rank", { rank_type: "yuepiao" }, "月票榜"));
     results.push(await call("book", { book_id: "1041637443" }, "书详情（捞尸人）"));
+    results.push(await call("catalog", { book_id: "1010868264" }, "目录概览（诡秘之主）"));
+    results.push(await call("catalog", { book_id: "1010868264", volume: 1 }, "卷1章节列表"));
     results.push(await call("search", { kw: "诡秘之主" }, "搜索"));
     results.push(await call("author", { author: "https://m.qidian.com/author/3780268" }, "作者作品（URL 入参）"));
     results.push(

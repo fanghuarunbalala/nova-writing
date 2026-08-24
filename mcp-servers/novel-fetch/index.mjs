@@ -9,7 +9,8 @@
  *
  * 工具：novel_fetch（单工具多 action）
  *   - search   kw 关键词 → 书/作者搜索结果
- *   - book     book_id 或书页 URL → 书详情（简介/基础信息/月票/推荐票/收藏）
+ *   - book     book_id 或书页 URL → 书详情（简介/基础信息/月票/推荐票/收藏 + 最近章节）
+ *   - catalog  book_id 或书页 URL + 可选 volume → 目录（卷概览+最近 10 章 / 指定卷全部章节，链接可直接传 chapter）
  *   - rank     rank_type + page → 排行榜 TOP 列表
  *   - author   author 作者名或作者页 URL → 作者作品列表
  *   - chapter  url 章节页 URL → 正文按自然段分片（每片 ≤300 字，带编号）
@@ -69,11 +70,13 @@ const RANK_TYPES = {
 // 网络与解析
 // ---------------------------------------------------------------------------
 
-/** 防重表：目标 URL → 上次抓取时间戳 */
+/** 防重表：目标 URL → { 抓取时间戳, pageData }（60s 窗口内复用，防高频打目标站） */
 const recentFetches = new Map();
 
 /**
  * 抓取移动端页面并提取 SSR pageContext JSON。
+ * 60s 防重窗口内同 URL 直接复用上次结果（catalog 概览→指定卷等连续调用同页场景）；
+ * 复用为进程内内存对象，不落盘、不跨进程。
  * @param {string} pathname 移动端路径（如 /rank/yuepiao/）或完整 URL
  * @returns {Promise<{ pageData: object }>} pageData 可能为空对象
  */
@@ -82,8 +85,8 @@ async function fetchMobilePage(pathname) {
 
   const last = recentFetches.get(url);
   const now = Date.now();
-  if (last !== undefined && now - last < DEDUP_WINDOW_MS) {
-    throw new Error(`请求过于频繁：同一地址 ${DEDUP_WINDOW_MS / 1000}s 内只抓取一次，请稍后再试`);
+  if (last !== undefined && now - last.ts < DEDUP_WINDOW_MS) {
+    return { pageData: last.pageData };
   }
 
   const res = await fetch(url, {
@@ -95,7 +98,6 @@ async function fetchMobilePage(pathname) {
     throw new Error(`抓取失败（HTTP ${res.status}）：${res.statusText || "请稍后再试"}`);
   }
   const html = await res.text();
-  recentFetches.set(url, now);
 
   const m = html.match(
     /<script[^>]+id=["']vite-plugin-ssr_pageContext["'][^>]*>([\s\S]*?)<\/script>/i,
@@ -109,7 +111,9 @@ async function fetchMobilePage(pathname) {
   } catch {
     throw new Error("页面解析失败：SSR 数据格式异常，请稍后再试");
   }
-  return { pageData: data?.pageContext?.pageProps?.pageData ?? {} };
+  const pageData = data?.pageContext?.pageProps?.pageData ?? {};
+  recentFetches.set(url, { ts: now, pageData });
+  return { pageData };
 }
 
 /** 多字段名取值兜底（起点字段多态普遍：bName/bookName、bid/bookId…） */
@@ -254,15 +258,28 @@ async function actionSearch(kw) {
   return lines.join("\n");
 }
 
-/** book：书详情（简介/基础信息/月票/推荐票/收藏） */
-async function actionBook(bookId, url) {
-  let bid = bookId;
-  if (!bid && url) {
+/** 解析书 ID：book_id 直用，否则从书页 URL 提取（book/catalog 共用） */
+function parseBookId(bookId, url) {
+  if (bookId && String(bookId).trim()) return String(bookId).trim();
+  if (url) {
     const m = String(url).match(/\/book\/(\d+)\/?/i);
-    if (!m) throw new Error(`无法从 URL 解析书 ID：${url}`);
-    bid = m[1];
+    if (m) return m[1];
+    throw new Error(`无法从 URL 解析书 ID：${url}`);
   }
-  if (!bid) throw new Error("action=book 需要 book_id 参数（或书页 URL）");
+  throw new Error("需要 book_id 参数（或书页 URL）");
+}
+
+/** 渲染章节行：序号隐含在章节名中，附字数与可直接传给 action=chapter 的链接 */
+function chapterLine(ch, bid, idx) {
+  const name = first(ch, ["cN", "chapterName"]);
+  const cid = first(ch, ["id", "chapterId"]);
+  const cnt = formatWords(first(ch, ["cnt", "wordsCount"]));
+  return `${idx}. ${name}${cnt ? `（${cnt}）` : ""}｜ https://m.qidian.com/book/${bid}/${cid}`;
+}
+
+/** book：书详情（简介/基础信息/月票/推荐票/收藏 + 最近章节） */
+async function actionBook(bookId, url) {
+  const bid = parseBookId(bookId, url);
 
   const { pageData } = await fetchMobilePage(`/book/${bid}/`);
   const bi = pageData.bookInfo;
@@ -291,10 +308,76 @@ async function actionBook(bookId, url) {
   if (stats.length) lines.push(stats.join(" ｜ "));
   if (bi.isVip) lines.push("收费：VIP（付费章节）");
   if (bi.isSign || bi.signStatus) lines.push("签约：已签约");
-  const upd = first(bi, ["updChapterName"]);
-  if (upd) lines.push(`最新更新：${upd}`);
   const desc = cleanDesc(first(bi, ["desc", "intro"]), 300);
   if (desc) lines.push("", `简介：${desc}`);
+  // 最近章节（书详情页 SSR 自带 recentChapters，零额外请求）
+  const recent = Array.isArray(pageData.recentChapters) ? pageData.recentChapters.slice(0, 5) : [];
+  if (recent.length) {
+    lines.push("", "最近更新：");
+    recent.forEach((ch, i) => lines.push(chapterLine(ch, bid, i + 1)));
+    lines.push("", "完整目录可用 action=catalog（传 book_id，可选 volume 列指定卷）。");
+  }
+  return lines.join("\n");
+}
+
+/**
+ * catalog：目录浏览。
+ * 无 volume：卷概览（序号/卷名/章数/免费·VIP）+ 最近 10 章（卷末倒序收集）；
+ * 指定 volume：该卷全部章节（输出链接可直接传 action=chapter）。
+ * VIP 判据：卷级 hS（false 免费 / true 需订阅，未订阅仅返回试读）。
+ */
+async function actionCatalog(bookId, url, volume) {
+  const bid = parseBookId(bookId, url);
+  const { pageData } = await fetchMobilePage(`/book/${bid}/catalog/`);
+  const vs = Array.isArray(pageData.vs) ? pageData.vs : [];
+  if (!vs.length) throw new Error(`目录解析失败：未找到卷数据（book_id=${bid}）`);
+  const bookName = first(pageData, ["bookName"]) || `book_id=${bid}`;
+  const total = first(pageData, ["chapterTotalCnt"]);
+
+  // 指定卷：该卷全部章节
+  if (volume !== undefined && volume !== null && volume !== "") {
+    const idx = Number(volume);
+    if (!Number.isInteger(idx) || idx < 1 || idx > vs.length) {
+      throw new Error(`volume 需为 1-${vs.length} 的整数，收到：${volume}`);
+    }
+    const v = vs[idx - 1];
+    const cs = Array.isArray(v.cs) ? v.cs : [];
+    const vipMark = v.hS ? "VIP——未订阅仅返回试读" : "免费";
+    const lines = [
+      `《${bookName}》卷 ${idx}「${first(v, ["vN"])}」：${cs.length} 章 ｜ ${vipMark}`,
+      "",
+    ];
+    cs.forEach((ch, i) => lines.push(chapterLine(ch, bid, i + 1)));
+    lines.push("", "抓某章正文：action=chapter + 该章 url。");
+    return lines.join("\n");
+  }
+
+  // 默认：卷概览 + 最近 10 章（卷倒序、卷内倒序收集）
+  const lines = [
+    `《${bookName}》目录：${vs.length} 卷${total ? ` · 共 ${total} 章` : ""}`,
+    "",
+  ];
+  vs.forEach((v, i) => {
+    lines.push(
+      `卷 ${i + 1} ｜ ${first(v, ["vN"])} ｜ ${first(v, ["cCnt"])} 章 ｜ ${v.hS ? "VIP" : "免费"}`,
+    );
+  });
+  const recent = [];
+  for (let i = vs.length - 1; i >= 0 && recent.length < 10; i--) {
+    const cs = Array.isArray(vs[i].cs) ? vs[i].cs : [];
+    for (let j = cs.length - 1; j >= 0 && recent.length < 10; j--) {
+      recent.push(cs[j]);
+    }
+  }
+  if (recent.length) {
+    lines.push("", "最近更新（卷末倒序）：");
+    recent.forEach((ch, i) => lines.push(chapterLine(ch, bid, i + 1)));
+  }
+  lines.push(
+    "",
+    `查看某卷章节列表：action=catalog + book_id + volume=N（1-${vs.length}）；`,
+    "抓某章正文：action=chapter + 该章 url。",
+  );
   return lines.join("\n");
 }
 
@@ -422,15 +505,17 @@ const toolDescription = [
   "",
   "## 何时使用",
   "1. 作者想了解某本书的简介/基础信息/月票·推荐票数据（\"这本书讲什么\"\"这本数据怎么样\"）；",
-  "2. 作者想找当前排行榜上的书（\"现在月票榜前十都是什么\"）；",
-  "3. 作者想查某个作者写了哪些作品（\"这个作者还有别的书吗\"）；",
-  "4. 作者提供起点章节 URL，想参考/收录其中的片段（\"帮我抓下这段\"）；",
-  "5. 低优先级供给工具——核心工具无法完成这些查找时才使用。",
+  "2. 作者想看某本书的目录、找某一章（\"诡秘之主第三卷有哪些章\"——catalog 列目录，章节链接可直接接着抓）；",
+  "3. 作者想找当前排行榜上的书（\"现在月票榜前十都是什么\"）；",
+  "4. 作者想查某个作者写了哪些作品（\"这个作者还有别的书吗\"）；",
+  "5. 作者提供起点章节 URL，想参考/收录其中的片段（\"帮我抓下这段\"）；",
+  "6. 低优先级供给工具——核心工具无法完成这些查找时才使用。",
   "",
   "## 使用方式",
   "调用时指定 action，按 action 传对应参数：",
   "- action=search：按关键词搜书/作者，传 kw（书名或作者名）；",
-  "- action=book：查书详情（简介/分类/字数/状态/月票/推荐票/收藏），传 book_id 或书页 URL；",
+  "- action=book：查书详情（简介/分类/字数/状态/月票/推荐票/收藏 + 最近章节），传 book_id 或书页 URL；",
+  "- action=catalog：查书目录（卷概览+最近 10 章；传 volume 列指定卷全部章节，输出章节链接可直接传 action=chapter），传 book_id 或书页 URL；",
   "- action=rank：查排行榜，传 rank_type（yuepiao 月票 / recom 推荐票 / hotsales 畅销 / readindex 阅读指数 / newbook 新书 / sign 签约 / newauthor 新人 / newfans 书友 / sanjiang 三江）+ 可选 page；",
   "- action=author：查作者作品列表，传 author（作者名或作者页 URL）；",
   "- action=chapter：抓取章节分片（每片 ≤300 字、带编号），传 url（章节页 URL），返回列表供作者挑选。",
@@ -447,9 +532,9 @@ const inputSchema = fromJsonSchema({
   properties: {
     action: {
       type: "string",
-      enum: ["search", "book", "rank", "author", "chapter"],
+      enum: ["search", "book", "catalog", "rank", "author", "chapter"],
       description:
-        "要执行的操作：search 搜索书籍/作者；book 书详情（简介/基础信息/月票/推荐票）；rank 排行榜；author 作者作品列表；chapter 章节分片抓取。",
+        "要执行的操作：search 搜索书籍/作者；book 书详情（简介/基础信息/最近章节）；catalog 目录浏览（卷概览或指定卷章节列表）；rank 排行榜；author 作者作品列表；chapter 章节分片抓取。",
     },
     kw: { type: "string", description: "action=search 时必填：书名或作者名关键词。" },
     url: {
@@ -470,6 +555,11 @@ const inputSchema = fromJsonSchema({
         .join("，")}。`,
     },
     page: { type: "number", description: "action=rank 时可选：页码（默认 1）。" },
+    volume: {
+      type: "number",
+      description:
+        "action=catalog 时可选：卷序号（从 1 起）。缺省返回卷概览+最近 10 章；指定后返回该卷全部章节（含可直接传给 action=chapter 的章节链接）。",
+    },
   },
   required: ["action"],
   additionalProperties: false,
@@ -498,6 +588,9 @@ await serveStdio(() => {
             break;
           case "book":
             text = await actionBook(args.book_id, args.url);
+            break;
+          case "catalog":
+            text = await actionCatalog(args.book_id, args.url, args.volume);
             break;
           case "rank":
             text = await actionRank(args.rank_type, args.page);

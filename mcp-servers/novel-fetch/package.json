@@ -1,0 +1,16 @@
+{
+  "name": "novel-fetch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "网文平台信息工具箱 MCP server（当前支持起点中文网）：搜索书籍/作者、书详情、排行榜、作者作品、章节分片抓取",
+  "bin": {
+    "novel-fetch": "./index.mjs"
+  },
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0"
+  }
+}

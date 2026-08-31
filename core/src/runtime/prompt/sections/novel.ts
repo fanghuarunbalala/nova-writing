@@ -247,41 +247,63 @@ export const novelCommunicationSection: PromptSection = {
 };
 
 /**
- * novel.global_constraints 动态段：每调用渲染一段常驻说明，并在标签内注入项目根
- * NOVEL.md（小说全局约束/meta）的当前内容。
+ * novel.global_constraints 动态段（两层，PRD memory-两层记忆 M1）：每调用渲染
+ * 一段常驻说明，并按「全局层在前、项目层在后」注入两层 NOVEL.md 当前内容，
+ * 段头标注软优先级（项目层 > 全局层 > 动态记忆）。
  *
- * 该段只依赖 workspace 与 NOVEL.md 位置两个固定事实，因此常驻说明（读取语义、
- * 内容约束）始终渲染，不随文件是否有内容而变化；文件内容作为可选部分在标签内
- * 呈现，无内容时给出占位提示。动态段不进 base，因此 NOVEL.md 改动不破坏 base
- * 缓存；文件内容由 node 层每调用读取并经动态段输入传入，prompt 层保持
+ * 常驻说明（读取语义、层级、内容边界）始终渲染，不随文件是否有内容而变化；
+ * 各层内容作为可选块呈现：单层缺失只注入另一层，两层全缺给出占位提示。
+ * 修改治理：模型经 Write/Edit 修改任一层 NOVEL.md 都必须过作者审批（文件工具
+ * 对这两条路径强制审批）。动态段不进 base，因此 NOVEL.md 改动不破坏 base 缓存；
+ * 文件内容由 node 层每调用读取并经动态段输入传入，prompt 层保持
  * provider-neutral（不接触 node:fs）。
  */
 export const novelGlobalConstraintsSection: PromptSection = {
   kind: "dynamic",
   id: "novel.global_constraints",
-  version: "1.0.0",
+  version: "2.0.0",
   label: "Novel Global Constraints",
   renderDynamic: (input) => {
     const snapshot = input.novelGlobalConstraints;
-    const fileName =
-      snapshot?.fileName ?? NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME;
-    const content = snapshot?.content.trim();
-    const body =
-      content !== undefined && content.length > 0
-        ? content
-        : "（当前无可用内容，若你需要维护小说全局约束，用 Write 创建该文件后按上述约束写入。）";
-    return [
-      `# 小说全局约束（${fileName}）`,
+    // 空白内容视同缺失（"" → undefined），单层缺失只注另一层
+    const globalContent = snapshot?.global?.trim() || undefined;
+    const projectContent = snapshot?.project?.trim() || undefined;
+    const parts: string[] = [
+      `# 小说全局约束（分层 NOVEL.md）`,
       "",
-      "- 读取：每次 Provider Call 都会重新读取该文件并注入此处，你用 Write/Edit 修改后即时生效。",
-      "- 内容约束：此文件仅记录小说 meta/全局约束（书名、类型、世界观、角色规则、基调、禁忌、作者偏好等），不写入对话、任务或实现细节。",
+      "- 层级：全局层（作者跨书约束）在前、项目层（本书约束）在后；**项目层优先于全局层**，两层静态声明都优先于你的自由裁量。冲突时按更特定的层执行。",
+      "- 读取：每次 Provider Call 都会重新读取两层文件并注入此处；作者手改或你经审批修改后即时生效。",
+      "- 修改治理：你用 Write/Edit 修改任一层 NOVEL.md 都**必须经作者审批**（对这两条路径强制征询，呈现变更内容；驳回则磁盘不变）。这是你修改静态声明的唯一通道——不得尝试其他方式改写。",
+      "- 项目层内容边界：只收本书全局硬约束（单章字数区间、更新节奏）、人称/时态、世界观铁律（不变式，≤10 条）、基调文风、禁忌清单；不写入对话、任务过程、实体展开细节（实体库管）、学出来的作者偏好与反馈（动态记忆 memory/ 管）。",
+      "- 全局层内容边界：只收作者跨书约束与偏好（文风基准、普适禁忌、平台约束、协作方式约定）；同样不收实体细节与学出来的偏好。",
       "",
-      `以下是 ${fileName} 的当前内容：`,
-      "",
-      "<Novel-Constraints-Content>",
-      body,
-      "</Novel-Constraints-Content>",
-    ].join("\n");
+    ];
+    if (globalContent !== undefined && globalContent.length > 0) {
+      parts.push(
+        `## 全局层（作者跨书约束，${NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME} @ 用户数据目录）`,
+        "",
+        "<Novel-Constraints-Global>",
+        globalContent,
+        "</Novel-Constraints-Global>",
+        "",
+      );
+    }
+    if (projectContent !== undefined && projectContent.length > 0) {
+      parts.push(
+        `## 项目层（本书约束，${NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME} @ workspace 根）`,
+        "",
+        "<Novel-Constraints-Project>",
+        projectContent,
+        "</Novel-Constraints-Project>",
+        "",
+      );
+    }
+    if (globalContent === undefined && projectContent === undefined) {
+      parts.push(
+        "（当前两层均无可用内容：作者可直接创建 NOVEL.md；你若需要维护本书全局约束，用 Write 创建该文件后按上述边界写入——修改会请求作者审批。）",
+      );
+    }
+    return parts.join("\n");
   },
 };
 

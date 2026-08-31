@@ -31,12 +31,13 @@ export const NOVEL_COMPOSE_TOOL_NAMES: readonly string[] = Object.freeze([
  * protocol → context.reliability → completion.contract → todo.guidance →
  * novel.compose.identity → novel.compose.system → novel.compose.process →
  * novel.compose.reporting → novel.story_appeal → novel.outline_standard →
- * novel.prose_standard → tool.policy(dynamic) → tool.guidance(dynamic 收尾)。
+ * novel.prose_standard → tool.policy(dynamic) → tool.guidance(dynamic 收尾) →
+ * memory.index(dynamic，PRD memory-两层记忆 D8：提供者按 author/feedback 过滤)。
  * 案例索引不住独立段：质量规范段尾「参考案例」小节承载（PRD compose-案例引导 v0.6）。
  */
 export const novelComposeAgentDefinition = new AgentDefinition({
   agentType: "Compose",
-  definitionVersion: "1.3.0",
+  definitionVersion: "1.4.0",
   label: "草案创作",
   description:
     "基于当前故事状态起草大纲与行文设计方案，返回主代理可直接应用的草案文本（只读，不落库）。",
@@ -54,6 +55,7 @@ export const novelComposeAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.prose_standard"),
     new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
+    new PromptSectionItem("memory.index"),
   ]),
   tools: new AgentToolPolicy({
     groupIds: ["runtime.files", "novel.entities", "runtime.todo"],

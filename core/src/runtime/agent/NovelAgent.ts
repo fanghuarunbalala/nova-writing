@@ -9,7 +9,11 @@ import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import type { ToolDef } from "../tool/ToolDef.js";
-import type { NovelConstraintsProvider, CaseGuideProvider } from "../prompt/PromptSection.js";
+import type {
+  NovelConstraintsProvider,
+  CaseGuideProvider,
+  MemoryIndexProvider,
+} from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AutoCompactPolicy } from "../compact/definitions/auto-compact.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
@@ -49,6 +53,10 @@ import type {
 import type { AskUserChannel } from "../tool/definitions/askUser.js";
 import type { LibraryReadDeps } from "../tool/definitions/library.js";
 import type { SkillRegistry } from "../skill/SkillRegistry.js";
+import type { SamplingConfig } from "../provider/types.js";
+import { readNovelGlobalConstraintsLayersSafe } from "../../node/workspace/readNovelGlobalConstraints.js";
+import { readMemoryIndexForInjection } from "../../memory/MemoryStore.js";
+import type { RunContext } from "../loop/types.js";
 
 /** Novel Agent 装配选项 */
 export interface NovelAgentOptions {
@@ -114,6 +122,27 @@ export interface NovelAgentOptions {
    * NovelImportText 的确定性写通道。definition.groupIds 含 novel.import 时必传。
    */
   importText?: { handle: NovelHandle };
+  /**
+   * 全局层 NOVEL.md 绝对路径（PRD memory-两层记忆 M1）：runtime.files 组的沙盒
+   * 例外 + 强制审批目标；缺省无全局层（novelConstraintsProvider 自行注入时可不传）。
+   */
+  globalConstraintsPath?: string;
+  /**
+   * 动态记忆依赖覆盖（PRD memory-两层记忆 M3）：缺省 staticLayerTexts 读两层
+   * NOVEL.md、source 由内部 run 序号追踪器构造（<会话id>#<run序号>）。
+   */
+  memory?: { staticLayerTexts: () => Promise<readonly (string | undefined)[]> };
+  /**
+   * 动态记忆索引提供者（PRD memory-两层记忆 M2）：缺省读 workspace memory/
+   * MEMORY.md 全量 active 条目（main 语义）；Compose 子代理装配方传 author/feedback
+   * 过滤版。
+   */
+  memoryIndexProvider?: MemoryIndexProvider;
+  /**
+   * 压缩前提取整理 pass（PRD memory-两层记忆 M4）：仅显式装配（子进程入口为
+   * main 会话接线；importer/analyst 后台会话不挂）。
+   */
+  preCompactPass?: (sampling: SamplingConfig, runs: readonly RunContext[]) => Promise<void>;
   /** subagent 派发三工具装配（agents/allowedAgentTypes 由 builder 注入定义目录常量，调用方只传 spawner） */
   subagent?: Omit<SubagentToolsOptions, "agents" | "allowedAgentTypes">;
   /** 自动压缩阈值覆盖（设置页 RuntimeSettings.compaction；缺省项用策略默认值） */
@@ -132,6 +161,23 @@ export interface NovelAgentOptions {
 export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   const definition = opts.definition ?? novelAgentDefinition;
   const todoStore = opts.todoStore ?? new InMemoryConversationTodoStore();
+  // 动态记忆依赖（PRD memory-两层记忆 M3）：恒装配（definition.groupIds 决定工具面
+  // 是否解析；main 定义含 runtime.memory）。source = <会话id>#<当前 run 序号>——
+  // 监听 run 追加维护序号，模型不可伪造（工具参数不含 source 字段）；
+  // staticLayerTexts 缺省读两层 NOVEL.md（skip 机械校验用）
+  let memorySourceSeq = opts.resumeSeq ?? 0;
+  const memoryDeps = {
+    getSource: () => `${opts.conversationId ?? "conv"}#${memorySourceSeq}`,
+    staticLayerTexts:
+      opts.memory?.staticLayerTexts ??
+      (async () => {
+        const snap = await readNovelGlobalConstraintsLayersSafe(
+          opts.workspace,
+          opts.globalConstraintsPath,
+        );
+        return snap === undefined ? [] : [snap.global, snap.project];
+      }),
+  };
   // compose 状态权威实例：nudge / 工具 / 权限门共享；显式传入时由上层 hydrate 后注入
   const composeState = opts.composeState ?? new ComposeModeStateProvider();
   // compose 工具服务：缺省自建兜底（designRoot = workspace/.novel/design），生产由上层注入（T10）
@@ -195,6 +241,10 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       ...(opts.skills !== undefined ? { skills: opts.skills } : {}),
       ...(opts.library !== undefined ? { library: opts.library } : {}),
       ...(opts.importText !== undefined ? { importText: opts.importText } : {}),
+      ...(opts.globalConstraintsPath !== undefined
+        ? { globalConstraintsPath: opts.globalConstraintsPath }
+        : {}),
+      memory: memoryDeps,
       // runtime.external 组：延迟池 + 会话 id + 审批通道（ExecuteExtraTool 内嵌审批用）
       external: {
         registry: externalRegistry,
@@ -241,6 +291,12 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   for (const def of externalRegistry.list()) {
     dispatcher.register(createDeferredRejectionStub(def));
   }
+  // 记忆 source 序号追踪（PRD memory-两层记忆 D7）：追加到 opts.listeners 之前，
+  // 保证 MemoryWrite 执行时序号已更新（run 追发生在工具执行前）
+  const listeners = [
+    ...(opts.listeners ?? []),
+    { onRunAppended: (run: RunContext) => { memorySourceSeq = run.seq; } },
+  ];
   return new AgentLoop({
     workspace: opts.workspace,
     provider: opts.provider,
@@ -248,7 +304,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     toolDispatcher: dispatcher,
     agentId: "main",
     conversationId: opts.conversationId,
-    listeners: opts.listeners,
+    listeners,
     runMessages: opts.runMessages,
     restoreRuns: opts.resumeRuns,
     startSeq: opts.resumeSeq,
@@ -259,6 +315,10 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     platform: opts.platform,
     novelConstraintsProvider: opts.novelConstraintsProvider,
     caseGuideProvider: opts.caseGuideProvider,
+    // 动态记忆索引（缺省读 workspace memory/MEMORY.md 全量 active——main 语义）
+    memoryIndexProvider:
+      opts.memoryIndexProvider ?? (() => readMemoryIndexForInjection(opts.workspace)),
+    ...(opts.preCompactPass !== undefined ? { preCompactPass: opts.preCompactPass } : {}),
     skillsIndex,
     composeState,
     beforeProviderCall: opts.beforeProviderCall,

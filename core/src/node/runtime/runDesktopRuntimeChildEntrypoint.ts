@@ -30,9 +30,11 @@ import { createProvider, type Provider } from "../../runtime/provider/Provider.j
 import { buildNovelAgent } from "../../runtime/agent/NovelAgent.js";
 import { ProviderCallDebugger } from "../../runtime/debug/ProviderCallDebugger.js";
 import {
-  readNovelGlobalConstraintsSafe,
-  NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME,
+  readNovelGlobalConstraintsLayersSafe,
+  NOVEL_GLOBAL_CONSTRAINTS_PATH_ENV,
 } from "../workspace/readNovelGlobalConstraints.js";
+import { readMemoryIndexForInjection, rebuildMemoryIndex } from "../../memory/MemoryStore.js";
+import { createMemoryExtractionPass } from "../../runtime/agent/MemoryExtractionPass.js";
 import {
 	AGENT_CASES_DIR,
 	readAgentCaseContent,
@@ -295,6 +297,10 @@ export async function runDesktopRuntimeChildEntrypoint(): Promise<void> {
 	const workspace = isAnalyst
 		? (process.env.NOVEL_LIBRARY_ROOT ?? ".")
 		: (process.env.NOVEL_CONVERSATION_WORKSPACE ?? ".");
+	// 全局层 NOVEL.md 绝对路径（PRD memory-两层记忆 M1）：GUI main 经 env 注入
+	// userData/NOVEL.md（子进程 env 继承）；未设 = 无全局层装配（仅项目层）
+	const globalConstraintsPath =
+		process.env[NOVEL_GLOBAL_CONSTRAINTS_PATH_ENV]?.trim() || undefined;
 	// 运行参数（设置页 RuntimeSettings：档位/采样/压缩/能力，main 解析后序列化为 env）。
 	// 非法/缺省整体回落 NOVEL_PROVIDER_* env 默认
 	const runtimeSettings = parseRuntimeSettingsEnv(process.env[RUNTIME_SETTINGS_ENV]);
@@ -598,6 +604,10 @@ await skillRegistry.load();
 						agentId,
 						debugger: createCallDebugger?.(agentId),
 						caseGuideProvider: caseGuideSnapshotProvider,
+						// 动态记忆索引（PRD memory-两层记忆 D8）：Compose 只注入 author/feedback
+						// 类（起草者正是偏好的执行者）；过滤在提供者侧完成
+						memoryIndexProvider: () =>
+							readMemoryIndexForInjection(workspace, { types: ["author", "feedback"] }),
 						composeGuideSeed: (input) =>
 							(guideOnce ??= (async () => {
 								if (classifier === undefined) return undefined;
@@ -750,15 +760,33 @@ await skillRegistry.load();
 			? { compact: runtimeSettings.compaction }
 			: {}),
 		// 动态段输入：workdir/modelId 由 LoopContext 自组装（workspace /
-		// run.sampling.model）；宿主只注入平台常量 + 每调用读 NOVEL.md
-		//（失败返回 undefined → 动态段渲染占位）
+		// run.sampling.model）；宿主只注入平台常量 + 每调用读两层 NOVEL.md
+		//（单层失败不影响另一层；两层全缺 → 动态段渲染占位）
 		platform: PLATFORM_LABELS[process.platform] ?? process.platform,
-			novelConstraintsProvider: async () => {
-				const content = await readNovelGlobalConstraintsSafe(workspace, logger);
-				return content === undefined
-					? undefined
-					: { fileName: NOVEL_GLOBAL_CONSTRAINTS_FILE_NAME, content };
-			},
+			novelConstraintsProvider: () =>
+				readNovelGlobalConstraintsLayersSafe(workspace, globalConstraintsPath, logger),
+			// 记忆索引提供者缺省在 buildNovelAgent 内部（读 workspace memory/MEMORY.md 全量）
+			// 全局层 NOVEL.md：runtime.files 组沙盒例外 + 守卫（项目层恒在守卫名单）
+			...(globalConstraintsPath !== undefined ? { globalConstraintsPath } : {}),
+			// 压缩前提取整理 pass（PRD memory-两层记忆 M4）：仅 main 会话——importer
+			// 后台受限面不挂（无跨会话记忆诉求，且无人值守不应产生记忆写入）
+			...(!isImporter
+				? {
+						preCompactPass: createMemoryExtractionPass({
+							workspace,
+							provider: loopProvider,
+							conversationId,
+							staticLayerTexts: async () => {
+								const snap = await readNovelGlobalConstraintsLayersSafe(
+									workspace,
+									globalConstraintsPath,
+								);
+								return snap === undefined ? [] : [snap.global, snap.project];
+							},
+							logger,
+						}).run,
+					}
+				: {}),
 			// 规范段「参考案例」小节的条目来源（seed + mtime 缓存扫描）
 			caseGuideProvider: caseGuideSnapshotProvider,
 		// compose 状态（nudge/权限门共享）+ 工具服务（novel.compose 组）+ 每次 provider
@@ -779,6 +807,19 @@ await skillRegistry.load();
 			workspace,
 			taskLoaded: importerTask !== undefined,
 		});
+	}
+	// 记忆索引启动一致性校验（PRD memory-两层记忆 4.3）：以主题文件为准重建索引
+	//（写入中断自愈：先写主题文件后同步索引的顺序保证）；corrupted 文件记日志不阻断
+	if (!isAnalyst && !isImporter) {
+		rebuildMemoryIndex(workspace)
+			.then((report) => {
+				if (report.corrupted.length > 0) {
+					logger?.warn("child.memory.corrupted", { files: report.corrupted });
+				}
+			})
+			.catch(() => {
+				/* 校验失败不阻断会话：下次 memory 写入会再次同步索引 */
+			});
 	}
 
 	const managerWait: ManagerWaitChannel | undefined =

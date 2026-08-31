@@ -24,7 +24,7 @@ const SECTION_MARKERS = [
   "# 交流风格",
   "# Using Tools",
   "# 环境信息",
-  "# 小说全局约束（NOVEL.md）",
+  "# 小说全局约束（分层 NOVEL.md）",
 ] as const;
 
 describe("端到端渲染回归（assemble → LoopContext → system prompt）", () => {
@@ -59,7 +59,7 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(prompt.split("# 谨慎行动").length - 1).toBe(1);
   });
 
-  it("dynamic 段注入：环境块（workdir/platform/model 补齐）+ 约束标签包裹", async () => {
+  it("dynamic 段注入：环境块（workdir/platform/model 补齐）+ 两层约束标签包裹（PRD memory-两层记忆）", async () => {
     const loop = buildNovelAgent({
       workspace: "/ws",
       provider,
@@ -67,8 +67,8 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
       conversationId: "conv-1",
       platform: "Windows",
       novelConstraintsProvider: async () => ({
-        fileName: "NOVEL.md",
-        content: "# 世界观\n- 基调热血",
+        global: "# 跨书\n- 不要 BE",
+        project: "# 世界观\n- 基调热血",
       }),
     });
     await loop.run("hi", { sampling: { model: "gpt-5" } });
@@ -76,12 +76,17 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     expect(prompt).toContain("- 平台：Windows");
     expect(prompt).toContain("- 工作目录：/ws");
     expect(prompt).toContain("- 模型：gpt-5"); // run.sampling.model 补齐
-    const wrapStart = prompt.indexOf("<Novel-Constraints-Content>");
-    const wrapEnd = prompt.indexOf("</Novel-Constraints-Content>");
+    const wrapStart = prompt.indexOf("<Novel-Constraints-Project>");
+    const wrapEnd = prompt.indexOf("</Novel-Constraints-Project>");
     expect(wrapStart).toBeGreaterThanOrEqual(0);
     expect(wrapEnd).toBeGreaterThan(wrapStart);
     expect(prompt.slice(wrapStart, wrapEnd)).toContain("# 世界观");
     expect(prompt.slice(wrapStart, wrapEnd)).toContain("基调热血");
+    // 全局层 + 拼接顺序（全局在前）
+    const globalStart = prompt.indexOf("<Novel-Constraints-Global>");
+    expect(globalStart).toBeGreaterThanOrEqual(0);
+    expect(globalStart).toBeLessThan(wrapStart);
+    expect(prompt.slice(globalStart, prompt.indexOf("</Novel-Constraints-Global>"))).toContain("不要 BE");
   });
 
   it("无 platform/provider：环境块省略 + 约束占位 + 工具名单（27 工具）+ 无 ToolPolicy 块", async () => {
@@ -94,14 +99,14 @@ describe("端到端渲染回归（assemble → LoopContext → system prompt）"
     await loop.run("hi", { sampling: { model: "gpt-5" } });
     const prompt = (loop as unknown as { context: { systemPrompt: string } }).context.systemPrompt;
     expect(prompt).not.toContain("# 环境信息");
-    expect(prompt).toContain("（当前无可用内容");
+    expect(prompt).toContain("当前两层均无可用内容");
     // promptDetail policy/guidance 已全量清空 → 名单行后无 policy 行、guidance 段省略；
     // 旧 renderSystem 的 # ToolPolicy 块路径已删除
     const toolsIdx = prompt.indexOf("# Using Tools");
     expect(toolsIdx).toBeGreaterThanOrEqual(0);
     expect(prompt).not.toContain("# ToolPolicy");
     const toolSection = prompt.slice(toolsIdx);
-    for (const name of ["TodoWrite", "Read", "AskUserQuestion", "EnterComposeMode", "ExitComposeMode", "NovelRead", "NovelDelete", "NovelWrite"]) {
+    for (const name of ["TodoWrite", "Read", "AskUserQuestion", "EnterComposeMode", "ExitComposeMode", "NovelRead", "NovelDelete", "NovelWrite", "MemoryWrite", "MemorySearch", "MemoryForget"]) {
       expect(toolSection).toContain(name);
     }
     // 名单行格式：单行逗号分隔

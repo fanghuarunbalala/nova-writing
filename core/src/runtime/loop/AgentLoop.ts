@@ -101,6 +101,8 @@ export class AgentLoop {
       platform: config.platform,
       novelConstraintsProvider: config.novelConstraintsProvider,
       caseGuideProvider: config.caseGuideProvider,
+      memoryIndexProvider: config.memoryIndexProvider,
+      preCompactPass: config.preCompactPass,
       skillsIndex: config.skillsIndex,
       beforeProviderCall: config.beforeProviderCall,
     });
@@ -574,7 +576,11 @@ export class AgentLoop {
         );
         continue;
       }
-      const requireApproval = this.config.toolDispatcher.resolve(tc.name)?.requireApproval === true;
+      // 按调用审批（PRD memory-两层记忆 M1）：requireApproval 静态命中，或
+      // requiresApprovalFor 判定本次调用命中守卫目标（Write/Edit → NOVEL.md）
+      const def = this.config.toolDispatcher.resolve(tc.name);
+      const requireApproval =
+        def?.requireApproval === true || def?.requiresApprovalFor?.(tc) === true;
       // bypass 模式：canonical 写跳过审批直接放行
       const bypass = compose?.mode === "bypass" && isCanonicalNovelWrite(tc.name);
       if (requireApproval && !bypass) pending.push(tc);

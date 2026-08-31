@@ -62,6 +62,10 @@ exports[`Tier 0 快照：system prompt 渲染 > section 序金样（id + kind）
     "id": "novel.global_constraints",
     "kind": "dynamic",
   },
+  {
+    "id": "memory.index",
+    "kind": "dynamic",
+  },
 ]
 `;
 
@@ -273,24 +277,60 @@ exports[`Tier 0 快照：system prompt 渲染 > 完整 system prompt 金样（�
 - **章内情绪混杂**：一章塞多个无关联的情绪节点，节奏散乱；
 - **随意归卷**：卷内无主题无弧线，卷与卷之间无情绪层次。
 # Using Tools
-- available tools: TodoWrite, Read, Glob, Write, Edit, AskUserQuestion, skill, EnterComposeMode, ExitComposeMode, NovelRead, NovelWrite, NovelEdit, NovelDelete;
-改已有文件用 Edit，禁止 Write 覆盖做小改动；Write/Edit 只作用于 workspace 文件，小说实体一律经 Novel* 工具操作。
+- available tools: TodoWrite, Read, Glob, Write, Edit, AskUserQuestion, skill, SearchExtraTools, ExecuteExtraTool, MemoryWrite, MemorySearch, MemoryForget, EnterComposeMode, ExitComposeMode, NovelRead, NovelWrite, NovelEdit, NovelDelete;
+改已有文件用 Edit，禁止 Write 覆盖做小改动；Write/Edit 只作用于 workspace 文件，小说实体一律经 Novel* 工具操作；修改 NOVEL.md（静态声明层）必须经作者审批。
+SearchExtraTools 低优先级：核心工具能完成的任务直接做，不要搜索；只有核心工具无法完成（如 MCP 能力）时才使用。
+ExecuteExtraTool 只执行 SearchExtraTools 发现的延迟工具；核心工具永远直接调用，不要包一层 ExecuteExtraTool。
+跨会话记忆只经 MemoryWrite 写入；NOVEL.md 静态约束与实体事实不进记忆（先查路由表）；改口用 supersedes。
+## 延迟工具两步流程（SearchExtraTools → ExecuteExtraTool）
+延迟工具（如 MCP 工具）不在工具列表中，不能直接调用。必须：
+1. SearchExtraTools 发现：{"query": "select:工具名"}（按名，最快）；不确定名称用关键词搜索，或 "discover:关键词" 查看完整描述与参数 schema；
+2. ExecuteExtraTool 执行：{"tool_name": "工具名", "params": {...}}（参数按其 schema）。
+若 ExecuteExtraTool 执行失败，不要反复搜索重试——停下并告诉用户失败原因。
+
+## 延迟工具两步流程（SearchExtraTools → ExecuteExtraTool）
+延迟工具（如 MCP 工具）不在工具列表中，不能直接调用。必须：
+1. SearchExtraTools 发现：{"query": "select:工具名"}（按名，最快）；不确定名称用关键词搜索，或 "discover:关键词" 查看完整描述与参数 schema；
+2. ExecuteExtraTool 执行：{"tool_name": "工具名", "params": {...}}（参数按其 schema）。
+若 ExecuteExtraTool 执行失败，不要反复搜索重试——停下并告诉用户失败原因。
+
+## 记忆写入路由（按序判定，先命中先路由）
+1. 作者明说的**跨书**规矩/口味 → 全局层 NOVEL.md（Write/Edit，强制审批）或建议作者手改；
+2. **本书**硬约束/世界观铁律/禁忌/字数/人称/文风 → 项目层 NOVEL.md（同上）；
+3. 从交互**学出来的**偏好/反馈/画像/项目经验，且两层 NOVEL.md、实体库、系统提示均无 → MemoryWrite；
+4. 角色/剧情/大纲/设定等**实体事实** → 实体库（NovelWrite/NovelEdit），不进记忆；
+5. 会话内临时状态（当前写哪章、刚讨论的草稿） → 不落层。
+**skip 规则（作者显式要求保存也适用）**：命中 1/2/4/5 的内容即使作者说「记住这个」也拒绝，回复中说明正确去处。
+**四类 type**：author=作者画像（水平/口味/阅读背景）；feedback=改稿反馈（纠正与肯定都记，附 Why 与 How to apply）；project=本项目决策与坑（实体库/journal 查不到的，相对日期转绝对日期）；reference=外部资源指针（只存去哪找）。
+**演化**：同义补充 → 同名 MemoryWrite 覆盖更新；改口矛盾 → 新 name + supersedes 指旧条目（旧条目自动 superseded）。
+**正文三段式**：\`## 规则/事实\` → \`## Why\` → \`## How to apply\`；单文件 ≤50 行，超限回执会提示拆分。
 # 环境信息
 - 当前日期：<masked>
 - 平台：Windows
 - 工作目录：/ws
 - 模型：gpt-5
-# 小说全局约束（NOVEL.md）
+# 小说全局约束（分层 NOVEL.md）
 
-- 读取：每次 Provider Call 都会重新读取该文件并注入此处，你用 Write/Edit 修改后即时生效。
-- 内容约束：此文件仅记录小说 meta/全局约束（书名、类型、世界观、角色规则、基调、禁忌、作者偏好等），不写入对话、任务或实现细节。
+- 层级：全局层（作者跨书约束）在前、项目层（本书约束）在后；**项目层优先于全局层**，两层静态声明都优先于你的自由裁量。冲突时按更特定的层执行。
+- 读取：每次 Provider Call 都会重新读取两层文件并注入此处；作者手改或你经审批修改后即时生效。
+- 修改治理：你用 Write/Edit 修改任一层 NOVEL.md 都**必须经作者审批**（对这两条路径强制征询，呈现变更内容；驳回则磁盘不变）。这是你修改静态声明的唯一通道——不得尝试其他方式改写。
+- 项目层内容边界：只收本书全局硬约束（单章字数区间、更新节奏）、人称/时态、世界观铁律（不变式，≤10 条）、基调文风、禁忌清单；不写入对话、任务过程、实体展开细节（实体库管）、学出来的作者偏好与反馈（动态记忆 memory/ 管）。
+- 全局层内容边界：只收作者跨书约束与偏好（文风基准、普适禁忌、平台约束、协作方式约定）；同样不收实体细节与学出来的偏好。
 
-以下是 NOVEL.md 的当前内容：
+## 全局层（作者跨书约束，NOVEL.md @ 用户数据目录）
 
-<Novel-Constraints-Content>
+<Novel-Constraints-Global>
+# 跨书约束
+- 不要 BE
+</Novel-Constraints-Global>
+
+## 项目层（本书约束，NOVEL.md @ workspace 根）
+
+<Novel-Constraints-Project>
 # 世界观
 - 基调热血
-</Novel-Constraints-Content>"
+</Novel-Constraints-Project>
+"
 `;
 
 exports[`Tier 0 快照：toolDefs（desc / schema / promptDetail） > 全部工具投影金样 1`] = `
@@ -373,7 +413,7 @@ exports[`Tier 0 快照：toolDefs（desc / schema / promptDetail） > 全部工�
     "description": "从 workspace 目录读取文件，使用 workspace 相对路径。
 
 用法：
-- file_path 必须是 workspace 相对路径，不能是绝对路径。
+- file_path 必须是 workspace 相对路径（例外：全局层 NOVEL.md 的绝对路径可读）。
 - 结果按 cat -n 格式返回，行号从 1 开始。
 - 默认读取整个文件；可传 offset 行偏移和 limit 行数读取指定区间。
 - 超过 512 KiB 会报错，请分段读取。
@@ -439,7 +479,8 @@ exports[`Tier 0 快照：toolDefs（desc / schema / promptDetail） > 全部工�
 - 若目标路径已有文件，本工具会整体覆盖。
 - 只用于新建或整体重写；小改动优先用 Edit。
 - 写入是原子的；缺失父目录自动创建。
-- 内容超过 512 KiB 会被拒绝；路径限定在 workspace 沙盒内。",
+- 内容超过 512 KiB 会被拒绝；路径限定在 workspace 沙盒内（例外：全局层 NOVEL.md 绝对路径）。
+- 修改 NOVEL.md（项目层或全局层）需要作者审批。",
     "name": "Write",
     "parameters": {
       "additionalProperties": false,
@@ -459,7 +500,7 @@ exports[`Tier 0 快照：toolDefs（desc / schema / promptDetail） > 全部工�
     },
     "promptDetail": {
       "guidance": "",
-      "policy": "改已有文件用 Edit，禁止 Write 覆盖做小改动；Write/Edit 只作用于 workspace 文件，小说实体一律经 Novel* 工具操作。",
+      "policy": "改已有文件用 Edit，禁止 Write 覆盖做小改动；Write/Edit 只作用于 workspace 文件，小说实体一律经 Novel* 工具操作；修改 NOVEL.md（静态声明层）必须经作者审批。",
     },
     "requireApproval": undefined,
     "version": "1.0.0",
@@ -468,11 +509,12 @@ exports[`Tier 0 快照：toolDefs（desc / schema / promptDetail） > 全部工�
     "description": "在 workspace 目录内的文件中做精确字符串替换。
 
 用法：
-- file_path 必须指向 workspace 内已有文件。
+- file_path 必须指向 workspace 内已有文件（例外：全局层 NOVEL.md 绝对路径）。
 - old_string 必须出现；未命中会报错。
 - replace_all=false（默认）只替换第一处。
 - 整体重写用 Write；编辑前建议先 Read。
-- 结果不得超过 512 KiB；路径限定在 workspace 沙盒内。",
+- 结果不得超过 512 KiB；路径限定在 workspace 沙盒内。
+- 修改 NOVEL.md（项目层或全局层）需要作者审批。",
     "name": "Edit",
     "parameters": {
       "additionalProperties": false,
@@ -675,6 +717,198 @@ exports[`Tier 0 快照：toolDefs（desc / schema / promptDetail） > 全部工�
     "promptDetail": undefined,
     "requireApproval": undefined,
     "version": "1.1.0",
+  },
+  {
+    "description": "按名称或关键词搜索延迟工具（当前为 MCP 服务器工具）。低优先级——仅当核心工具无法完成任务时使用；核心工具（Read/Write/Edit/Glob/skill 等）始终可用，应直接调用。延迟工具不能直接调用，必须先经本工具发现、再经 ExecuteExtraTool 执行（两步流程）。",
+    "name": "SearchExtraTools",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "max_results": {
+          "description": "最大返回条数（默认 5）。",
+          "type": "number",
+        },
+        "query": {
+          "description": "搜索查询。select:工具名 —— 按名精确选择（逗号分隔多选，最快）；discover:关键词 —— 返回工具名+描述+参数 schema（仅查看不执行）；其余为关键词搜索（最多 max_results 条）。",
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+    "promptDetail": {
+      "guidance": "## 延迟工具两步流程（SearchExtraTools → ExecuteExtraTool）
+延迟工具（如 MCP 工具）不在工具列表中，不能直接调用。必须：
+1. SearchExtraTools 发现：{"query": "select:工具名"}（按名，最快）；不确定名称用关键词搜索，或 "discover:关键词" 查看完整描述与参数 schema；
+2. ExecuteExtraTool 执行：{"tool_name": "工具名", "params": {...}}（参数按其 schema）。
+若 ExecuteExtraTool 执行失败，不要反复搜索重试——停下并告诉用户失败原因。",
+      "policy": "SearchExtraTools 低优先级：核心工具能完成的任务直接做，不要搜索；只有核心工具无法完成（如 MCP 能力）时才使用。",
+    },
+    "requireApproval": undefined,
+    "version": "1.0.0",
+  },
+  {
+    "description": "按名称与参数执行延迟工具（当前为 MCP 服务器工具）。须先用 SearchExtraTools 发现目标工具后再调用（可用 discover: 查询获取其参数 schema）。受信服务器工具直接执行；非受信服务器工具执行前会征询用户审批（审批框显示真实工具名与参数）。",
+    "name": "ExecuteExtraTool",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "description": "传给目标工具的参数对象（按其 schema）。",
+          "type": "object",
+        },
+        "tool_name": {
+          "description": "目标工具完整名称（如 mcp__server__tool）。",
+          "type": "string",
+        },
+      },
+      "required": [
+        "tool_name",
+        "params",
+      ],
+      "type": "object",
+    },
+    "promptDetail": {
+      "guidance": "## 延迟工具两步流程（SearchExtraTools → ExecuteExtraTool）
+延迟工具（如 MCP 工具）不在工具列表中，不能直接调用。必须：
+1. SearchExtraTools 发现：{"query": "select:工具名"}（按名，最快）；不确定名称用关键词搜索，或 "discover:关键词" 查看完整描述与参数 schema；
+2. ExecuteExtraTool 执行：{"tool_name": "工具名", "params": {...}}（参数按其 schema）。
+若 ExecuteExtraTool 执行失败，不要反复搜索重试——停下并告诉用户失败原因。",
+      "policy": "ExecuteExtraTool 只执行 SearchExtraTools 发现的延迟工具；核心工具永远直接调用，不要包一层 ExecuteExtraTool。",
+    },
+    "requireApproval": false,
+    "version": "1.0.0",
+  },
+  {
+    "description": "写入一条跨会话记忆（动态学习层 memory/）。参数不含 source——出处由系统自动附加当前会话与轮次。
+
+用法：
+- name：kebab-case 主题名（如 pov-preference），一条可独立作废的规则/事实一个文件；禁止场景化命名。
+- type：author（作者画像）/ feedback（改稿反馈，纠正与肯定都记）/ project（本项目决策与坑）/ reference（外部资源指针）。
+- description：一句话，同时是检索锚点。
+- content：三段式正文（## 规则/事实 → ## Why → ## How to apply）。
+- supersedes：改口时指向被取代的旧条目名（可选）。
+- 已声明的静态约束/实体事实/临时状态不要写入（会被拒绝并提示正确去处）。",
+    "name": "MemoryWrite",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "description": "三段式正文：## 规则/事实 → ## Why → ## How to apply（≤50 行）",
+          "type": "string",
+        },
+        "description": {
+          "description": "一句话描述（≤120 字符，检索锚点与索引行）",
+          "type": "string",
+        },
+        "name": {
+          "description": "主题名（kebab-case，= memory/<name>.md 文件名；一条可独立作废的规则/事实一个文件）",
+          "type": "string",
+        },
+        "supersedes": {
+          "description": "被本条目取代的旧条目名（改口场景；旧条目自动标 superseded 留盘可追溯）",
+          "type": "string",
+        },
+        "type": {
+          "description": "条目类型：author 作者画像 / feedback 改稿反馈 / project 本项目决策与坑 / reference 外部资源指针",
+          "enum": [
+            "author",
+            "feedback",
+            "project",
+            "reference",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+        "type",
+        "description",
+        "content",
+      ],
+      "type": "object",
+    },
+    "promptDetail": {
+      "guidance": "## 记忆写入路由（按序判定，先命中先路由）
+1. 作者明说的**跨书**规矩/口味 → 全局层 NOVEL.md（Write/Edit，强制审批）或建议作者手改；
+2. **本书**硬约束/世界观铁律/禁忌/字数/人称/文风 → 项目层 NOVEL.md（同上）；
+3. 从交互**学出来的**偏好/反馈/画像/项目经验，且两层 NOVEL.md、实体库、系统提示均无 → MemoryWrite；
+4. 角色/剧情/大纲/设定等**实体事实** → 实体库（NovelWrite/NovelEdit），不进记忆；
+5. 会话内临时状态（当前写哪章、刚讨论的草稿） → 不落层。
+**skip 规则（作者显式要求保存也适用）**：命中 1/2/4/5 的内容即使作者说「记住这个」也拒绝，回复中说明正确去处。
+**四类 type**：author=作者画像（水平/口味/阅读背景）；feedback=改稿反馈（纠正与肯定都记，附 Why 与 How to apply）；project=本项目决策与坑（实体库/journal 查不到的，相对日期转绝对日期）；reference=外部资源指针（只存去哪找）。
+**演化**：同义补充 → 同名 MemoryWrite 覆盖更新；改口矛盾 → 新 name + supersedes 指旧条目（旧条目自动 superseded）。
+**正文三段式**：\`## 规则/事实\` → \`## Why\` → \`## How to apply\`；单文件 ≤50 行，超限回执会提示拆分。",
+      "policy": "跨会话记忆只经 MemoryWrite 写入；NOVEL.md 静态约束与实体事实不进记忆（先查路由表）；改口用 supersedes。",
+    },
+    "requireApproval": undefined,
+    "version": "1.0.0",
+  },
+  {
+    "description": "按关键词检索跨会话记忆（词法打分：名称精确 > 名称包含 > 描述包含；含已 superseded 条目）。
+
+用法：
+- query：空白分词的关键词（角色名、偏好主题、错误信息片段）。
+- max_results：默认 5。
+- 返回条目名 + 描述 + 状态；详情用 Read 读 memory/<name>.md。",
+    "name": "MemorySearch",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "max_results": {
+          "description": "返回条数上限（默认 5）",
+          "type": "integer",
+        },
+        "query": {
+          "description": "检索关键词（空白分词，可多个；匹配名称与描述）",
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+    "promptDetail": {
+      "guidance": "",
+      "policy": "",
+    },
+    "requireApproval": undefined,
+    "version": "1.0.0",
+  },
+  {
+    "description": "删除一条跨会话记忆（物理删除 memory/<name>.md 并同步索引；需作者审批）。
+
+用法：
+- name：要遗忘的条目名。
+- reason：遗忘原因（审批呈现给作者）。",
+    "name": "MemoryForget",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "要遗忘的条目名（kebab-case）",
+          "type": "string",
+        },
+        "reason": {
+          "description": "遗忘原因（审批时呈现给作者）",
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+        "reason",
+      ],
+      "type": "object",
+    },
+    "promptDetail": {
+      "guidance": "",
+      "policy": "",
+    },
+    "requireApproval": true,
+    "version": "1.0.0",
   },
   {
     "description": "进入设计模式（compose）：创建会话 design 草稿文件，正式稿转为只读（canonical 写入被拒绝），草稿写入 \`.novel/design/<conversationId>.md\`。完成后用 ExitComposeMode 提交审批。

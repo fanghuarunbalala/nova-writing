@@ -21,6 +21,8 @@ import { createAskUserTool } from "../definitions/askUser.js";
 import type { AskUserChannel } from "../definitions/askUser.js";
 import { createNovelEntityTools } from "../definitions/novel.js";
 import { createNovelImportTextTool } from "../definitions/novelImportText.js";
+import { createMemoryTools } from "../definitions/memory.js";
+import type { MemoryToolsDeps } from "../definitions/memory.js";
 import { createLibraryReadTool } from "../definitions/library.js";
 import type { LibraryReadDeps } from "../definitions/library.js";
 import type { SkillRegistry } from "../../skill/SkillRegistry.js";
@@ -127,12 +129,25 @@ export const NOVEL_TOOL_GROUP_EXTERNAL = new ToolGroupManifest({
   tools: ["SearchExtraTools", "ExecuteExtraTool"],
 });
 
+/**
+ * runtime.memory：跨会话动态记忆（PRD memory-两层记忆 M3）——MemoryWrite 写入 /
+ * MemorySearch 词法检索 / MemoryForget 遗忘（审批）；详情读取复用 Read。
+ */
+export const NOVEL_TOOL_GROUP_MEMORY = new ToolGroupManifest({
+  id: "runtime.memory",
+  version: "1.0.0",
+  label: "Runtime Memory",
+  description: "跨会话动态记忆（MemoryWrite 写入 / MemorySearch 检索 / MemoryForget 遗忘-审批）",
+  tools: ["MemoryWrite", "MemorySearch", "MemoryForget"],
+});
+
 /** Novel Agent 工具组目录：groupId → manifest（有序插入，与 definition.tools.groupIds 对齐） */
 export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = new Map([
   [NOVEL_TOOL_GROUP_TODO.id, NOVEL_TOOL_GROUP_TODO],
   [NOVEL_TOOL_GROUP_FILES.id, NOVEL_TOOL_GROUP_FILES],
   [NOVEL_TOOL_GROUP_ASK.id, NOVEL_TOOL_GROUP_ASK],
   [NOVEL_TOOL_GROUP_SKILLS.id, NOVEL_TOOL_GROUP_SKILLS],
+  [NOVEL_TOOL_GROUP_MEMORY.id, NOVEL_TOOL_GROUP_MEMORY],
   [NOVEL_TOOL_GROUP_COMPOSE.id, NOVEL_TOOL_GROUP_COMPOSE],
   [NOVEL_TOOL_GROUP_ENTITIES.id, NOVEL_TOOL_GROUP_ENTITIES],
   [NOVEL_TOOL_GROUP_ANALYST_FILES.id, NOVEL_TOOL_GROUP_ANALYST_FILES],
@@ -174,6 +189,18 @@ export interface NovelToolGroupResolverOptions {
   /** novel.entities 写工具审批覆盖（缺省 true=需审批；BookAnalyst 后台无人审批会话传 false，对齐 analyst.files 免审批先例） */
   entityApproval?: boolean;
   /**
+   * 全局层 NOVEL.md 绝对路径（PRD memory-两层记忆 M1）：runtime.files 组的沙盒
+   * 例外文件（可 Read/Write/Edit）+ 强制审批目标（项目层 NOVEL.md 恒在守卫名单）。
+   * 缺省 = 无全局层装配（无例外路径，项目层守卫仍生效）。
+   */
+  globalConstraintsPath?: string;
+  /**
+   * runtime.memory 组装配（PRD memory-两层记忆 M3）：source 提供者（宿主闭包
+   * <会话id>#<run序号>）+ 静态层文本提供者（skip 机械校验）。
+   * 缺省=未装配（组不在 definition.groupIds 即不解析）。
+   */
+  memory?: Omit<MemoryToolsDeps, "workspace">;
+  /**
    * novel.import 组装配（ProjectImporter 专用）：原始（未守卫）handle——导入工具的
    * 确定性写通道（paragraph.insert + 章回填）；workspace 用顶层 workspace 字段。
    * 缺省=未装配（组不在 definition.groupIds 即不解析，无降级必要）。
@@ -194,11 +221,33 @@ export function createNovelToolGroupResolver(
       "runtime.todo",
       () => [createTodoWriteTool(options.todoStore, options.todoConversationId)],
     ],
-    ["runtime.files", () => createFileTools(options.workspace)],
+    [
+      "runtime.files",
+      // NOVEL.md 守卫（PRD memory-两层记忆 D3）：项目层 NOVEL.md 恒为强制审批目标；
+      // 全局层（用户数据目录，沙盒外）经 globalConstraintsPath 例外可达且强制审批
+      () =>
+        createFileTools(options.workspace, {
+          guardedFiles: ["NOVEL.md"],
+          ...(options.globalConstraintsPath !== undefined
+            ? { extraFiles: [options.globalConstraintsPath] }
+            : {}),
+        }),
+    ],
     [
       "analyst.files",
-      // 文件写本就免审批（沙盒内可逆）；该组差异在沙盒=书库根（runtime.files 同工厂）
+      // 文件写本就免审批（沙盒内可逆）；该组差异在沙盒=书库根（runtime.files 同工厂，
+      // 后台无人应答审批——不挂 NOVEL.md 守卫与例外路径）
       () => createFileTools(options.workspace),
+    ],
+    // runtime.memory：跨会话动态记忆三件套（缺省报错——buildNovelAgent 恒注入）
+    [
+      "runtime.memory",
+      () => {
+        if (options.memory === undefined) {
+          throw new TypeError("Tool Group runtime.memory requires memory deps (source provider)");
+        }
+        return createMemoryTools({ workspace: options.workspace, ...options.memory });
+      },
     ],
     // library.read：deps 缺省=未装配降级（工具回不可用文本，对齐 runtime.ask 先例）
     ["library.read", () => [createLibraryReadTool({ deps: options.library?.deps })]],

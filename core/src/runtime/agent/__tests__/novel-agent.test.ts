@@ -22,10 +22,10 @@ const mcpTool: ToolDef = {
 };
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（15 段 recipe 序含 skill.index 专属动态段）+ toolDefs 齐全（15 工具）", () => {
+  it("systemSections 齐全（16 段 recipe 序含 skill.index 与 memory.index 专属动态段）+ toolDefs 齐全（18 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
-    expect(cap.systemSections).toHaveLength(15);
+    expect(cap.systemSections).toHaveLength(16);
     expect(cap.systemSections.map((s) => s.id)).toEqual([
       "novel.identity",
       "novel.system",
@@ -42,16 +42,17 @@ describe("buildNovelAgent 组装", () => {
       "skill.index",
       "core.environment",
       "novel.global_constraints",
+      "memory.index",
     ]);
-    // 四规范段 + skill.index 转 dynamic：static 6 + dynamic 9
+    // 四规范段 + skill.index/memory.index 转 dynamic：static 6 + dynamic 10
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
-    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(9);
-    // library.read 暂不接入 main（定义组序已移除）——book-analyst 分支恢复后回 16
-    // 13（6 组）+ 2（runtime.external 外部工具两步模式）
-    expect(cap.toolDefs).toHaveLength(15);
+    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(10);
+    // library.read 暂不接入 main（定义组序已移除）——book-analyst 分支恢复后再加
+    // 13（6 组）+ 2（runtime.external）+ 3（runtime.memory，PRD memory-两层记忆）
+    expect(cap.toolDefs).toHaveLength(18);
   });
 
-  it("工具名覆盖 todo + files + ask + skills + external + compose + novel.entities（7 组 15 工具；library.read 暂不接入）", () => {
+  it("工具名覆盖 todo + files + ask + skills + external + memory + compose + novel.entities（8 组 18 工具；library.read 暂不接入）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { toolDefs: Array<{ name: string }> } } }).config.agentCapability;
     const names = cap.toolDefs.map((t) => t.name);
@@ -64,6 +65,9 @@ describe("buildNovelAgent 组装", () => {
     expect(names).toContain("skill");
     expect(names).toContain("SearchExtraTools");
     expect(names).toContain("ExecuteExtraTool");
+    expect(names).toContain("MemoryWrite");
+    expect(names).toContain("MemorySearch");
+    expect(names).toContain("MemoryForget");
     expect(names).toContain("EnterComposeMode");
     expect(names).toContain("ExitComposeMode");
     expect(names).toContain("NovelRead");
@@ -80,7 +84,7 @@ describe("buildNovelAgent 组装", () => {
     expect(result).toContain("[]");
   });
 
-  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（16 工具），Agent 返回 acceptance", async () => {
+  it("subagent 选项存在时追加 Agent/TaskOutput/TaskStop（19 工具），Agent 返回 acceptance", async () => {
     const spawner = {
       spawn: () => ({ taskId: "task_1", status: "running" as const }),
       queryTasks: async () => [],
@@ -107,8 +111,8 @@ describe("buildNovelAgent 组装", () => {
         };
       }
     ).config.agentCapability;
-    // 15（7 组，含 runtime.external 两工具与 novel.entities 四工具与 novel.compose 两工具） + 3（subagent 派发三工具）
-    expect(cap.toolDefs).toHaveLength(18);
+    // 18（8 组）+ 3（subagent 派发三工具）= 21（runtime.memory 三工具计入，PRD memory-两层记忆）
+    expect(cap.toolDefs).toHaveLength(21);
     const names = cap.toolDefs.map((t) => t.name);
     expect(names).toContain("Agent");
     expect(names).toContain("TaskOutput");

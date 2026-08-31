@@ -4,6 +4,7 @@ import type { ToolDef } from "../tool/ToolDef.js";
 import type {
   CaseGuideProvider,
   DynamicPromptSectionInput,
+  MemoryIndexProvider,
   NovelConstraintsProvider,
   SkillsIndexSnapshot,
 } from "../prompt/PromptSection.js";
@@ -60,6 +61,16 @@ export class LoopContext implements ReadonlyLoopContext {
   private readonly novelConstraintsProvider: NovelConstraintsProvider;
   /** 案例引导提供者（每 provider call 前调用；缺省空——规范段仅省略案例小节） */
   private readonly caseGuideProvider: CaseGuideProvider;
+  /** 动态记忆索引提供者（每 provider call 前调用；缺省空——memory.index 段省略） */
+  private readonly memoryIndexProvider: MemoryIndexProvider;
+  /**
+   * 压缩前提取整理 pass（PRD memory-两层记忆 M4）：compact 判定通过、T1 执行前
+   * 调用（每压缩纪元至多一次）；pass 自负超时放行——压缩主线绝不被阻塞。
+   * 缺省不装配。forceCompact 保险丝路径不经过（延迟敏感）。
+   */
+  private readonly preCompactPass?: (sampling: AgentRunConfig["sampling"], runs: readonly RunContext[]) => Promise<void>;
+  /** 提取 pass 已执行的纪元（纪元去重：压缩发生后才允许再次执行） */
+  private passEpoch = -1;
   /** 技能索引快照（构造注入一次，会话期静态；缺省空——skill.index 段省略） */
   private readonly skillsIndex?: SkillsIndexSnapshot;
   /** 每次 provider call 发起前回调（mode pending→active 晋升；缺省 no-op） */
@@ -69,6 +80,7 @@ export class LoopContext implements ReadonlyLoopContext {
    * 构造 LoopContext
    * @param opts Agent 能力 + 工作区 + 可恢复的 run 消息 + seq 起始值（journal 恢复用）
    * + 平台显示名（环境块，进程常量）+ NOVEL.md 提供者（每调用 fs 读，node 层注入）
+   * + 记忆索引提供者（每调用读 memory/MEMORY.md）+ 压缩前提取 pass
    * + beforeProviderCall（每次 provider call 发起前执行）
    */
   constructor(opts: {
@@ -81,6 +93,8 @@ export class LoopContext implements ReadonlyLoopContext {
     platform?: string;
     novelConstraintsProvider?: NovelConstraintsProvider;
     caseGuideProvider?: CaseGuideProvider;
+    memoryIndexProvider?: MemoryIndexProvider;
+    preCompactPass?: (sampling: AgentRunConfig["sampling"], runs: readonly RunContext[]) => Promise<void>;
     skillsIndex?: SkillsIndexSnapshot;
     beforeProviderCall?: () => void | Promise<void>;
   }) {
@@ -90,6 +104,8 @@ export class LoopContext implements ReadonlyLoopContext {
     this.platform = opts.platform;
     this.novelConstraintsProvider = opts.novelConstraintsProvider ?? (async () => undefined);
     this.caseGuideProvider = opts.caseGuideProvider ?? (async () => undefined);
+    this.memoryIndexProvider = opts.memoryIndexProvider ?? (async () => undefined);
+    this.preCompactPass = opts.preCompactPass;
     this.skillsIndex = opts.skillsIndex;
     this.beforeProviderCall = opts.beforeProviderCall ?? (async () => {});
     for (const policy of opts.agentCapability.compactPolicies) {
@@ -212,6 +228,17 @@ export class LoopContext implements ReadonlyLoopContext {
   ): Promise<ProviderCall> {
     // ⓪ provider call 发起前回调（mode pending→active 晋升等；在一切渲染/门控之前）
     await this.beforeProviderCall();
+    // ⓪′ 压缩前提取整理 pass（PRD memory-两层记忆 M4）：判定通过、T1 执行前，
+    // 每压缩纪元至多一次（passEpoch 去重；压缩发生后纪元 +1 才允许再次执行）。
+    // pass 自负超时（Promise.race 内部兜底），此处不设额外时限——但 await 完成才继续
+    if (
+      this.preCompactPass !== undefined &&
+      this.compactChain.needsCompact(this) &&
+      this.passEpoch !== this.compactionCount
+    ) {
+      this.passEpoch = this.compactionCount;
+      await this.preCompactPass(run.sampling, this.runList);
+    }
     // ① 压缩（链式，影响 runs；策略可含 LLM 摘要调用，需 await）。
     // 压缩后清扫带 nudge 标记的流内 system 消息（nudge 策略按纪元重注）
     if (await this.compactChain.compactIfNeeded(this)) {
@@ -224,9 +251,10 @@ export class LoopContext implements ReadonlyLoopContext {
     for (const policy of this.agentCapability.nudgePolicies) {
       await policy.persistentNudgeIfNeeded(this, runProgress);
     }
-    // ③ 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）
+    // ③ 动态段输入：LoopContext 自组装 + 宿主注入约束内容与记忆索引（每调用重读）
     const constraints = await this.novelConstraintsProvider();
     const guide = await this.caseGuideProvider();
+    const memoryIndex = await this.memoryIndexProvider();
     const dynamicInput: DynamicPromptSectionInput = {
       environment:
         this.platform === undefined || this.platform.trim().length === 0
@@ -239,6 +267,7 @@ export class LoopContext implements ReadonlyLoopContext {
       ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
       ...(guide === undefined ? {} : { caseGuide: guide }),
       ...(this.skillsIndex !== undefined ? { skills: this.skillsIndex } : {}),
+      ...(memoryIndex === undefined ? {} : { memoryIndex }),
     };
     // ④ 组装基础请求（system / tools / messages / sampling；messages 快照含 ② 注入；
     // toolSequenceGuard 兜底协议合法性——存量 journal 坏序列在此自愈，不落盘）

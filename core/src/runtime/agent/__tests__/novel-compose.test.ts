@@ -62,7 +62,7 @@ describe("buildNovelComposeAgent 装配", () => {
     }
   });
 
-  it("systemSections 13 段 recipe 序（explorer 框架 + compose 四段 + 三质量规范段 + toolPolicy/toolGuidance 收尾；案例索引并入规范段，无独立 guide 段）", () => {
+  it("systemSections 14 段 recipe 序（explorer 框架 + compose 四段 + 三质量规范段 + toolPolicy/toolGuidance + memory.index 收尾；PRD memory-两层记忆 D8）", () => {
     const cfg = cfgOf(build());
     expect(cfg.agentCapability.systemSections.map((s) => s.id)).toEqual([
       "core.runtime.protocol",
@@ -78,14 +78,15 @@ describe("buildNovelComposeAgent 装配", () => {
       "novel.prose_standard",
       "tool.policy",
       "tool.guidance",
+      "memory.index",
     ]);
     // 质量规范段为 dynamic（尾附「参考案例」小节，PRD compose-案例引导 v0.6）
     const prose = cfg.agentCapability.systemSections.find((s) => s.id === "novel.prose_standard");
     expect(prose?.kind).toBe("dynamic");
   });
 
-  it("definitionVersion 1.3.0（guide 段迁出 recipe，案例索引并入规范段）", () => {
-    expect(novelComposeAgentDefinition.definitionVersion).toBe("1.3.0");
+  it("definitionVersion 1.4.0（memory.index 索引段接入，PRD memory-两层记忆 D8）", () => {
+    expect(novelComposeAgentDefinition.definitionVersion).toBe("1.4.0");
   });
 
   it("config 盖章 conversationId + agentId，且无 listeners（live-only）", () => {

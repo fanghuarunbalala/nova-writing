@@ -43,33 +43,43 @@ describe("core.environment 动态段", () => {
   });
 });
 
-describe("novel.global_constraints 动态段", () => {
-  it("常驻说明恒渲染 + 内容 <Novel-Constraints-Content> 包裹", () => {
+describe("novel.global_constraints 动态段（两层，PRD memory-两层记忆 M1）", () => {
+  it("两层注入：全局在前项目在后 + 优先级标注 + 分层标签包裹", () => {
     const text = novelGlobalConstraintsSection.renderDynamic(
       {
         novelGlobalConstraints: {
-          fileName: "NOVEL.md",
-          content: "# 世界观\n- 基调热血",
+          global: "# 跨书\n- 不要 BE",
+          project: "# 本书\n- 基调热血",
         },
       },
       {} as never,
     );
-    expect(text).toContain("# 小说全局约束（NOVEL.md）");
-    expect(text).toContain("每次 Provider Call 都会重新读取该文件");
-    expect(text).toContain("<Novel-Constraints-Content>");
-    expect(text).toContain("# 世界观");
-    expect(text).toContain("</Novel-Constraints-Content>");
+    expect(text).toContain("# 小说全局约束（分层 NOVEL.md）");
+    expect(text).toContain("项目层优先于全局层");
+    expect(text).toContain("<Novel-Constraints-Global>");
+    expect(text).toContain("不要 BE");
+    expect(text).toContain("<Novel-Constraints-Project>");
+    expect(text).toContain("基调热血");
+    // 拼接顺序：全局层在项目层之前
+    expect(text.indexOf("不要 BE")).toBeLessThan(text.indexOf("基调热血"));
+    // 修改治理提示（强制审批）
+    expect(text).toContain("必须经作者审批");
   });
 
-  it("输入缺失/空内容 → 常驻说明仍渲染 + 空占位提示", () => {
-    const absent = novelGlobalConstraintsSection.renderDynamic({}, {} as never);
-    expect(absent).toContain("# 小说全局约束（NOVEL.md）");
-    expect(absent).toContain("（当前无可用内容");
-    const empty = novelGlobalConstraintsSection.renderDynamic(
-      { novelGlobalConstraints: { fileName: "NOVEL.md", content: "  \n" } },
+  it("单层缺失只注另一层；输入缺失/两层全空 → 占位提示", () => {
+    const projectOnly = novelGlobalConstraintsSection.renderDynamic(
+      { novelGlobalConstraints: { project: "# 本书\n- 基调热血" } },
       {} as never,
     );
-    expect(empty).toContain("（当前无可用内容");
+    expect(projectOnly).toContain("基调热血");
+    expect(projectOnly).not.toContain("Novel-Constraints-Global");
+    const absent = novelGlobalConstraintsSection.renderDynamic({}, {} as never);
+    expect(absent).toContain("当前两层均无可用内容");
+    const empty = novelGlobalConstraintsSection.renderDynamic(
+      { novelGlobalConstraints: { global: "  \n", project: " " } },
+      {} as never,
+    );
+    expect(empty).toContain("当前两层均无可用内容");
   });
 });
 

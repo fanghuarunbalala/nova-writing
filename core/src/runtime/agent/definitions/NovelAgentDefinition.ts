@@ -13,7 +13,8 @@
  * novel.communication → core.runtime.protocol → novel.story_appeal →
  * novel.outline_standard → novel.prose_standard → novel.publication_standard →
  * tool.policy(dynamic) → tool.guidance(dynamic) → skill.index(dynamic) →
- * core.environment(dynamic) → novel.global_constraints(dynamic)
+ * core.environment(dynamic) → novel.global_constraints(dynamic) →
+ * memory.index(dynamic，PRD memory-两层记忆：空索引时段省略)
  */
 import {
   AgentCommunicationPolicy,
@@ -26,10 +27,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** Novel Agent 声明式定义（definitionVersion 1.5.0：runtime.external 外部工具两步模式 + external_tools nudge） */
+/** Novel Agent 声明式定义（definitionVersion 1.6.0：runtime.memory 记忆组 + memory.index 索引段，PRD memory-两层记忆） */
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.5.0",
+  definitionVersion: "1.6.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -48,6 +49,7 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("skill.index"),
     new PromptSectionItem("core.environment"),
     new PromptSectionItem("novel.global_constraints"),
+    new PromptSectionItem("memory.index"),
   ]),
   tools: new AgentToolPolicy({
     groupIds: [
@@ -58,6 +60,8 @@ export const novelAgentDefinition = new AgentDefinition({
       // 外部工具延迟两步模式（SearchExtraTools/ExecuteExtraTool）；MCP 工具经
       // 延迟池接入，不进常驻工具面（docs/PRD/external-tools-接入.md）
       "runtime.external",
+      // 跨会话动态记忆（PRD memory-两层记忆 M3：Write/Search/Forget；详情读取复用 Read）
+      "runtime.memory",
       "novel.compose",
       "novel.entities",
       // library.read 暂不接入 main（避免污染主 agent 工具面）；开发在 book-analyst 分支

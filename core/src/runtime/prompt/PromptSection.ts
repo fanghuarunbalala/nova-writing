@@ -2,15 +2,19 @@ import type { ReadonlyLoopContext } from "../loop/LoopContext.js";
 import type { GuideCaseEntry } from "../agent/composeGuide/types.js";
 
 /**
- * 小说全局约束快照：node 层每调用读取 NOVEL.md 注入（≤256 KiB）。
- * Novel global-constraints snapshot: injected by the node layer after reading
- * NOVEL.md per call (≤256 KiB).
+ * 小说全局约束快照（分层，PRD memory-两层记忆 M1）：node 层每调用读取两层
+ * NOVEL.md 注入（各 ≤256 KiB，超限整体拒绝）。拼接序 = 全局层在前、项目层在后，
+ * 优先级项目层 > 全局层（软优先级：渲染标注引导，不做硬消解）。
+ * Layered novel global-constraints snapshot (PRD memory two-layer): the node
+ * layer reads both NOVEL.md files per call (each ≤256 KiB, over-limit rejected
+ * whole). Concatenation order = global first, project after; project layer
+ * takes soft precedence over the global layer.
  */
 export interface NovelGlobalConstraintsSnapshot {
-  /** 文件名（如 NOVEL.md），用于块标题 */
-  readonly fileName: string;
-  /** 文件内容（UTF-8，≤256 KiB） */
-  readonly content: string;
+  /** 全局层内容（用户数据目录 NOVEL.md；缺失 = 未声明，不渲染该层） */
+  readonly global?: string;
+  /** 项目层内容（workspace 根 NOVEL.md；缺失 = 未声明，不渲染该层） */
+  readonly project?: string;
 }
 
 /**
@@ -48,6 +52,29 @@ export interface SkillsIndexSnapshot {
 }
 
 /**
+ * 动态记忆索引快照（PRD memory-两层记忆 M2）：node 层每调用读 memory/MEMORY.md
+ * 派生（active 条目，注入预算内截断）。Compose 侧提供者按 type 过滤
+ * （author/feedback），过滤发生在提供者而非渲染层。
+ * Dynamic memory-index snapshot: derived per call by the node layer from
+ * memory/MEMORY.md (active entries, truncated to the injection budget). The
+ * Compose-side provider filters by type (author/feedback) at the provider,
+ * not in rendering.
+ */
+export interface MemoryIndexSnapshot {
+  /** 索引行（active 条目，已按确定序：type 分组 → name 字典序） */
+  readonly entries: readonly {
+    /** 主题名（kebab-case，= memory/<name>.md 文件名） */
+    readonly name: string;
+    /** 一句话描述（检索锚点） */
+    readonly description: string;
+    /** 条目类型 */
+    readonly type: "author" | "feedback" | "project" | "reference";
+  }[];
+  /** 注入预算（200 行）截断掉了尾部条目（磁盘文件完整） */
+  readonly truncated: boolean;
+}
+
+/**
  * 动态段渲染输入：LoopContext 每 provider call 组装（workdir/platform/modelId
  * 来自 LoopContext 自身状态与 run 配置），仅 novelGlobalConstraints 由宿主注入。
  * Dynamic section render input: assembled per provider call by LoopContext
@@ -70,14 +97,25 @@ export interface DynamicPromptSectionInput {
   readonly caseGuide?: CaseGuideSnapshot;
   /** 技能索引快照（宿主装配期注入一次、会话期静态；缺失或空时 skill.index 段省略） */
   readonly skills?: SkillsIndexSnapshot;
+  /** 动态记忆索引快照（宿主每调用读 memory/MEMORY.md 派生；空时 memory.index 段省略） */
+  readonly memoryIndex?: MemoryIndexSnapshot;
 }
 
 /**
- * 小说全局约束提供者：每 provider call 前调用（node 层 fs 读取 NOVEL.md）。
+ * 小说全局约束提供者：每 provider call 前调用（node 层 fs 读取两层 NOVEL.md）。
  * 读取失败返回 undefined → 动态段渲染占位。这是唯一的宿主注入缝——
  * LoopContext 自身已持有 workdir（workspace）与 modelId（run.sampling.model）。
  */
 export type NovelConstraintsProvider = () => Promise<NovelGlobalConstraintsSnapshot | undefined>;
+
+/**
+ * 动态记忆索引提供者：每 provider call 前调用（node 层读 memory/MEMORY.md）。
+ * 读取失败/目录缺失返回 undefined → memory.index 段省略（对齐 skill.index 空省略先例）。
+ * Dynamic memory-index provider: invoked before each provider call (the node
+ * layer reads memory/MEMORY.md). Failures or a missing directory return
+ * undefined and the memory.index section is omitted.
+ */
+export type MemoryIndexProvider = () => Promise<MemoryIndexSnapshot | undefined>;
 
 /**
  * 案例引导提供者：每 provider call 前调用（node 层扫描 .novel/cases 派生）。

@@ -10,6 +10,7 @@ import type { ComposeModeStateProvider } from "../../conversation/compose/index.
 import type { AgentCapability } from "../agent/AgentCapability.js";
 import type {
   CaseGuideProvider,
+  MemoryIndexProvider,
   NovelConstraintsProvider,
   SkillsIndexSnapshot,
 } from "../prompt/PromptSection.js";
@@ -68,6 +69,18 @@ export interface AgentLoopConfig {
    * 返回 undefined → 质量规范段仅省略「参考案例」小节（正文恒渲染）。
    */
   caseGuideProvider?: CaseGuideProvider;
+  /**
+   * 动态记忆索引提供者（PRD memory-两层记忆 M2）：每 provider call 前调用
+   * （node 层读 memory/MEMORY.md 派生 active 条目，Compose 侧按 type 过滤）。
+   * 返回 undefined / 空 → memory.index 段省略。
+   */
+  memoryIndexProvider?: MemoryIndexProvider;
+  /**
+   * 压缩前提取整理 pass（PRD memory-两层记忆 M4）：compact 判定通过、T1 执行前
+   * 调用（每压缩纪元至多一次）；runs = 即将被压缩的完整上下文（原文销毁前最后
+   * 窗口）。实现自负超时放行，压缩主线绝不被阻塞。
+   */
+  preCompactPass?: (sampling: SamplingConfig, runs: readonly RunContext[]) => Promise<void>;
   /**
    * 技能索引快照（skill.index 动态段）：装配期从 SkillRegistry.effective() 派生一次
    * （会话期静态，非每调用读盘）。缺省或空清单 → 段整体省略。

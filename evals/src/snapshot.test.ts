@@ -33,8 +33,8 @@ function assemble() {
 		conversationId: "conv-snapshot",
 		platform: "Windows",
 		novelConstraintsProvider: async () => ({
-			fileName: "NOVEL.md",
-			content: "# 世界观\n- 基调热血",
+			global: "# 跨书约束\n- 不要 BE",
+			project: "# 世界观\n- 基调热血",
 		}),
 	});
 	return loop;
@@ -87,7 +87,7 @@ describe("Tier 0 快照：toolDefs（desc / schema / promptDetail）", () => {
 	});
 
 	it("工具数量锁（13；误增删组/工具即暴露——novel.entities 合并 5 组 12 件 + skill 工具；library.read 暂不接入 main）", () => {
-		expect(capability().toolDefs).toHaveLength(13);
+		expect(capability().toolDefs).toHaveLength(18);
 	});
 });
 

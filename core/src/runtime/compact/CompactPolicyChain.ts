@@ -15,6 +15,12 @@ export interface CompactPolicyChain {
    */
   unregister(policy: ContextCompactPolicy): void;
   /**
+   * 链式检查是否需要压缩（只判定不执行；压缩前钩子用，PRD memory-两层记忆 M4）
+   * @param loop LoopContext（策略直接读取上下文）
+   * @returns 任一策略 shouldCompact 即 true
+   */
+  needsCompact(loop: LoopContext): boolean;
+  /**
    * 链式检查并压缩（策略按优先级逐个 shouldCompact → compact；策略可含 LLM 调用，故为异步）
    * @param loop LoopContext（策略直接操作上下文）
    * @returns 是否有策略执行了压缩

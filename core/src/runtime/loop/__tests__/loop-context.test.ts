@@ -150,7 +150,7 @@ describe("LoopContext", () => {
     expect(bareCall.system).not.toContain("环境:");
   });
 
-  it("novelConstraintsProvider 每调用注入：约束内容进 dynamic 段；未注入省略", async () => {
+  it("novelConstraintsProvider 每调用注入：两层约束进 dynamic 段；未注入省略（PRD memory-两层记忆 M1）", async () => {
     const constraintsCapability: AgentCapability = {
       systemSections: [
         {
@@ -161,7 +161,7 @@ describe("LoopContext", () => {
           renderDynamic: (input) =>
             input.novelGlobalConstraints === undefined
               ? ""
-              : `约束:${input.novelGlobalConstraints.content}`,
+              : `约束:${input.novelGlobalConstraints.global ?? "-"}|${input.novelGlobalConstraints.project ?? "-"}`,
         },
       ],
       toolDefs: [],
@@ -172,19 +172,19 @@ describe("LoopContext", () => {
     const ctx = new LoopContext({
       agentCapability: constraintsCapability,
       workspace: "/ws",
-      novelConstraintsProvider: async () => ({ fileName: "NOVEL.md", content: `v${++reads}` }),
+      novelConstraintsProvider: async () => ({ project: `v${++reads}` }),
     });
     const call1 = await ctx.toProviderCall(
       { sampling: { model: "gpt-5" } },
       { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
     );
-    expect(call1.system).toContain("约束:v1");
+    expect(call1.system).toContain("约束:-|v1");
     // 每 provider call 重新读取（NOVEL.md 改动即时生效）
     const call2 = await ctx.toProviderCall(
       { sampling: { model: "gpt-5" } },
       { curTurn: 0, maxTurn: 5, toolsLastTurn: new Map() },
     );
-    expect(call2.system).toContain("约束:v2");
+    expect(call2.system).toContain("约束:-|v2");
     // 未注入 provider（返回 undefined）：dynamic 段省略
     const bare = new LoopContext({ agentCapability: constraintsCapability, workspace: "/ws" });
     const bareCall = await bare.toProviderCall(

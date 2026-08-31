@@ -39,8 +39,9 @@ import {
   novelPublicationStandardSection,
 } from "../../prompt/sections/novelStandards.js";
 import { skillIndexSection } from "../../skill/skillIndexSection.js";
+import { memoryIndexSection } from "../../prompt/sections/memory.js";
 
-/** novel 域段注册表（id@version；27 段：main 10 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3 + project-importer 2） */
+/** novel 域段注册表（id@version；28 段：main 11 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3 + project-importer 2） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -55,6 +56,8 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   toolGuidanceSection,
   // 技能索引（skill.index，渐进披露第一层；快照由宿主装配期注入，main recipe 引用）
   skillIndexSection,
+  // 动态记忆索引（memory.index，PRD memory-两层记忆 M2；空索引段省略，main 与 Compose recipe 引用）
+  memoryIndexSection,
   // subagent 共享段（explorer/compose recipe 引用）
   contextReliabilitySection,
   completionContractSection,

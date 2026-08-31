@@ -590,6 +590,10 @@ async function main(): Promise<void> {
   // CMS spawnConversation 派生（task/extraEnv 契约直接适配），analyst journal 需已开工作区。
   const libraryRoot = process.env.NOVEL_LIBRARY_ROOT ?? join(app.getPath("userData"), "library");
   mkdirSync(libraryRoot, { recursive: true });
+  // ── 全局层 NOVEL.md（PRD memory-两层记忆 M1）：跨工作区静态声明 ──
+  // userData 根下同名文件；env 继承给 conversation 子进程（两层注入的项目层之外那层）。
+  // env 可覆盖；文件不预创建（作者/AI 首次写入时建立，注入层缺省渲染占位）
+  process.env.NOVEL_GLOBAL_CONSTRAINTS ??= join(app.getPath("userData"), "NOVEL.md");
   let libraryService = new LibraryService({ libraryRoot });
   // 解析进度 journal 信号：spawn 时记录 bookId → conversationId（storedir = storedirRoot/<cid>）
   const analystConversationOf = new Map<string, string>();

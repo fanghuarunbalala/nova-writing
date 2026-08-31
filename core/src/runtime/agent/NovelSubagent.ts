@@ -17,7 +17,7 @@ import {
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { ConversationTodoStore } from "../todo/TodoProtocol.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
-import type { CaseGuideProvider } from "../prompt/PromptSection.js";
+import type { CaseGuideProvider, MemoryIndexProvider } from "../prompt/PromptSection.js";
 
 /** novel 域 subagent 装配选项（explorer/compose 同构） */
 export interface NovelSubagentOptions {
@@ -37,6 +37,11 @@ export interface NovelSubagentOptions {
   debugger?: ProviderCallDebugger;
   /** 案例引导提供者（质量规范段「参考案例」小节输入；每 provider call 调用） */
   caseGuideProvider?: CaseGuideProvider;
+  /**
+   * 动态记忆索引提供者（PRD memory-两层记忆 D8）：Compose 传 author/feedback
+   * 过滤版（调用方构造）；Explore 不传（不注入）。每 provider call 调用。
+   */
+  memoryIndexProvider?: MemoryIndexProvider;
   /** spawn seed 消息（novel-guide 案例正文注入；首 run 一次，带委派 prompt） */
   composeGuideSeed?: (input: string) => Promise<LLMessage[] | undefined>;
 }
@@ -75,6 +80,9 @@ export function buildNovelSubagent(opts: BuildNovelSubagentOptions): AgentLoop {
     debugger: opts.debugger,
     ...(opts.caseGuideProvider !== undefined
       ? { caseGuideProvider: opts.caseGuideProvider }
+      : {}),
+    ...(opts.memoryIndexProvider !== undefined
+      ? { memoryIndexProvider: opts.memoryIndexProvider }
       : {}),
     ...(opts.composeGuideSeed !== undefined ? { spawnSeedMessages: opts.composeGuideSeed } : {}),
   });

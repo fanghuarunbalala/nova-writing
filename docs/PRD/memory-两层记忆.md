@@ -195,7 +195,7 @@ stateDiagram-v2
 ### 4.5 memory 工具集（新 ToolGroup：`runtime.memory`，schema/handler 分离，按 AgentToolPolicy 装配）
 
 - **memory_write**：触发=作者显式"记住…" / 提取整理 pass（4.6）/ 模型自主判断。输入=name/type/description/content（**不含 source**——由工具宿主自动附加当前 `<会话id>#<run序号>`，模型不可伪造不可手填；子代理调用时附加其父会话与当前 run，见已知边界 §8 D7）。处理=四道校验：① source 宿主注入（默认成立）；② skip 校验（4.4：机械词法重叠 + promptDetail 语义指引）；③ 索引同义检查——name 相同或 description 高度重叠 → 更新原条目（modified 刷新），矛盾改口 → 旧条目标 superseded；④ 先写主题文件、成功后再更新索引行（顺序保证中断可恢复）。输出=写入结果 + 索引预算状态（行数/阈值）。requireApproval=false（memory/ 低风险、可 forget）。
-- **memory_search**：输入=query, max_results（默认 5）。处理=V1 词法打分——**协议对齐 DeferredToolRegistry**（查询分词、名称精确 3 > 名称包含 2 > 描述包含 1 累加，同分按 name 字典序，maxResults 截断）；provider 接口预留 V2 向量混合检索位（本 PRD 不实现）。输出=排序条目列表（name + description + 文件路径）。
+- **memory_search**：输入=query, max_results（默认 5）。处理=**BM25 词法（已实施修订：取代 3/2/1 打分）**——CJK bigram + 拉丁分词（零依赖不引 jieba）、字段加权（name×2 + description×1，k1=1.5/b=0.75）、同分 name 字典序；**混合检索（D10 已实施）**：配置了嵌入通道时 BM25 序 + 余弦序 RRF 融合（k=60）→ top12 → LLM rerank（主 chat provider 一次小调用，8s 超时，失败静默回退融合序）→ 截断。嵌入通道：①设置页 Embedding profile（OpenAI 兼容 /embeddings 端点，中文网络环境主通道——deepseek 无此端点由配置自由性绕开）；②本地 transformers.js（`NOVEL_MEMORY_LOCAL_EMBEDDINGS=1` 显式开启 + `NOVEL_MEMORY_HF_MIRROR` 镜像，模型下载失败降级词法）；③皆无纯 BM25。向量缓存 memory/.embeddings.json（条目级 hash 失效/删除剪枝/换模型全量重嵌，查询时批量懒嵌入）。输出=排序条目列表（name + description + 状态；superseded 可检索）。
 - **memory_forget**：输入=name, reason。requireApproval=true，走现审批流；物理删除主题文件与索引行，journal 留痕（审批决策与工具调用本身已入 run）。
 - **详情读取不设专用工具**：主题文件是工作区 markdown，模型用现有 **Read** 工具按需直读 `memory/<name>.md`（CC 同款 "standard file tools"；Read 调用入 journal，可观测性不丢）。**读取指引（信任边界 + 保鲜）**：记忆只证明"写入时如此"，冲突信当下——记忆中引用的实体事实（如"主角第 3 章已死"）用于生成前必须回实体库核实；详情旁注条目 modified 时间，超过阈值（建议 14 天）附「point-in-time 记录，使用前核实现状」提醒（对齐 CC memoryAge 机制）。
 - **注入面**：静态两层注入所有 agent（Explore/Compose 同样守字数与禁忌）；动态索引注入 main agent 与 Compose（author/feedback 类，§8 D8）；memory 工具只装配 main agent 与提取整理子代理（4.6），子代理一律不拥有 memory 写工具的唯一受控例外。
@@ -247,6 +247,8 @@ stateDiagram-v2
 - **应记 recall**：golden 剧本人工标注"应记清单"，统计写入覆盖率；
 - **重复率与更新率**：同义新建（应更新而新建）比例；索引行数增长曲线。
 
+**实施状态（2026-08-31）**：密闭四件已进 `evals pnpm test`——写入质量（含 source 宿主附加断言）、skip 生效率（含「作者显式要求保存也拒绝」剧本）、跨会话召回 golden（seed memory 预置→MemorySearch 命中）、supersede；golden 剧本经 preset 短跑与 live case（16.memory-recall / 17.memory-write-rubric / 18.memory-search-precision，`pnpm suite` 跑）。
+
 ### 6.3 动态层读取与治理
 - **跨会话召回 recall@5**：剧本会话 1 埋偏好事实（"不要 BE"），会话 N 相关任务中召回并遵守的比例（复用 preset.messages 短跑机制）；
 - **改口测试**：先 A 后 B 两轮声明，后续会话使用 B 的比例（supersede 生效度）；改口涉及静态层时断言走文件审批且批准前磁盘不变；
@@ -285,13 +287,15 @@ stateDiagram-v2
 
 ## 8. 开放问题
 
+> **槽位结论（2026-08-31 补注）**：与 CC 的注入槽位差异已核实并定论——两架构同构（每 provider call 从磁盘重读、组装时注入、不落持久历史；CC 是 `prependUserContext` 用户侧前置 + `<system-reminder>` 包装，我们是 system 动态段），区别仅在槽位。CC 消息槽换 Claude 专属注意力加权与「数据非指令」语义；我们 system 槽换**压缩免疫**（T1/T2/T3 只动 messages）+ **provider 中立**（system-reminder 权重收益未在 deepseek 等端点验证）+ **硬约束权威**（字数/人称/禁忌需要规范级权重）。维持现状（两层 NOVEL.md 与 memory.index 均留 system），不迁移消息槽。
+
 ### 8.1 已定决策（2026-08-29 定稿拍板）
 
 - **D1 静态层 CC 式两层**：全局（用户数据目录）+ 项目（workspaceRoot）同名 NOVEL.md；注入拼接、广→窄、段头标注；**软优先级**（项目层 > 全局层 > 动态记忆），不做硬冲突消解器——对齐 CC「拼接加载 + arbitrarily」。
 - **D2 静态层上限**：每层建议 ≤100 行（合计对齐 CC 200 行 guideline）；引擎维持 256 KiB **超限整体拒绝 + 占位**（fail-loud，对齐 CC 4 MiB skip）——**撤销草案的「截断 + 标记」**；不引入 @import。
 - **D3 NOVEL.md 修改治理 = 文件工具 + 强制审批**：模型仅经 Write/Edit 修改（两条确切路径强制 requireApproval，现审批流呈现 diff）；**不建提案工具、不扩审批队列**。依据：审批队列纯内存（重启丢 pending，approval-persistence 未实施）且条目形状绑定 toolCalls；驳回后落「冲突未采纳」记忆。
 - **D4 详情读取复用现有 Read**：砍掉草案的 memory_read 工具（CC 同款 standard file tools；journal 有痕可观测）；索引常驻注入（纯 pull 会塌召回——模型不知道自己不知道什么）。
-- **D5 工具集 = memory_write / memory_search / memory_forget 三件套**；memory_search V1 词法打分对齐 DeferredToolRegistry（3/2/1 + 同分字典序 + maxResults 5），provider 接口预留向量位；**V1 不上 RAG/embedding**（CC 亦无：检索 = 索引常驻 + 按需 Read + grep，同构验证；量级为几十条，非几千条）。
+- **D5 工具集 = memory_write / memory_search / memory_forget 三件套**（实施名 MemoryWrite/MemorySearch/MemoryForget）。~~词法打分对齐 DeferredToolRegistry（3/2/1）~~ **已修订（2026-08-31）：升级 BM25 + CJK bigram 分词**——中文查询在空白分词下整句成单 token，3/2/1 子串打分召回不足；BM25 字段加权 + IDF 区分度经分词测试锁死。V1 不上 RAG/embedding 的原决策已被 D10 取代（见下）。
 - **D6 compact 触发确定性提取整理 pass**（取代草案 auto-flush nudge）：T1 前、每压缩纪元一次、housekeeping 子代理、超时放行；草案引用的 external-tools nudge 实为 persistent 通道（事实修正），本机制不依赖 nudge。
 - **D7 source 由工具宿主自动附加** `<会话id>#<run序号>`（审批 requestId 同粒度先例；journal 无独立事件 id，run 序号是唯一稳定粒度）；已知边界：子代理 run 不落 journal，提取 pass 子代理的 source 指向其提取内容的**来源会话与轮次**。
 - **D8 Compose 注入面 = 索引 + author/feedback 类**（起草者正是偏好的执行者；只注入常驻索引不给工具）；Explore 不注入。
@@ -299,10 +303,12 @@ stateDiagram-v2
 
 ### 8.2 保留开放项（后续版本再议）
 
-- 8.2.1 memory_search 的 V2 向量 provider 选型（本地零依赖优先，对齐 SQLite 内建思路；启用条件="索引预算常年吃紧"成为真问题）；
-- 8.2.2 长程噪声阈值的具体数字（按 6.6 基线多轮标定后回填 6.4）；
-- 8.2.3 整理触发自动化（每 N 会话提示一次）与自动 dreaming 定时任务是否进 V2；
-- 8.2.4 全局层是否需要 GUI 设置界面入口（V1 为磁盘文件直编）。
+> **D10（2026-08-31 拍板，取代 8.2.1）**：embedding + rerank 已引入。通道优先级 = 设置页 Embedding profile（`RUNTIME_AGENT_TYPES` 新槽位，OpenAI 兼容 /embeddings，**中文网络环境主通道**）> 本地 transformers.js（`NOVEL_MEMORY_LOCAL_EMBEDDINGS=1` 显式开启，`NOVEL_MEMORY_HF_MIRROR` 镜像如 hf-mirror.com，q8 模型按需下载缓存）> 纯 BM25 降级。rerank = LLM rerank（复用主 chat provider，`NOVEL_MEMORY_RERANK=0` 可关，失败/超时回退 RRF 融合序）。融合 = BM25 + 余弦 RRF(k=60)。SQLite 向量扩展/本地 ONNX 独立进程路线仍排除。Provider 接口新增可选 `embed`（OpenAIProvider 实现，Anthropic 天然缺席）。
+
+
+- 8.2.1 长程噪声阈值的具体数字（按 6.6 基线多轮标定后回填 6.4）；
+- 8.2.2 整理触发自动化（每 N 会话提示一次）与自动 dreaming 定时任务是否进 V2；
+- 8.2.3 全局层是否需要 GUI 设置界面入口（V1 为磁盘文件直编）。
 
 ---
 

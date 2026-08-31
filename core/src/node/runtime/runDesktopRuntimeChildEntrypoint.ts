@@ -35,6 +35,10 @@ import {
 } from "../workspace/readNovelGlobalConstraints.js";
 import { readMemoryIndexForInjection, rebuildMemoryIndex } from "../../memory/MemoryStore.js";
 import { createMemoryExtractionPass } from "../../runtime/agent/MemoryExtractionPass.js";
+import { createLlmReranker } from "../../memory/MemoryHybrid.js";
+import type { HybridSearchOptions } from "../../memory/MemoryHybrid.js";
+import { createLocalEmbedder, localEmbedderFromEnv } from "../../memory/LocalEmbedder.js";
+import type { Embedder } from "../../memory/LocalEmbedder.js";
 import {
 	AGENT_CASES_DIR,
 	readAgentCaseContent,
@@ -657,6 +661,67 @@ await skillRegistry.load();
 	}
 	const loopProvider: Provider =
 		isImporter || isAnalyst ? wrapProviderWithLogging(provider, () => logger) : provider;
+	// 记忆混合检索配置（PRD memory-两层记忆 D10；中文网络环境下 API 通道为主）：
+	// ① 设置页 Embedding profile（OpenAI 兼容 /embeddings 端点）→ API 嵌入；
+	// ② 未配置 API 且 NOVEL_MEMORY_LOCAL_EMBEDDINGS=1 → 本地 transformers.js 通道
+	//    （镜像 NOVEL_MEMORY_HF_MIRROR，如 https://hf-mirror.com；模型下载失败静默降级词法）；
+	// ③ 皆无 → 纯 BM25 词法。rerank 用主 chat provider 一次小调用（NOVEL_MEMORY_RERANK=0 关）。
+	const rerankDisabled = /^(0|false)$/i.test(process.env.NOVEL_MEMORY_RERANK ?? "");
+	const embeddingRuntime = runtimeSettings?.agents.Embedding;
+	let memoryEmbedder: Embedder | undefined;
+	if (embeddingRuntime !== undefined && embeddingRuntime.provider === "openai") {
+		const embedProvider = createProvider(
+			{
+				id: "embedding",
+				type: "openai",
+				...(embeddingRuntime.baseUrl !== undefined ? { baseUrl: embeddingRuntime.baseUrl } : {}),
+				...(embeddingRuntime.apiKey !== undefined ? { apiKey: embeddingRuntime.apiKey } : {}),
+			},
+			modelInfoRegistry,
+		);
+		if (embedProvider.embed !== undefined) {
+			const embedModel = embeddingRuntime.model;
+			memoryEmbedder = {
+				modelId: `api:${embedModel}`,
+				embed: (texts, signal) => embedProvider.embed!({ texts, model: embedModel }, signal),
+			};
+		}
+	} else {
+		const localOptions = localEmbedderFromEnv(process.env as Record<string, string | undefined>, {
+			...(storedir !== undefined && storedir.trim() !== ""
+				? { cacheRoot: join(storedir, "models") }
+				: {}),
+			logger,
+		});
+		if (localOptions !== undefined) {
+			memoryEmbedder = createLocalEmbedder(localOptions);
+		}
+	}
+	/** reranker：复用主 loop provider（任意 chat 端点可用；小输出、低温） */
+	const memoryReranker =
+		rerankDisabled || memoryEmbedder === undefined
+			? undefined
+			: createLlmReranker((system, user, signal) =>
+					loopProvider
+						.call(
+							{
+								system,
+								messages: [{ role: "user", content: user }],
+								sampling: { model: sampling.model, maxTokens: 400, temperature: 0 },
+								...(signal !== undefined ? { signal } : {}),
+							},
+						)
+						.then((result) => result.message.content),
+				);
+	const memorySearch: HybridSearchOptions | undefined =
+		memoryEmbedder === undefined && memoryReranker === undefined
+			? undefined
+			: {
+					...(memoryEmbedder !== undefined ? { embedder: memoryEmbedder } : {}),
+					...(memoryReranker !== undefined ? { reranker: memoryReranker } : {}),
+					logger,
+				};
+
 
 	// ① compose 状态与服务：状态实例先 hydrate（state.jsonl 重放）再装配——
 	// 顺序保证：nudge 策略构造（buildNovelAgent 内）时 latch 已 seed（重启不误发上升沿）
@@ -768,6 +833,8 @@ await skillRegistry.load();
 			// 记忆索引提供者缺省在 buildNovelAgent 内部（读 workspace memory/MEMORY.md 全量）
 			// 全局层 NOVEL.md：runtime.files 组沙盒例外 + 守卫（项目层恒在守卫名单）
 			...(globalConstraintsPath !== undefined ? { globalConstraintsPath } : {}),
+			// 记忆混合检索（D10）：MemorySearch 工具与提取 pass 共用同一 embedder/reranker
+			...(memorySearch !== undefined ? { memorySearch } : {}),
 			// 压缩前提取整理 pass（PRD memory-两层记忆 M4）：仅 main 会话——importer
 			// 后台受限面不挂（无跨会话记忆诉求，且无人值守不应产生记忆写入）
 			...(!isImporter
@@ -783,6 +850,7 @@ await skillRegistry.load();
 								);
 								return snap === undefined ? [] : [snap.global, snap.project];
 							},
+							...(memorySearch !== undefined ? { search: memorySearch } : {}),
 							logger,
 						}).run,
 					}

@@ -21,8 +21,8 @@ const modules = import.meta.glob("../cases/*.case.ts", { eager: true });
 const specs = Object.values(modules).map((m) => (m as { spec: CaseSpec }).spec);
 
 describe("case 语料结构自测", () => {
-	it("注册了 15 个 case，name 唯一非空", () => {
-		expect(specs).toHaveLength(15);
+	it("注册了 18 个 case（含 memory 三件，PRD memory-两层记忆 §6.2/6.3），name 唯一非空", () => {
+		expect(specs).toHaveLength(18);
 		const names = specs.map((s) => s.name);
 		expect(new Set(names).size).toBe(names.length);
 		for (const name of names) {

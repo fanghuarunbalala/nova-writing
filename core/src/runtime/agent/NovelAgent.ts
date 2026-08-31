@@ -56,6 +56,7 @@ import type { SkillRegistry } from "../skill/SkillRegistry.js";
 import type { SamplingConfig } from "../provider/types.js";
 import { readNovelGlobalConstraintsLayersSafe } from "../../node/workspace/readNovelGlobalConstraints.js";
 import { readMemoryIndexForInjection } from "../../memory/MemoryStore.js";
+import type { HybridSearchOptions } from "../../memory/MemoryHybrid.js";
 import type { RunContext } from "../loop/types.js";
 
 /** Novel Agent 装配选项 */
@@ -133,6 +134,11 @@ export interface NovelAgentOptions {
    */
   memory?: { staticLayerTexts: () => Promise<readonly (string | undefined)[]> };
   /**
+   * 记忆混合检索选项（PRD D10）：embedder（设置页 Embedding profile 的 API 通道
+   * 或本地通道）+ LLM reranker。缺省纯 BM25 词法。由子进程入口解析配置后注入。
+   */
+  memorySearch?: HybridSearchOptions;
+  /**
    * 动态记忆索引提供者（PRD memory-两层记忆 M2）：缺省读 workspace memory/
    * MEMORY.md 全量 active 条目（main 语义）；Compose 子代理装配方传 author/feedback
    * 过滤版。
@@ -177,6 +183,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
         );
         return snap === undefined ? [] : [snap.global, snap.project];
       }),
+    ...(opts.memorySearch !== undefined ? { search: opts.memorySearch } : {}),
   };
   // compose 状态权威实例：nudge / 工具 / 权限门共享；显式传入时由上层 hydrate 后注入
   const composeState = opts.composeState ?? new ComposeModeStateProvider();

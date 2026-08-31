@@ -9,6 +9,7 @@ import type {
 import { BaseProvider } from "../BaseProvider.js";
 import type { ThinkingParam } from "../model-info.js";
 import { wrapSystemReminder } from "../systemReminder.js";
+import { toProviderError } from "../errors.js";
 
 /** 流式累积状态（createStream 迭代填充，buildResult 读取；实例串行使用约定） */
 interface Accumulator {
@@ -56,6 +57,41 @@ export class OpenAIProvider extends BaseProvider {
     for await (const chunk of stream) {
       this.accumulate(chunk);
       yield chunk;
+    }
+  }
+
+  /**
+   * 批量文本嵌入（PRD memory-两层记忆 D10）：openai SDK /embeddings 端点。
+   * 端点不支持 embeddings（如 deepseek）时抛标准化的 ProviderRequestError——
+   * 调用方（记忆混合检索）捕获后降级词法，不阻断主对话。
+   * @param input 批量输入文本 + 模型名
+   * @returns 与 texts 等长同序的向量数组
+   */
+  async embed(
+    input: { texts: string[]; model: string },
+    signal?: AbortSignal,
+  ): Promise<number[][]> {
+    if (input.texts.length === 0) return [];
+    try {
+      const client = new OpenAI({
+        apiKey: this.config.apiKey,
+        baseURL: this.config.baseUrl,
+      });
+      const response = await client.embeddings.create(
+        { model: input.model, input: input.texts },
+        { signal, ...(this.config.timeoutMs !== undefined ? { timeout: this.config.timeoutMs } : {}) },
+      );
+      const byIndex = new Map<number, number[]>();
+      for (const item of response.data) {
+        byIndex.set(item.index, item.embedding as number[]);
+      }
+      return input.texts.map((_, i) => {
+        const vector = byIndex.get(i);
+        if (vector === undefined) throw new Error("embeddings 响应缺失条目");
+        return vector;
+      });
+    } catch (error) {
+      throw toProviderError(error, this.providerName);
     }
   }
 

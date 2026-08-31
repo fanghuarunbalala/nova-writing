@@ -20,6 +20,7 @@ import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import { createFileTools } from "../tool/definitions/files.js";
 import { createMemoryTools } from "../tool/definitions/memory.js";
 import type { Logger } from "../../log/Logger.js";
+import type { HybridSearchOptions } from "../../memory/MemoryHybrid.js";
 
 /** pass 超时（超时 cancel；压缩放行） */
 const DEFAULT_TIMEOUT_MS = 90_000;
@@ -40,6 +41,8 @@ export interface MemoryExtractionPassOptions {
   conversationId: string;
   /** 两层 NOVEL.md 文本（MemoryWrite skip 机械校验用） */
   staticLayerTexts: () => Promise<readonly (string | undefined)[]>;
+  /** 混合检索选项（PRD D10：与主会话 MemorySearch 同源，可选） */
+  search?: HybridSearchOptions;
   logger?: Logger;
   /** 超时（缺省 90s） */
   timeoutMs?: number;
@@ -132,6 +135,7 @@ export function createMemoryExtractionPass(opts: MemoryExtractionPassOptions): {
           workspace: opts.workspace,
           getSource,
           staticLayerTexts: opts.staticLayerTexts,
+          ...(opts.search !== undefined ? { search: opts.search } : {}),
         }).filter((t) => t.name !== "MemoryForget"),
       ];
       const capability: AgentCapability = {

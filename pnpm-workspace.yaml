@@ -4,10 +4,16 @@ packages:
   - "gui"
   - "evals"
 
+# pnpm 11 构建审批（allowBuilds 布尔映射）：
+# onnxruntime-node/protobufjs = transformers.js 本地嵌入通道（PRD memory-两层记忆 D10）
+# 及其传递依赖；sharp 仅图片路径用到——文本嵌入不构建（省原生编译）
 allowBuilds:
   better-sqlite3: true
   esbuild: true
   zeromq: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: false
 
 onlyBuiltDependencies:
   - zeromq

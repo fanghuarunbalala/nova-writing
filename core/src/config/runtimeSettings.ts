@@ -19,8 +19,10 @@ import type {
 } from "./contract.js";
 
 /** 参与运行参数解析的 agentType 全集（novel=主创作 / Explore=探索 / Compose=起草 /
- *  ProjectImporter=项目导入解构——设置页可为各 agent 独立覆盖模型与采样） */
-export const RUNTIME_AGENT_TYPES = ["novel", "Explore", "Compose", "ProjectImporter"] as const;
+ *  ProjectImporter=项目导入解构——设置页可为各 agent 独立覆盖模型与采样；
+ *  Embedding=记忆检索向量嵌入（PRD memory-两层记忆 D10）——仅显式绑定 profile 时
+ *  才解析，不回落默认 chat profile（deepseek 等端点无 /embeddings，回落无意义） */
+export const RUNTIME_AGENT_TYPES = ["novel", "Explore", "Compose", "ProjectImporter", "Embedding"] as const;
 
 /** Agent 覆盖中引用 Fast 档位的保留值 */
 export const FAST_PROFILE_REF = "fast";
@@ -294,6 +296,11 @@ export async function resolveRuntimeAgents(
 	const agents: Record<string, ResolvedAgentConnection> = {};
 	for (const agentType of RUNTIME_AGENT_TYPES) {
 		const override = settings?.agents[agentType];
+		// Embedding 槽位：仅显式绑定 profile 才产出连接（回落默认 chat profile 无意义，
+		// 见 RUNTIME_AGENT_TYPES 注释）；未配置时缺席 = 子进程记忆检索走本地/词法通道
+		if (agentType === "Embedding" && (override?.profileId === undefined || override.profileId === "")) {
+			continue;
+		}
 		const defaults = settings?.samplingDefaults;
 		const profile = await resolveProfile(override);
 		const temperature = override?.temperature ?? defaults?.temperature;

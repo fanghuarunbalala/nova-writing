@@ -12,6 +12,9 @@
 import { readFile, writeFile, mkdir, readdir, rm, rename } from "node:fs/promises";
 import { join } from "node:path";
 import type { MemoryIndexSnapshot } from "../runtime/prompt/PromptSection.js";
+import { bm25Rank } from "./MemorySearch.js";
+import type { HybridSearchOptions } from "./MemoryHybrid.js";
+import { hybridSearch } from "./MemoryHybrid.js";
 
 /** 记忆条目四类 type（对齐 CC：user→author 语义） */
 export type MemoryEntryType = "author" | "feedback" | "project" | "reference";
@@ -348,39 +351,39 @@ export async function forgetMemoryTopic(workspace: string, name: string): Promis
 }
 
 /**
- * 词法检索（对齐 DeferredToolRegistry 打分口径）：查询按空白分词、大小写不敏感，
- * 逐词「名称精确=3 > 名称包含=2 > 描述包含=1」累加；同分按 name 字典序；
- * maxResults 截断。扫描全部主题文件（含 superseded——检索可查、注入不可见）。
+ * 词法检索（BM25，PRD 修订：取代 3/2/1 打分）：CJK bigram + 拉丁分词，字段加权
+ * BM25（name×2 + description×1，k1=1.5/b=0.75），同分 name 字典序；maxResults 截断。
+ * 扫描全部主题文件（含 superseded——检索可查、注入不可见）。
+ * 传 hybrid（embedder/reranker）时升级混合检索：BM25+余弦 RRF 融合 + LLM rerank
+ * （PRD D10）；嵌入不可用自动纯词法降级。
  */
 export async function searchMemoryTopics(
   workspace: string,
   query: string,
   maxResults = 5,
+  hybrid?: HybridSearchOptions,
 ): Promise<(MemoryIndexEntry & { status: "active" | "superseded" })[]> {
   const { topics } = await readAllTopics(workspace);
-  const tokens = query.toLowerCase().split(/\s+/).filter((t) => t.length > 0);
-  if (tokens.length === 0) return [];
-  const scored = topics
-    .map((t) => {
-      const nameL = t.name.toLowerCase();
-      const descL = t.description.toLowerCase();
-      let score = 0;
-      for (const token of tokens) {
-        if (nameL === token) score += 3;
-        else if (nameL.includes(token)) score += 2;
-        if (descL.includes(token)) score += 1;
-      }
-      return { entry: t, score };
-    })
-    .filter((s) => s.score > 0)
-    .sort((a, b) => (b.score - a.score !== 0 ? b.score - a.score : compareEntries(a.entry, b.entry)))
-    .slice(0, Math.max(1, maxResults));
-  return scored.map((s) => ({
-    name: s.entry.name,
-    description: s.entry.description,
-    type: s.entry.type,
-    status: s.entry.status,
-  }));
+  if (topics.length === 0) return [];
+  if (hybrid?.embedder !== undefined || hybrid?.reranker !== undefined) {
+    return hybridSearch(workspace, topics, query, Math.max(1, maxResults), hybrid);
+  }
+  const ranked = bm25Rank(
+    topics.map((t) => ({ key: t.name, name: t.name, description: t.description })),
+    query,
+  );
+  const byName = new Map(topics.map((t) => [t.name, t] as const));
+  return ranked
+    .slice(0, Math.max(1, maxResults))
+    .map((r) => {
+      const topic = byName.get(r.key)!;
+      return {
+        name: topic.name,
+        description: topic.description,
+        type: topic.type,
+        status: topic.status,
+      };
+    });
 }
 
 /**

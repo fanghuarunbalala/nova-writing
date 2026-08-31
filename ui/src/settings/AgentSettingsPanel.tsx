@@ -1,6 +1,6 @@
 /** Agent 运行参数设置：模型档位（Normal/Fast）+ 全局默认采样 + 按 Agent 覆盖 + 压缩阈值。 */
 import { useEffect, useState } from "react";
-import { Check, Feather, RotateCcw, ScrollText, Search } from "lucide-react";
+import { Check, Feather, Fingerprint, RotateCcw, ScrollText, Search } from "lucide-react";
 // 运行时值必须走 browser-safe 的 /client 出口（根入口会拖入 zeromq 等 node 依赖 → renderer 白屏）
 import { FAST_PROFILE_REF } from "@novel/core/client";
 import type { AgentRuntimeOverride, ConfigSnapshot, RuntimeSettings, ThinkingLevel } from "@novel/core";
@@ -30,6 +30,12 @@ const AGENTS: readonly {
     desc: "只读检索大纲 / 人物 / 段落 · 默认走 Fast 快速档，适合便宜快速的模型。",
   },
   { id: "Compose", name: "起草", icon: ScrollText, desc: "起草大纲与行文设计草案，不直接改动档案。" },
+  {
+    id: "Embedding",
+    name: "嵌入",
+    icon: Fingerprint,
+    desc: "记忆检索向量嵌入（可选）· 需支持 /embeddings 的端点（SiliconFlow / OpenAI / DashScope；DeepSeek 无此端点）；不配则用本地模型或纯词法检索。",
+  },
 ];
 
 const THINKING_LEVELS: readonly { value: ThinkingLevel; label: string }[] = [

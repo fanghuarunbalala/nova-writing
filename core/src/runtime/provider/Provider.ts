@@ -21,6 +21,17 @@ export interface Provider {
   call(call: ProviderCall, onDelta?: ProviderOnDelta): Promise<ProviderResult>;
 
   /**
+   * 批量文本嵌入（PRD memory-两层记忆 D10：混合检索的 API 通道）。
+   * 仅支持 /embeddings 端点的适配器实现（OpenAIProvider 及兼容端点：SiliconFlow/
+   * OpenAI/DashScope；deepseek 无此端点）；未实现 = 该 provider 无嵌入能力，
+   * 调用方降级词法检索。
+   * @param input 批量输入文本 + 模型名
+   * @returns 与 texts 等长同序的向量数组
+   * @throws ProviderError 标准化异常
+   */
+  embed?(input: { texts: string[]; model: string }, signal?: AbortSignal): Promise<number[][]>;
+
+  /**
    * 查询模型能力信息（含上下文窗口 token 数；压缩策略阈值基准）
    * @param model 模型名
    * @returns 模型能力信息（注册覆盖优先，缺省按名启发式推断）

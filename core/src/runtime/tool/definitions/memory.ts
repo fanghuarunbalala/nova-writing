@@ -20,6 +20,7 @@ import {
   writeMemoryTopic,
 } from "../../../memory/MemoryStore.js";
 import type { MemoryEntryType } from "../../../memory/MemoryStore.js";
+import type { HybridSearchOptions } from "../../../memory/MemoryHybrid.js";
 
 /** memory 工具组依赖 */
 export interface MemoryToolsDeps {
@@ -29,6 +30,8 @@ export interface MemoryToolsDeps {
   getSource: () => string;
   /** 两层 NOVEL.md 文本（skip 机械校验用；缺层 = undefined 占位） */
   staticLayerTexts: () => Promise<readonly (string | undefined)[]>;
+  /** 混合检索选项（PRD D10：embedder/reranker；缺省纯 BM25 词法） */
+  search?: HybridSearchOptions;
 }
 
 const MEMORY_TYPES: readonly MemoryEntryType[] = ["author", "feedback", "project", "reference"];
@@ -186,7 +189,7 @@ export function createMemoryTools(deps: MemoryToolsDeps): ToolDef[] {
             "query 必填",
           );
         }
-        const results = await searchMemoryTopics(deps.workspace, query, maxResults);
+        const results = await searchMemoryTopics(deps.workspace, query, maxResults, deps.search);
         if (results.length === 0) return "无匹配记忆条目。";
         return results
           .map(

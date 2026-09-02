@@ -8,6 +8,8 @@ import type { LLMessage } from "../provider/types.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
 import { AgentAssembler } from "./AgentAssembler.js";
+import { MaxTurnNudgePolicy } from "../nudge/definitions/max-turn.js";
+import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import { novelSectionRegistry } from "./definitions/novelSections.js";
 import {
@@ -53,6 +55,11 @@ export interface BuildNovelSubagentOptions extends NovelSubagentOptions {
  * @returns AgentLoop（config 带 conversationId + agentId，无 listeners——live-only）
  */
 export function buildNovelSubagent(opts: BuildNovelSubagentOptions): AgentLoop {
+  // 子代理 nudge 目录：只放零依赖的 max_turn——external_tools/project_stage/
+  // compose_mode 均需子代理 builder 没有的构造依赖，不在此扩大
+  const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map([
+    ["max_turn", () => new MaxTurnNudgePolicy()],
+  ]);
   const assembler = new AgentAssembler({
     definition: opts.definition,
     sectionRegistry: novelSectionRegistry,
@@ -63,6 +70,7 @@ export function buildNovelSubagent(opts: BuildNovelSubagentOptions): AgentLoop {
       todoStore: opts.todoStore,
       todoConversationId: opts.conversationId,
     }),
+    nudgeCatalog,
   });
   const capability = assembler.assemble();
   return new AgentLoop({

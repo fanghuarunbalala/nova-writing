@@ -43,8 +43,8 @@ export const bookAnalystAgentDefinition = new AgentDefinition({
   delegation: new AgentDelegationPolicy({ mode: "disabled", allowedAgentTypes: [] }),
   communication: new AgentCommunicationPolicy("standalone"),
   runtimePolicyId: "default",
-  /** todo_idle：长任务进度习惯（无 compose_mode——不适用） */
+  /** todo_idle：长任务进度习惯（无 compose_mode——不适用）；max_turn：轮次预算两级提醒 */
   nudgeEnablement: Object.freeze({
-    enabled: Object.freeze(["todo_idle"]),
+    enabled: Object.freeze(["todo_idle", "max_turn"]),
   }),
 });

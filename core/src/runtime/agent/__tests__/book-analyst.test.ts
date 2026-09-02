@@ -29,9 +29,9 @@ function build() {
 		conversationId: "conv-test",
 	});
 	// AgentLoop.context 为 TS private（编译期），运行时属性可访问——装配回归需取工具面
-	const context = loop as unknown as { context: { agentCapability: { toolDefs: ToolDef[] } } };
+	const context = loop as unknown as { context: { agentCapability: { toolDefs: ToolDef[]; nudgePolicies: Array<{ constructor: { name: string } }> } } };
 	const tools = new Map(context.context.agentCapability.toolDefs.map((t) => [t.name, t]));
-	return { store, tools };
+	return { store, tools, nudgeNames: context.context.agentCapability.nudgePolicies.map((n) => n.constructor.name) };
 }
 
 function call(name: string, args: Record<string, unknown>): ToolCall {
@@ -39,6 +39,11 @@ function call(name: string, args: Record<string, unknown>): ToolCall {
 }
 
 describe("BookAnalyst 装配（novel.entities 免审批 + mutateBatch）", () => {
+	it("nudge 接线：todo_idle + max_turn（enabled 声明序）", () => {
+		const { nudgeNames } = build();
+		expect(nudgeNames).toEqual(["TodoIdleNudgePolicy", "MaxTurnNudgePolicy"]);
+	});
+
 	it("agentType 为 BookAnalyst，NovelWrite/NovelEdit/NovelDelete 免审批", () => {
 		expect(BOOK_ANALYST_AGENT_TYPE).toBe("BookAnalyst");
 		const { tools } = build();

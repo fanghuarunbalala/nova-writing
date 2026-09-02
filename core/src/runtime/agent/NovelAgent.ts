@@ -39,6 +39,7 @@ import { TodoIdleNudgePolicy } from "../nudge/definitions/todo.js";
 import { ComposeModeNudgePolicy } from "../nudge/definitions/compose.js";
 import { ProjectStageNudgePolicy } from "../nudge/definitions/project-stage.js";
 import { ExternalToolsNudgePolicy } from "../nudge/definitions/external-tools.js";
+import { MaxTurnNudgePolicy } from "../nudge/definitions/max-turn.js";
 import { DeferredToolRegistry } from "../tool/deferred/DeferredToolRegistry.js";
 import { createDeferredRejectionStub } from "../tool/definitions/externalTools.js";
 import type {
@@ -149,12 +150,14 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
   // nudge 实现目录：definition.nudgeEnablement.enabled ∩ 本目录 → 注入。
   // todo_idle / project_stage 恒可注入（project_stage 依赖 opts.handle，必传项）；
   // compose_mode 依赖显式 composeState（hydrate 后注入，缺省不生效）；
-  // external_tools 恒可注入（注册表为空时策略 no-op）。
+  // external_tools 恒可注入（注册表为空时策略 no-op）；
+  // max_turn 恒可注入（零依赖；ProjectImporter 换 definition 装配亦经此目录）。
   const nudgeCatalog: ReadonlyMap<string, () => ContextNudgePolicy> = new Map<
     string,
     () => ContextNudgePolicy
   >([
     ["todo_idle", () => new TodoIdleNudgePolicy()],
+    ["max_turn", () => new MaxTurnNudgePolicy()],
     [
       "project_stage",
       () => new ProjectStageNudgePolicy({ handle: opts.handle }),

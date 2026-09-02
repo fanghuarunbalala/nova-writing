@@ -71,6 +71,12 @@ export const novelAgentDefinition = new AgentDefinition({
   runtimePolicyId: "default",
   /** Novel agent 显式启用的 nudge（nudgeId）；装配侧 ∩ 实现目录后注入。 */
   nudgeEnablement: Object.freeze({
-    enabled: Object.freeze(["compose_mode", "todo_idle", "project_stage", "external_tools"]),
+    enabled: Object.freeze([
+      "compose_mode",
+      "todo_idle",
+      "project_stage",
+      "external_tools",
+      "max_turn",
+    ]),
   }),
 });

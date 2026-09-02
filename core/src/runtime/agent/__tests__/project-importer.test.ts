@@ -34,12 +34,17 @@ function build() {
 		importText: { handle: handle as never },
 	});
 	// AgentLoop.context 为 TS private（编译期），运行时属性可访问——取工具面断言
-	const context = loop as unknown as { context: { agentCapability: { toolDefs: ToolDef[] } } };
+	const context = loop as unknown as { context: { agentCapability: { toolDefs: ToolDef[]; nudgePolicies: Array<{ constructor: { name: string } }> } } };
 	const tools = new Map(context.context.agentCapability.toolDefs.map((t) => [t.name, t]));
-	return { tools };
+	return { tools, nudgeNames: context.context.agentCapability.nudgePolicies.map((n) => n.constructor.name) };
 }
 
 describe("ProjectImporter 定义与装配", () => {
+	it("nudge 接线：todo_idle + max_turn（经 buildNovelAgent 共用目录，enabled 声明序）", () => {
+		const { nudgeNames } = build();
+		expect(nudgeNames).toEqual(["TodoIdleNudgePolicy", "MaxTurnNudgePolicy"]);
+	});
+
 	it("agentType 为 ProjectImporter；recipe 段全部可解析（装配不抛错即通过）", () => {
 		expect(PROJECT_IMPORTER_AGENT_TYPE).toBe("ProjectImporter");
 		expect(projectImporterAgentDefinition.delegation.mode).toBe("disabled");

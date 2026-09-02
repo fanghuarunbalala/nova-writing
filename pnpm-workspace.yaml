@@ -4,6 +4,7 @@ packages:
   - "gui"
   - "evals"
   - "server"
+  - "mcp-servers/novel-fetch"
 
 allowBuilds:
   better-sqlite3: true

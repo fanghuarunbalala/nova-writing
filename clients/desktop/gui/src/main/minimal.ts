@@ -48,6 +48,7 @@ import {
   type CredentialCipher,
   ServerAuthClient,
   ServerAuthSession,
+  ServerEventBridge,
   ServerTokenStore,
   resolveRuntimeAgents,
   serializeSkillsEnv,
@@ -107,6 +108,8 @@ const UI_CHANNEL = "ui-rpc";
 const CONVERSATION_EVENTS_CHANNEL = "conversation-events";
 /** server 认证状态推送（main → renderer 单向；设置页连接指示） */
 const SERVER_AUTH_CHANNEL = "server-auth-changed";
+/** server SSE 流事件转发（journal/approval/lease；renderer 侧进度视图/审批中心消费） */
+const SERVER_EVENTS_CHANNEL = "server-events";
 
 /**
  * 回显 AgentLoop：followup 即时开 run 产 run-start/user.message → assistant.delta×N →
@@ -646,7 +649,30 @@ async function main(): Promise<void> {
   };
   serverAuthSession.onStatusChange(() => {
     void writeServerAccessFile();
+    void setupServerEventBridge();
   });
+  // setInterval 之前先定义桥（onStatusChange 闭包引用；login 成功后即可起订）
+  let serverEventBridge: ServerEventBridge | undefined;
+  const setupServerEventBridge = async (): Promise<void> => {
+    if (serverEventBridge !== undefined) return;
+    const url = (await configStore.get()).server?.url;
+    if (url === undefined) return;
+    if ((await serverAuthSession.ensureAccessToken()) === undefined) return;
+    serverEventBridge = new ServerEventBridge({
+      url,
+      getAccessToken: () => serverAuthSession.ensureAccessToken(),
+      onEvent: (event) => {
+        // journal/approval/lease 事件原样转发 renderer（进度视图/审批中心各自消费）；
+        // approval_resolved → 本地审批队列回填在 FR4 接线
+        const win = mainWindow;
+        if (win === undefined || win.isDestroyed()) return;
+        win.webContents.send(SERVER_EVENTS_CHANNEL, event);
+      },
+    });
+    serverEventBridge.start();
+  };
+  // 启动即尝试起订（已登录过的恢复场景；未登录时 ensureAccessToken 返回 undefined 直接跳过）
+  void setupServerEventBridge();
   // 过期前主动轮换并刷新 access 文件（5min < 15min TTL；无 server 配置时 ensureAccessToken 直通返回）
   setInterval(() => {
     void writeServerAccessFile();

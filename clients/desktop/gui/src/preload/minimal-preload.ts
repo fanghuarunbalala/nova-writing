@@ -66,6 +66,14 @@ try {
         ipcRenderer.off("server-auth-changed", handler as never);
       };
     },
+    /** 订阅 server SSE 流事件转发（journal/approval/lease 原样事件）；返回取消订阅 */
+    onServerEvent: (callback: (event: unknown) => void): (() => void) => {
+      const handler = (_event: unknown, event: unknown): void => callback(event);
+      ipcRenderer.on("server-events", handler as never);
+      return () => {
+        ipcRenderer.off("server-events", handler as never);
+      };
+    },
   });
   console.error("[preload] novelApi exposed");
 } catch (e) {

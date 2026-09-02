@@ -8,7 +8,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -206,10 +207,54 @@ describe("桌面数据通道", () => {
 		await expect(journal.writeRuns([run(9, [])])).rejects.toBeInstanceOf(JournalRewriteConflictError);
 		await journal.reconcile();
 		await journal.writeRuns([run(9, [user("压缩后")])]);
+		// rewrite 成功 → SSE 广播 journal_rewritten（订阅者应整体重放）
+		await vi.waitFor(
+			() => expect(events.some((e) => e.type === "journal_rewritten" && (e.runCount as number) === 1)).toBe(true),
+			{ timeout: 5000 },
+		);
 		await bridge.stop();
 
 		// 5. server 重放终态
 		const replay = await (await fetch(`${baseUrl}/v1/journal/conv-contract/replay`, { headers: { authorization: `Bearer ${other.accessToken}` } })).json() as { events: any[] };
 		expect(replay.events.filter((e) => e.kind === "append").length).toBe(0);
+	});
+
+	it("断线状态机（PRD 3.4）：网络断 → 写入落 sidecar → 恢复 → open 按序补推清队", { timeout: 20_000 }, async () => {
+		// 独立会话 + 租约；fetch 外包一层可断网开关（server 真实响应）
+		const leaseRes = await app.inject({ method: "POST", url: "/v1/leases", headers: auth(session), payload: { conversationId: "conv-flap" } });
+		const flapLease = (leaseRes.json() as { leaseToken: string }).leaseToken;
+		let online = true;
+		const flappingFetch: typeof fetch = async (input, init) => {
+			if (!online) throw new TypeError("fetch failed (simulated offline)");
+			return fetch(input as string, init);
+		};
+		const dir = await mkdtemp(join(tmpdir(), "nova-flap-"));
+		const journal = new HttpConversationJournalService({
+			conversationId: "conv-flap",
+			url: baseUrl,
+			getAccessToken: async () => session.accessToken,
+			getLeaseToken: () => flapLease,
+			pendingPath: join(dir, "pending-push.jsonl"),
+			fetchImpl: flappingFetch as never,
+		});
+		await journal.open();
+
+		// 断线：两次 append 上推失败 → 落 sidecar（顺序保持）
+		online = false;
+		await expect(journal.appendRun(run(1, [user("断线-第一条")]))).rejects.toThrow();
+		await expect(journal.appendRunMessages(1, [user("断线-第二条")])).rejects.toThrow();
+		const queued = (await readFile(join(dir, "pending-push.jsonl"), "utf8")).split("\n").filter(Boolean);
+		expect(queued).toHaveLength(2);
+
+		// 恢复：open 重放对账 + 按序补推 + 清队（server 终态两行、顺序正确）
+		online = true;
+		await journal.open();
+		expect(existsSync(join(dir, "pending-push.jsonl"))).toBe(false);
+		const replay = await (await fetch(`${baseUrl}/v1/journal/conv-flap/replay`, { headers: { authorization: `Bearer ${session.accessToken}` } })).json() as { events: Array<{ run_seq: number; kind: string; payload: string }> };
+		expect(replay.events).toHaveLength(2);
+		expect(replay.events[0]!.kind).toBe("snapshot");
+		expect(replay.events[1]!.kind).toBe("append");
+		expect(JSON.parse(replay.events[0]!.payload)[0].messages[0].content).toBe("断线-第一条");
+		expect(JSON.parse(replay.events[1]!.payload)[0].content).toBe("断线-第二条");
 	});
 });

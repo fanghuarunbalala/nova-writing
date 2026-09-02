@@ -14,6 +14,7 @@ import { ModelProviderSettingsPanel } from "./ModelProviderSettingsPanel.js";
 import { AgentSettingsPanel } from "./AgentSettingsPanel.js";
 import { SkillsSettingsPanel } from "./SkillsSettingsPanel.js";
 import { McpSettingsPanel } from "./McpSettingsPanel.js";
+import { ServerSettingsPanel } from "./ServerSettingsPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
 import styles from "./SettingsDialog.module.css";
 
@@ -94,6 +95,16 @@ export function SettingsDialog({
               MCP
             </button>
           ) : null}
+          {configuration !== undefined ? (
+            <button
+              type="button"
+              className={styles.navItem}
+              data-active={activeSectionId === "server"}
+              onClick={() => setActiveSectionId("server")}
+            >
+              Server
+            </button>
+          ) : null}
           <button
             type="button"
             className={styles.navItem}
@@ -129,6 +140,9 @@ export function SettingsDialog({
           ) : null}
           {activeSectionId === "mcp" && configuration !== undefined ? (
             <McpSettingsPanel configuration={configuration} />
+          ) : null}
+          {activeSectionId === "server" && configuration !== undefined ? (
+            <ServerSettingsPanel configuration={configuration} />
           ) : null}
           {activeSectionId === "appearance" ? <AppearanceSettingsPanel /> : null}
           {extensionSection !== undefined && ExtensionSection !== undefined ? (

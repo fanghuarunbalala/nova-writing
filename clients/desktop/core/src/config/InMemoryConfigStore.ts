@@ -10,6 +10,7 @@ import type {
   McpServerConfig,
   ModelProfile,
   RuntimeSettings,
+  ServerSettings,
 } from "./contract.js";
 import {
   removeProfileReferences,
@@ -28,6 +29,7 @@ export class InMemoryConfigStore implements ConfigStore {
   private runtime?: RuntimeSettings;
   private skillsDisabled?: string[];
   private mcpServers: McpServerConfig[] = [];
+  private server?: ServerSettings;
 
 	/** 读取配置快照 */
 	async get(): Promise<ConfigSnapshot> {
@@ -40,6 +42,7 @@ export class InMemoryConfigStore implements ConfigStore {
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
 			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
 			...(this.mcpServers.length > 0 ? { mcpServers: Object.freeze([...this.mcpServers]) } : {}),
+			...(this.server !== undefined ? { server: this.server } : {}),
 			diagnostics: { logLevel: "info" },
 		};
 	}
@@ -85,6 +88,11 @@ export class InMemoryConfigStore implements ConfigStore {
 			}
 			case "mcp.remove": {
 				this.mcpServers = this.mcpServers.filter((s) => s.id !== m.serverId);
+				break;
+			}
+			case "server.set": {
+				const url = m.server.url?.trim();
+				this.server = url ? { url } : undefined;
 				break;
 			}
 			case "credential.save": {

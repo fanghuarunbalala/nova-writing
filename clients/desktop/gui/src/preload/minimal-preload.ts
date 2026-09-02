@@ -58,6 +58,14 @@ try {
         ipcRenderer.off("conversation-events", handler as never);
       };
     },
+    /** 订阅 server 认证状态推送（payload = ServerAuthState）；返回取消订阅 */
+    onServerAuthChange: (callback: (state: unknown) => void): (() => void) => {
+      const handler = (_event: unknown, state: unknown): void => callback(state);
+      ipcRenderer.on("server-auth-changed", handler as never);
+      return () => {
+        ipcRenderer.off("server-auth-changed", handler as never);
+      };
+    },
   });
   console.error("[preload] novelApi exposed");
 } catch (e) {

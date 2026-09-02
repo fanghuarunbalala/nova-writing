@@ -81,6 +81,12 @@ const configurationClient = {
   skillsList: () => configApi.skillsList?.(),
   // MCP 测试连接（main 临时连接 initialize + tools/list）：旧 server 未暴露时 undefined → 隐藏按钮
   testMcp: (input: McpServerInput) => configApi.testMcp?.(input),
+  // server 模式认证（main 侧 ServerAuthSession；旧 server 未暴露时 undefined → 面板隐藏表单外的功能）
+  serverAuth: () => configApi.serverAuth?.(),
+  serverLogin: (url: string, username: string, password: string) => configApi.serverLogin?.(url, username, password),
+  serverLogout: () => configApi.serverLogout?.(),
+  serverDevices: () => configApi.serverDevices?.(),
+  serverKickDevice: (deviceId: string) => configApi.serverKickDevice?.(deviceId),
 };
 
 interface WorkspaceSessionDto {

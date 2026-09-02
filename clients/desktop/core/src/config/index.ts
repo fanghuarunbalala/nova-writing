@@ -5,6 +5,7 @@ export * from "./store.js";
 export * from "./runtimeSettings.js";
 export * from "./connectionTest.js";
 export * from "./CredentialCipher.js";
+export * from "./serverAuth.js";
 export * from "./InMemoryConfigStore.js";
 export * from "./client/ConfigHandle.js";
 export * from "./server/ConfigServer.js";

@@ -7,6 +7,7 @@
 import type { ProviderType, ThinkingLevel } from "../runtime/provider/types.js";
 import type { ThinkingMode } from "../runtime/provider/model-info.js";
 import type { SkillsListResult } from "../runtime/skill/listSkills.js";
+import type { ServerAuthState, ServerDeviceInfo } from "./serverAuth.js";
 
 /** 凭据引用（配置只存引用，密钥经 CredentialCipher 加密落盘） */
 export type CredentialRef = string
@@ -113,6 +114,12 @@ export interface McpServerConfig {
 /** MCP 服务器 upsert 输入（不含 id，id 由调用方给定） */
 export type McpServerInput = Omit<McpServerConfig, "id">
 
+/** server 模式连接配置（opt-in：url 缺省 = 纯本地模式；令牌不在此，独立加密文件） */
+export interface ServerSettings {
+	/** server 基址（如 http://127.0.0.1:8787） */
+	url?: string
+}
+
 /** MCP 连接测试结果（成功附工具清单预览；失败附中文原因） */
 export type McpTestResult =
 	| { ok: true; toolCount: number; tools: readonly { name: string; description?: string }[] }
@@ -144,6 +151,8 @@ export interface ConfigSnapshot {
 	skillsDisabled?: readonly string[]
 	/** MCP 服务器列表（缺省无） */
 	mcpServers?: readonly McpServerConfig[]
+	/** server 模式连接（缺省 = 本地模式） */
+	server?: ServerSettings
 	/** 诊断 */
 	diagnostics: { logLevel: string }
 }
@@ -157,6 +166,7 @@ export type ConfigMutation =
 	| { op: "skills.setDisabled"; names: readonly string[] }
 	| { op: "mcp.upsert"; serverId: string; server: McpServerInput }
 	| { op: "mcp.remove"; serverId: string }
+	| { op: "server.set"; server: ServerSettings }
 	| { op: "credential.save"; ref: CredentialRef; secret: string }
 	| { op: "credential.delete"; ref: CredentialRef }
 
@@ -218,4 +228,19 @@ export interface ConfigApi {
 	 * @returns 测试结果（失败附中文原因）
 	 */
 	testMcp?(input: McpServerInput): Promise<McpTestResult>
+	/**
+	 * server 模式认证（可选：宿主注入 ServerAuthSession；未注入时设置页隐藏 Server 区块）。
+	 * 登录成功后 url 一并写入配置（server.set）。
+	 */
+	serverAuth?(): Promise<ServerAuthState>
+	/** 登录 server（双令牌落加密文件；失败抛错由 UI 呈现） */
+	serverLogin?(url: string, username: string, password: string): Promise<ServerAuthState>
+	/** 登出（吊销 refresh + 清本地令牌；url 配置保留） */
+	serverLogout?(): Promise<ServerAuthState>
+	/** 设备会话列表（需在线） */
+	serverDevices?(): Promise<ServerDeviceInfo[]>
+	/** 踢设备（server 侧吊销其全部会话） */
+	serverKickDevice?(deviceId: string): Promise<void>
+	/** server 状态变化订阅（可选：宿主主动推送；缺省 UI 轮询 serverAuth） */
+	onServerAuthChange?(listener: (state: ServerAuthState) => void): Promise<() => void>
 }

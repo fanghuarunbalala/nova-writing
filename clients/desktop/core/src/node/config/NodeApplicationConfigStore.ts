@@ -13,6 +13,7 @@ import type {
 	McpServerConfig,
 	ModelProfile,
 	RuntimeSettings,
+	ServerSettings,
 } from "../../config/contract.js";
 import {
 	removeProfileReferences,
@@ -39,6 +40,7 @@ interface PersistedConfig {
 	runtime?: RuntimeSettings
 	skillsDisabled?: string[]
 	mcpServers?: McpServerConfig[]
+	server?: ServerSettings
 	credentials: Record<CredentialRef, string>
 }
 
@@ -52,6 +54,7 @@ export class NodeApplicationConfigStore implements ConfigStore {
 	private runtime?: RuntimeSettings;
 	private skillsDisabled?: string[];
 	private mcpServers: McpServerConfig[] = [];
+	private server?: ServerSettings;
 	private credentials = new Map<CredentialRef, string>();
 
 	/**
@@ -95,6 +98,9 @@ export class NodeApplicationConfigStore implements ConfigStore {
 					return false;
 				}
 			});
+			// server 连接配置：url 非字符串即丢弃（回退本地模式）
+			const serverUrl = (parsed.server as { url?: unknown } | undefined)?.url;
+			this.server = typeof serverUrl === "string" && serverUrl.length > 0 ? { url: serverUrl } : undefined;
 		} catch {
 			this.profiles = [];
 			this.defaultProfileId = undefined;
@@ -116,6 +122,7 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
 			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
 			...(this.mcpServers.length > 0 ? { mcpServers: this.mcpServers } : {}),
+			...(this.server !== undefined ? { server: this.server } : {}),
 			diagnostics: { logLevel: "info" },
 		};
 	}
@@ -158,6 +165,11 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			case "mcp.remove":
 				this.mcpServers = this.mcpServers.filter((s) => s.id !== m.serverId);
 				break;
+			case "server.set": {
+				const url = m.server.url?.trim();
+				this.server = url ? { url } : undefined;
+				break;
+			}
 			case "credential.save":
 				this.credentials.set(m.ref, await this.cipher.encrypt(m.secret));
 				break;
@@ -182,6 +194,7 @@ export class NodeApplicationConfigStore implements ConfigStore {
 			...(this.runtime !== undefined ? { runtime: this.runtime } : {}),
 			...(this.skillsDisabled !== undefined ? { skillsDisabled: this.skillsDisabled } : {}),
 			...(this.mcpServers.length > 0 ? { mcpServers: this.mcpServers } : {}),
+			...(this.server !== undefined ? { server: this.server } : {}),
 			credentials: Object.fromEntries(this.credentials),
 		};
 		await writeFile(this.filePath, JSON.stringify(payload, null, 2), "utf8");

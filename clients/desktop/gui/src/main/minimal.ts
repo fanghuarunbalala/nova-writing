@@ -3,7 +3,7 @@
  * - novel：SqliteNovelStore 落盘（userData/novel.db）
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, screen } from "electron";
 import type { OpenDialogOptions, SaveDialogOptions } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { spawn } from "node:child_process";
@@ -46,6 +46,9 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
+  ServerAuthClient,
+  ServerAuthSession,
+  ServerTokenStore,
   resolveRuntimeAgents,
   serializeSkillsEnv,
   listSkills,
@@ -102,6 +105,8 @@ const WORKSPACE_CHANNEL = "workspace-rpc";
 const UI_CHANNEL = "ui-rpc";
 /** 会话事件火线裸推通道（main → renderer 单向 webContents.send；preload 同名白名单） */
 const CONVERSATION_EVENTS_CHANNEL = "conversation-events";
+/** server 认证状态推送（main → renderer 单向；设置页连接指示） */
+const SERVER_AUTH_CHANNEL = "server-auth-changed";
 
 /**
  * 回显 AgentLoop：followup 即时开 run 产 run-start/user.message → assistant.delta×N →
@@ -526,15 +531,21 @@ async function main(): Promise<void> {
   // 会话存储根随 workspace 重绑（<storeDir>/conversations；未开工作区时 undefined）
   let currentJournalDir: string | undefined;
 
-  // config：JSON 文件持久化（凭据暂明文，safeStorage cipher 后续接）
+  // config：JSON 文件持久化（凭据经 Electron safeStorage 加密；不可用时回退明文并告警）
   const configHome = new NodeConfigHomeResolver(app.getPath("userData"));
   const plaintextCipher: CredentialCipher = {
     encrypt: async (secret) => secret,
     decrypt: async (ciphertext) => ciphertext,
   };
+  const cipher: CredentialCipher = safeStorage.isEncryptionAvailable()
+    ? {
+        encrypt: async (secret) => safeStorage.encryptString(secret).toString("base64"),
+        decrypt: async (ciphertext) => safeStorage.decryptString(Buffer.from(ciphertext, "base64")),
+      }
+    : (infoLog("[main] safeStorage 不可用，凭据回退明文存储"), plaintextCipher);
   const configStore = new NodeApplicationConfigStore({
     filePath: join(configHome.resolve(), "config.json"),
-    cipher: plaintextCipher,
+    cipher,
     // 配置变更 → 重写运行参数 env（新对话生效；回调失败不影响变更本身）
     onMutated: () => {
       applyRuntimeEnv(configStore).catch((e) => {
@@ -573,8 +584,22 @@ async function main(): Promise<void> {
   // 技能清单扫描（设置页「技能」面板）：应用级 userData/skills + 项目级 <workspace>/skills
   //（workspace 随开合变化，闭包现取；禁用名单以 config 当前值为准）
   const appSkillsRoot = join(app.getPath("userData"), "skills");
+  // server 模式认证（FR1）：双令牌独立文件 + safeStorage 加密；未配置 url 时恒 unconfigured（本地模式零侵入）
+  const serverAuthSession = new ServerAuthSession(
+    new ServerTokenStore(join(configHome.resolve(), "server-auth.json"), cipher),
+    (url) => new ServerAuthClient(url),
+  );
+  await serverAuthSession.restore((await configStore.get()).server?.url);
   const configServer = new ConfigServer(configStore, {
     runtimeStatus: () => ({ providerLive }),
+    serverAuth: {
+      session: serverAuthSession,
+      clientFactory: (url) => new ServerAuthClient(url),
+      deviceName: "桌面端",
+      onLoginUrlPersist: async (url) => {
+        await configStore.mutate({ op: "server.set", server: { url } });
+      },
+    },
     skillsList: async () => {
       const snapshot = await configStore.get();
       const workspace = currentWorkspaceRoot;
@@ -905,6 +930,11 @@ async function main(): Promise<void> {
       // 同上
     });
   };
+  // server 认证状态变化 → renderer 推送（设置页连接指示；离线/需重登即时可见）
+  serverAuthSession.onStatusChange((state) => {
+    const win = mainWindow;
+    if (win !== undefined && !win.isDestroyed()) win.webContents.send(SERVER_AUTH_CHANNEL, state);
+  });
   // novel.changed 订阅：ZeroMQ → renderer 通知（拉取为准，通知仅触发刷新）
   const novelSubscriber = new EventSubscriber(novelEventsAddr(), [NOVEL_CHANGED]);
   await novelSubscriber.connect();

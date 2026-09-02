@@ -7,6 +7,8 @@ import type {
   McpServerInput,
   McpTestResult,
   ProviderRuntimeStatus,
+  ServerAuthState,
+  ServerDeviceInfo,
   SkillsListResult,
 } from "@novel/core";
 
@@ -54,4 +56,14 @@ export interface ApplicationConfigurationClient {
    * @returns 测试结果（失败附中文原因）
    */
   testMcp?(input: McpServerInput): Promise<McpTestResult>;
+
+  /**
+   * server 模式认证（设置页「Server」面板）。
+   * 可选：宿主未接线时面板隐藏。登录成功后 url 已写入配置。
+   */
+  serverAuth?(): Promise<ServerAuthState>;
+  serverLogin?(url: string, username: string, password: string): Promise<ServerAuthState>;
+  serverLogout?(): Promise<ServerAuthState>;
+  serverDevices?(): Promise<ServerDeviceInfo[]>;
+  serverKickDevice?(deviceId: string): Promise<void>;
 }

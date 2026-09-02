@@ -92,7 +92,8 @@ export class InMemoryConfigStore implements ConfigStore {
 			}
 			case "server.set": {
 				const url = m.server.url?.trim();
-				this.server = url ? { url } : undefined;
+				const mode = m.server.agentMode === "bundle" ? ("bundle" as const) : undefined;
+				this.server = url ? (mode !== undefined ? { url, agentMode: mode } : { url }) : (mode !== undefined ? { agentMode: mode } : undefined);
 				break;
 			}
 			case "credential.save": {

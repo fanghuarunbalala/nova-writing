@@ -157,6 +157,10 @@ export function McpSettingsPanel({ configuration }: McpSettingsPanelProps) {
     setStatus("正在测试连接…");
     try {
       const result = await configuration.testMcp(input);
+      if (result === undefined) {
+        setStatus("当前宿主不支持 MCP 连接测试");
+        return;
+      }
       setTestResult(result);
       setStatus(result.ok ? `连接正常 ✓ 提供 ${result.toolCount} 个工具` : `连接失败：${result.error}`);
     } catch (error) {

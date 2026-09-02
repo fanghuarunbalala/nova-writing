@@ -33,6 +33,10 @@ export function SkillsSettingsPanel({ configuration }: SkillsSettingsPanelProps)
     setStatus("正在读取技能清单…");
     try {
       const loaded = await configuration.skillsList();
+      if (loaded === undefined) {
+        setStatus("当前宿主未装配技能扫描");
+        return;
+      }
       setResult(loaded);
       setStatus(
         loaded.skills.length === 0

@@ -98,9 +98,18 @@ export class NodeApplicationConfigStore implements ConfigStore {
 					return false;
 				}
 			});
-			// server 连接配置：url 非字符串即丢弃（回退本地模式）
-			const serverUrl = (parsed.server as { url?: unknown } | undefined)?.url;
-			this.server = typeof serverUrl === "string" && serverUrl.length > 0 ? { url: serverUrl } : undefined;
+			// server 连接配置：url 非字符串即丢弃（回退本地模式）；agentMode 白名单外回退 legacy
+			const serverUrl = (parsed.server as { url?: unknown; agentMode?: unknown } | undefined)?.url;
+			const rawMode = (parsed.server as { agentMode?: unknown } | undefined)?.agentMode;
+			const agentMode = rawMode === "bundle" ? "bundle" : "legacy";
+			this.server =
+				typeof serverUrl === "string" && serverUrl.length > 0
+					? agentMode === "bundle"
+						? { url: serverUrl, agentMode }
+						: { url: serverUrl }
+					: agentMode === "bundle"
+						? { agentMode }
+						: undefined;
 		} catch {
 			this.profiles = [];
 			this.defaultProfileId = undefined;
@@ -167,7 +176,8 @@ export class NodeApplicationConfigStore implements ConfigStore {
 				break;
 			case "server.set": {
 				const url = m.server.url?.trim();
-				this.server = url ? { url } : undefined;
+				const mode = m.server.agentMode === "bundle" ? ("bundle" as const) : undefined;
+				this.server = url ? (mode !== undefined ? { url, agentMode: mode } : { url }) : (mode !== undefined ? { agentMode: mode } : undefined);
 				break;
 			}
 			case "credential.save":

@@ -102,3 +102,18 @@ export function applyToolOverrides(
     return { ...def, requireApproval: override.requireApproval };
   });
 }
+
+/** 端运行时能力声明（POST /v1/definitions/resolve 用）：注册表/目录自动推导（FR6）。 */
+export function runtimeCapabilities(
+	registry: PromptSectionRegistry,
+	toolGroupCatalog: ReadonlyMap<string, unknown>,
+): { renderers: string[]; policies: string[]; triggers: string[]; toolGroups: string[] } {
+	return {
+		renderers: [...registry.ids()],
+		// TS 侧 AutoCompactPolicy 仍是硬编码编排（M2.5 记录的偏差）：三档策略全部本地实现
+		policies: ["t1-skeletonize", "t2-summarize", "t3-drop-oldest"],
+		// nudge 触发器目录（buildNovelAgent nudgeCatalog 的键集合）
+		triggers: ["todo_idle", "max_turn", "project_stage", "external_tools", "compose_mode"],
+		toolGroups: [...toolGroupCatalog.keys()],
+	};
+}

@@ -385,6 +385,18 @@ await skillRegistry.load();
 	// server 模式（NOVEL_SERVER_URL）：Http 上推实现（append/rewrite 走 REST，断线落 sidecar 待推队列）；
 	// 恢复上下文改从 server 重放折叠（本地无 journal 文件）。
 	const serverUrl = process.env.NOVEL_SERVER_URL?.trim();
+	// bundle 模式（FR6）：NOVA_AGENT_MODE=bundle + NOVA_DEFINITION_BUNDLE（JSON 文件路径）。
+	// 读包失败/未配置 → undefined（legacy 装配）；能力校验失败回退在 buildNovelAgent 内收口。
+	let agentBundle: import("../../runtime/definition/bundle.js").DefinitionBundle | undefined;
+	if (process.env.NOVA_AGENT_MODE === "bundle" && process.env.NOVEL_DEFINITION_BUNDLE) {
+		try {
+			agentBundle = JSON.parse(
+				readFileSync(process.env.NOVEL_DEFINITION_BUNDLE, "utf8"),
+			) as import("../../runtime/definition/bundle.js").DefinitionBundle;
+		} catch (err) {
+			debugLog(`[bundle] 定义包读取失败，回退 legacy: ${String(err)}`);
+		}
+	}
 	let journal: import("../../conversation/contract/journal/index.js").ConversationJournalService | undefined;
 	if (storedir !== undefined && storedir.trim() !== "") {
 		if (serverUrl !== undefined && serverUrl !== "") {
@@ -404,7 +416,7 @@ await skillRegistry.load();
 				},
 				// 租约由 run 生命周期管理（FR5：申请/心跳/释放），此处仅取持有值
 				getLeaseToken: () => currentLeaseToken,
-				definitionVersion: process.env.NOVEL_DEFINITION_VERSION,
+				definitionVersion: agentBundle?.definitionVersion ?? process.env.NOVEL_DEFINITION_VERSION,
 			});
 		} else {
 			journal = new FileConversationJournalService({
@@ -759,6 +771,9 @@ await skillRegistry.load();
 			workspace,
 			provider: loopProvider,
 			handle: novelHandle,
+			// bundle 模式（FR6，NOVA_AGENT_MODE=bundle）：定义包驱动装配（包经
+			// NOVA_DEFINITION_BUNDLE 文件注入——server resolve 拉取后由宿主落盘/缓存）
+			...(agentBundle !== undefined ? { bundle: agentBundle } : {}),
 			// ProjectImporter：novel 装配 + 派生定义（仅换 prompt 与工具面；后台无人值守，
 			// definition 已裁掉 ask/compose 组且 delegation disabled）
 			...(isImporter ? { definition: projectImporterAgentDefinition } : {}),

@@ -25,6 +25,10 @@ import {
 } from "../tool/groups/NovelToolGroups.js";
 import type { NovelHandle } from "../../novel/client/NovelHandle.js";
 import type { Logger } from "../../log/Logger.js";
+import type { DefinitionBundle } from "../definition/bundle.js";
+import { applyToolOverrides, autoCompactOptionsFromBundle, validateBundleAgainstRegistry } from "../definition/assembler.js";
+import type { PromptSectionRegistry } from "../prompt/PromptSectionRegistry.js";
+import type { PromptSection } from "../prompt/PromptSection.js";
 import type { LoopContextListener } from "../loop/types.js";
 import type { ProviderCallDebugger } from "../debug/ProviderCallDebugger.js";
 import type { LLMessage } from "../provider/types.js";
@@ -55,6 +59,12 @@ import type { SkillRegistry } from "../skill/SkillRegistry.js";
 export interface NovelAgentOptions {
   /** Agent 定义（声明式配置；缺省 novelAgentDefinition） */
   definition?: AgentDefinition;
+  /**
+   * 定义包（bundle 模式，NOVA_AGENT_MODE=bundle 时由宿主注入；缺省 legacy 装配）。
+   * 包驱动 system 段序/static 内容、compact 阈值基线、工具审批覆盖；
+   * 能力校验失败自动回退 legacy（见 buildNovelAgent 内 bundleCompatible）。
+   */
+  bundle?: DefinitionBundle;
   /** 工作区路径（工具文件操作环境） */
   workspace: string;
   /** Provider 实例 */
@@ -182,6 +192,13 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
           ],
         ] as [string, () => ContextNudgePolicy][])),
   ]);
+  // bundle 模式（FR6）：先做能力校验（段引用可解析）——失败回退 legacy 装配 + 告警
+  const bundleMissing =
+    opts.bundle !== undefined ? validateBundleAgainstRegistry(opts.bundle, novelSectionRegistry) : [];
+  const bundleCompatible = opts.bundle !== undefined && bundleMissing.length === 0;
+  if (opts.bundle !== undefined && bundleMissing.length > 0) {
+    opts.logger?.warn?.(`[bundle] 能力缺口，回退 legacy 装配: ${bundleMissing.join(", ")}`);
+  }
   const assembler = new AgentAssembler({
     definition,
     sectionRegistry: novelSectionRegistry,
@@ -207,10 +224,24 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     }),
     nudgeCatalog,
     // 自动上下文压缩（docs/PRD/context-compact.md）：以 provider 闭包构造，
-    // 阈值信号/窗口查询/摘要调用都走会话同一 provider；阈值可经 opts.compact 覆盖
-    compactPolicies: [new AutoCompactPolicy(opts.provider, { logger: opts.logger, ...opts.compact })],
+    // 阈值信号/窗口查询/摘要调用都走会话同一 provider；阈值可经 opts.compact 覆盖。
+    // bundle 模式（NOVA_AGENT_MODE=bundle，M2.5 遗留接线）：包参数为基线、用户设置覆盖。
+    compactPolicies: [
+      new AutoCompactPolicy(opts.provider, {
+        logger: opts.logger,
+        ...(opts.bundle !== undefined && bundleCompatible
+          ? autoCompactOptionsFromBundle(opts.bundle)
+          : {}),
+        ...opts.compact,
+      }),
+    ],
   });
   const capability = assembler.assemble();
+  // bundle 模式（FR6）：包驱动的 system 段序与 static 内容 + 工具审批覆盖
+  if (opts.bundle !== undefined && bundleCompatible) {
+    capability.systemSections = bundleRecipeSections(opts.bundle, novelSectionRegistry);
+    capability.toolDefs = applyToolOverrides(capability.toolDefs, opts.bundle);
+  }
   // subagent 派发三工具（Agent/TaskOutput/TaskStop）：组系统外追加——
   // groupIds 契约不含 subagent 组。白名单由 definition.delegation 派生
   // （声明即生效，无平行常量；delegation 禁用时 allowedAgentTypes 恒空，
@@ -266,4 +297,32 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     composeState,
     beforeProviderCall: opts.beforeProviderCall,
   });
+}
+
+/**
+ * bundle recipe → LoopContext 可消费的段列表（bundle 模式 FR6）：
+ * static 段以包内容合成（render 恒返回包内文案——server 下发的策略面即事实）；
+ * dynamic 段按 sectionId 从本地注册表解析（渲染器是端能力，包只引用）。
+ */
+function bundleRecipeSections(bundle: DefinitionBundle, registry: PromptSectionRegistry): PromptSection[] {
+	const sections: PromptSection[] = [];
+	for (const item of bundle.prompt.recipe) {
+		if (item.kind === "static") {
+			const content = item.content;
+			sections.push({
+				kind: "static",
+				id: item.sectionId,
+				version: item.version,
+				label: item.sectionId,
+				render: () => content,
+			});
+		} else {
+			const section = registry.resolve(item.sectionId, item.version);
+			if (section.kind !== "dynamic") {
+				throw new Error(`bundle 段 ${item.sectionId} 应为 dynamic`);
+			}
+			sections.push(section);
+		}
+	}
+	return sections;
 }

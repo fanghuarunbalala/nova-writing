@@ -47,7 +47,7 @@ export interface ApplicationConfigurationClient {
    * 可选：宿主未接线时面板显示未装配。
    * @returns 技能清单（含生效/禁用状态与目录路径）
    */
-  skillsList?(): Promise<SkillsListResult>;
+  skillsList?(): Promise<SkillsListResult> | undefined;
 
   /**
    * 测试 MCP 服务器连通性（initialize + tools/list；成功附工具清单预览）。
@@ -55,15 +55,15 @@ export interface ApplicationConfigurationClient {
    * @param input 服务器配置（draft 表单直传，无需先保存）
    * @returns 测试结果（失败附中文原因）
    */
-  testMcp?(input: McpServerInput): Promise<McpTestResult>;
+  testMcp?(input: McpServerInput): Promise<McpTestResult> | undefined;
 
   /**
    * server 模式认证（设置页「Server」面板）。
    * 可选：宿主未接线时面板隐藏。登录成功后 url 已写入配置。
    */
-  serverAuth?(): Promise<ServerAuthState>;
-  serverLogin?(url: string, username: string, password: string): Promise<ServerAuthState>;
-  serverLogout?(): Promise<ServerAuthState>;
-  serverDevices?(): Promise<ServerDeviceInfo[]>;
-  serverKickDevice?(deviceId: string): Promise<void>;
+  serverAuth?(): Promise<ServerAuthState> | undefined;
+  serverLogin?(url: string, username: string, password: string): Promise<ServerAuthState> | undefined;
+  serverLogout?(): Promise<ServerAuthState> | undefined;
+  serverDevices?(): Promise<ServerDeviceInfo[]> | undefined;
+  serverKickDevice?(deviceId: string): Promise<void> | undefined;
 }

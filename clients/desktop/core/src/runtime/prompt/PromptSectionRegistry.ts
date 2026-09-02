@@ -43,6 +43,11 @@ export class PromptSectionRegistry {
   readonly #sections: ReadonlyMap<string, ReadonlyMap<string, PromptSection>>;
   readonly #ordered: readonly PromptSection[];
 
+  /** 全部段 id（bundle 能力协商：端可解析的 dynamic 渲染器集合） */
+  ids(): readonly string[] {
+    return [...this.#sections.keys()];
+  }
+
   /**
    * 构造注册表（校验每个段 id/version/label 与 id@version 唯一性）
    * @param sections 注册段集合

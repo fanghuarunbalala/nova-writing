@@ -32,6 +32,7 @@ export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps)
   const refreshAuth = useCallback(async () => {
     if (configuration.serverAuth === undefined) return;
     const next = await configuration.serverAuth();
+    if (next === undefined) return;
     setState(next);
     setUrl(next.url ?? "");
     setStatus(next.needRelogin === true ? "登录已失效，请重新登录" : (STATUS_LABEL[next.status] ?? next.status));
@@ -43,7 +44,8 @@ export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps)
       return;
     }
     try {
-      setDevices(await configuration.serverDevices());
+      const rows = await configuration.serverDevices();
+      if (rows !== undefined) setDevices(rows);
     } catch {
       setDevices([]);
     }

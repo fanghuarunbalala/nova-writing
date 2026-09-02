@@ -46,6 +46,9 @@ import {
   type ConversationApprovalRequest,
   type ConversationJournalService,
   type CredentialCipher,
+  runtimeCapabilities,
+  novelSectionRegistry,
+  NOVEL_TOOL_GROUP_CATALOG,
   ServerAuthClient,
   ServerAuthSession,
   ServerApprovalChannel,
@@ -571,6 +574,9 @@ async function main(): Promise<void> {
       applyServerEnv().catch((e) => {
         infoLog(`[main] server env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
       });
+      applyDefinitionEnv().catch((e) => {
+        infoLog(`[main] definition env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
     },
   });
   await configStore.load();
@@ -640,6 +646,43 @@ async function main(): Promise<void> {
   // server 模式 env（FR2）：配置了 server.url → 子进程注入 NOVEL_SERVER_URL（journal HTTP 上推）。
   // access token 不走 env（15min TTL，长 run 会过期）：main 周期轮换并落 server-access.json，子进程现读现用。
   const serverAccessFile = join(configHome.resolve(), "server-access.json");
+  // bundle 模式（FR6）：server.agentMode=bundle → 子进程 NOVA_AGENT_MODE + 定义包文件。
+  // server 在线时 resolve 拉最新兼容包（能力从注册表自动推导）覆盖本地缓存；离线用缓存。
+  const definitionBundlePath = join(configHome.resolve(), "definitions", "bundle.json");
+  const applyDefinitionEnv = async (): Promise<void> => {
+    const snapshot = await configStore.get();
+    if (snapshot.server?.agentMode !== "bundle") {
+      delete process.env.NOVEL_AGENT_MODE;
+      delete process.env.NOVEL_DEFINITION_BUNDLE;
+      return;
+    }
+    process.env.NOVEL_AGENT_MODE = "bundle";
+    const url = snapshot.server?.url;
+    if (url !== undefined) {
+      try {
+        const token = await serverAuthSession.ensureAccessToken();
+        if (token !== undefined) {
+          const caps = runtimeCapabilities(novelSectionRegistry, NOVEL_TOOL_GROUP_CATALOG);
+          const res = await fetch(`${url}/v1/definitions/resolve`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ agentType: "novel", capabilities: caps }),
+          });
+          if (res.ok) {
+            const body = (await res.json()) as { bundle?: unknown };
+            if (body.bundle !== undefined) {
+              mkdirSync(dirname(definitionBundlePath), { recursive: true });
+              writeFileSync(definitionBundlePath, JSON.stringify(body.bundle, null, 2), "utf8");
+              infoLog("[main] definition bundle synced from server");
+            }
+          }
+        }
+      } catch {
+        // 离线：沿用本地缓存
+      }
+    }
+    if (existsSync(definitionBundlePath)) process.env.NOVEL_DEFINITION_BUNDLE = definitionBundlePath;
+  };
   const applyServerEnv = async () => {
     const url = (await configStore.get()).server?.url;
     if (url !== undefined) {
@@ -651,6 +694,7 @@ async function main(): Promise<void> {
     }
   };
   await applyServerEnv();
+  await applyDefinitionEnv();
   const writeServerAccessFile = async (): Promise<void> => {
     const token = await serverAuthSession.ensureAccessToken();
     if (token !== undefined) writeFileSync(serverAccessFile, JSON.stringify({ accessToken: token }), "utf8");
@@ -672,7 +716,7 @@ async function main(): Promise<void> {
       onEvent: (event) => {
         // approval_resolved（FR4）：他端（如手机）批掉 → 回填本地队列（幂等；先到者生效）
         if (event.type === "approval_resolved" && typeof event.requestId === "string") {
-          const decision = event.decision === "approve" || event.decision === "reject" ? { kind: event.decision } : undefined;
+          const decision = event.decision === "approve" || event.decision === "reject" ? ({ kind: event.decision } as ConversationApprovalDecision) : undefined;
           if (decision !== undefined) {
             void manager.resolveApproval(event.requestId, decision).catch(() => {});
           }
@@ -724,7 +768,7 @@ async function main(): Promise<void> {
     conversationLease: {
       acquire: async (conversationId) => {
         const url = await serverChannelActive();
-        if (url === undefined) return {};
+        if (url === undefined) return {} as Record<string, string>;
         const client = new LeaseClient({ url, conversationId, getAccessToken: () => serverAuthSession.ensureAccessToken() });
         const { leaseToken } = await client.acquire(); // 409 他端持有 → 抛错阻止 spawn（会话转只读提示）
         client.startHeartbeat(leaseToken);

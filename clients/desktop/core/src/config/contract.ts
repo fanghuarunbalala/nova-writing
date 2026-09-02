@@ -118,6 +118,8 @@ export type McpServerInput = Omit<McpServerConfig, "id">
 export interface ServerSettings {
 	/** server 基址（如 http://127.0.0.1:8787） */
 	url?: string
+	/** agent 装配模式（FR6：bundle = 定义包驱动；缺省 legacy 代码装配） */
+	agentMode?: "legacy" | "bundle"
 }
 
 /** MCP 连接测试结果（成功附工具清单预览；失败附中文原因） */

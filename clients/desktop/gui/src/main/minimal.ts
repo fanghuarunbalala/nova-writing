@@ -557,6 +557,9 @@ async function main(): Promise<void> {
       applyMcpEnv(configStore).catch((e) => {
         infoLog(`[main] mcp env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
       });
+      applyServerEnv().catch((e) => {
+        infoLog(`[main] server env re-apply failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
     },
   });
   await configStore.load();
@@ -622,6 +625,32 @@ async function main(): Promise<void> {
   await applySkillsEnv(configStore, join(app.getPath("userData"), "skills"));
   await applyMcpEnv(configStore);
   providerLive = process.env.NOVEL_PROVIDER_API_KEY !== undefined;
+
+  // server 模式 env（FR2）：配置了 server.url → 子进程注入 NOVEL_SERVER_URL（journal HTTP 上推）。
+  // access token 不走 env（15min TTL，长 run 会过期）：main 周期轮换并落 server-access.json，子进程现读现用。
+  const serverAccessFile = join(configHome.resolve(), "server-access.json");
+  const applyServerEnv = async () => {
+    const url = (await configStore.get()).server?.url;
+    if (url !== undefined) {
+      process.env.NOVEL_SERVER_URL = url;
+      process.env.NOVEL_SERVER_ACCESS_FILE = serverAccessFile;
+    } else {
+      delete process.env.NOVEL_SERVER_URL;
+      delete process.env.NOVEL_SERVER_ACCESS_FILE;
+    }
+  };
+  await applyServerEnv();
+  const writeServerAccessFile = async (): Promise<void> => {
+    const token = await serverAuthSession.ensureAccessToken();
+    if (token !== undefined) writeFileSync(serverAccessFile, JSON.stringify({ accessToken: token }), "utf8");
+  };
+  serverAuthSession.onStatusChange(() => {
+    void writeServerAccessFile();
+  });
+  // 过期前主动轮换并刷新 access 文件（5min < 15min TTL；无 server 配置时 ensureAccessToken 直通返回）
+  setInterval(() => {
+    void writeServerAccessFile();
+  }, 5 * 60 * 1000).unref?.();
 
   // novel-db WS：conversation 子进程经 kkrpc/ws + token 访问 canonical store（协议定稿 transport）
   const novelWs = await startNovelDbWsServer({ store: publishingStore, token: randomUUID() });

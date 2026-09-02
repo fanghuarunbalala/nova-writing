@@ -60,4 +60,51 @@ describe("事件账本", () => {
     expect(forbidden.statusCode).toBe(403);
     expect(res.statusCode).toBe(200);
   });
+
+  it("rewrite：全量重写替换旧行；expectedLastSeq 不符 409 附当前值", async () => {
+    const { app } = await makeApp();
+    const s = await registerUser(app, "rewrite-user");
+    const lease = await acquireLease(app, s, "conv-rw");
+    const push = (messages: unknown[]) =>
+      app.inject({
+        method: "POST", url: "/v1/runs/conv-rw/events", headers: auth(s),
+        payload: { runSeq: 1, kind: "append", messages, leaseToken: lease },
+      });
+    const r1 = await (await push([{ type: "user", content: "旧内容1" }])).json();
+    const r2 = await (await push([{ type: "user", content: "旧内容2" }])).json();
+
+    // 过期 expectedLastSeq → 409 + currentLastSeq
+    const stale = await app.inject({
+      method: "PUT", url: "/v1/journal/conv-rw/rewrite", headers: auth(s),
+      payload: { expectedLastSeq: r1.seq, leaseToken: lease, runs: [{ runSeq: 1, messages: [] }] },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect((stale.json() as any).currentLastSeq).toBe(r2.seq);
+
+    // 匹配 → 行替换为压缩后的 snapshot
+    const ok = await app.inject({
+      method: "PUT", url: "/v1/journal/conv-rw/rewrite", headers: auth(s),
+      payload: {
+        expectedLastSeq: r2.seq, leaseToken: lease,
+        runs: [
+          { runSeq: 1, messages: [{ type: "user", content: "压缩摘要" }] },
+          { runSeq: 2, messages: [{ type: "user", content: "新 run" }] },
+        ],
+      },
+    });
+    expect(ok.statusCode).toBe(200);
+    const replay = (await app.inject({ method: "GET", url: "/v1/journal/conv-rw/replay", headers: auth(s) })).json() as any;
+    expect(replay.events).toHaveLength(2);
+    expect(replay.events.every((e: any) => e.kind === "snapshot")).toBe(true);
+    expect(JSON.parse(replay.events[0].payload)[0].content).toBe("压缩摘要");
+    expect(replay.events[1].run_seq).toBe(2);
+    expect(replay.events.some((e: any) => JSON.stringify(e.payload).includes("旧内容"))).toBe(false);
+
+    // 无租约 rewrite 被拒
+    const noLease = await app.inject({
+      method: "PUT", url: "/v1/journal/conv-rw/rewrite", headers: auth(s),
+      payload: { expectedLastSeq: 999, runs: [] },
+    });
+    expect([400, 423, 410]).toContain(noLease.statusCode);
+  });
 });

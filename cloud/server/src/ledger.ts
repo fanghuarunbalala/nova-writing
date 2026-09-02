@@ -72,6 +72,53 @@ export function registerLedgerRoutes(app: FastifyInstance, db: Db, hub: SseHub, 
     return reply.code(201).send({ seq });
   });
 
+  /**
+   * 全量重写（压缩/清空后的 writeRuns 上推；PRD 桌面接入 FR2，开放问题①敲定：PUT 原子语义）。
+   * 乐观校验 expectedLastSeq：与当前最大 seq 不符 = 并发覆盖风险 → 409 附当前值（客户端重放后重试）。
+   * 事务内 delete 全部旧行 + 逐 run 插 snapshot 行；SSE 广播 journal_rewritten（订阅者应整体重放）。
+   */
+  app.put("/v1/journal/:conversationId/rewrite", { preHandler: guard }, async (request, reply) => {
+    const user = (request as unknown as AuthedRequest).user;
+    const conversationId = (request.params as { conversationId: string }).conversationId;
+    const body = request.body as {
+      expectedLastSeq?: number;
+      leaseToken?: string;
+      runs?: Array<{ runSeq?: number; messages?: unknown[] }>;
+    };
+    if (typeof body?.expectedLastSeq !== "number" || !Array.isArray(body?.runs)) {
+      return reply.code(400).send({ code: "bad_request", message: "需要 expectedLastSeq 与 runs 数组" });
+    }
+    for (const run of body.runs) {
+      if (typeof run?.runSeq !== "number" || !Array.isArray(run?.messages)) {
+        return reply.code(400).send({ code: "bad_request", message: "runs[] 每项需要 runSeq 与 messages" });
+      }
+    }
+    const lease = checkLease(db, conversationId, body.leaseToken, user.userId);
+    if (!lease.ok) {
+      const status = lease.code === "lease_required" ? 400 : lease.code === "lease_taken" ? 423 : 410;
+      return reply.code(status).send({ code: lease.code, message: "无有效租约" });
+    }
+    const result = db.transaction(() => {
+      const current = db
+        .prepare("SELECT MAX(seq) AS maxSeq FROM journal_events WHERE conversation_id = ?")
+        .get(conversationId) as { maxSeq: number | null };
+      if ((current.maxSeq ?? 0) !== body.expectedLastSeq) {
+        return { conflict: true, currentLastSeq: current.maxSeq ?? 0 };
+      }
+      db.prepare("DELETE FROM journal_events WHERE conversation_id = ?").run(conversationId);
+      let lastSeq = 0;
+      for (const run of body.runs!) {
+        lastSeq = appendLedgerRow(db, conversationId, run.runSeq!, "snapshot", run.messages!);
+      }
+      return { conflict: false as const, lastSeq };
+    })();
+    if (result.conflict) {
+      return reply.code(409).send({ code: "stale_rewrite", message: "账本已被并发写入，请重放后重试", currentLastSeq: result.currentLastSeq });
+    }
+    hub.publish({ type: "journal_rewritten", conversationId, lastSeq: result.lastSeq, runCount: body.runs!.length });
+    return reply.send({ lastSeq: result.lastSeq });
+  });
+
   app.get("/v1/journal/:conversationId/replay", { preHandler: guard }, async (request, reply) => {
     const user = (request as unknown as AuthedRequest).user;
     const conversationId = (request.params as { conversationId: string }).conversationId;

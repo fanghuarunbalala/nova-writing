@@ -10,6 +10,7 @@
  * - subagent：SubagentRuntime 进程内编排（main 经 Agent/TaskOutput/TaskStop 派发）
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { readFile as readFileAsync } from "node:fs/promises";
 import { join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
@@ -17,6 +18,7 @@ import { Conversation, type ConversationEventPublisher, type ManagerWaitChannel 
 import { EventPublisher } from "../../event/EventPublisher.js";
 import { conversationEventsAddr } from "../../event/topics.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
+import { HttpConversationJournalService } from "../../conversation/persistence/HttpConversationJournalService.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { FileConversationStateJournalService } from "../../conversation/persistence/FileConversationStateJournalService.js";
 import { journalListener } from "../../conversation/JournalBridge.js";
@@ -379,15 +381,41 @@ await skillRegistry.load();
 		novelHandle = guardImporterHandle(novelHandle);
 	}
 
-	// journal：storedir（manager 分配，经 env 传入）可用时建立 + open（恢复 seq）
-	const journal =
-		storedir !== undefined && storedir.trim() !== ""
-			? new FileConversationJournalService({
-					conversationId,
-					filePath: join(storedir, "journal.jsonl"),
-				})
-			: undefined;
+	// journal：storedir（manager 分配，经 env 传入）可用时建立 + open（恢复 seq）。
+	// server 模式（NOVEL_SERVER_URL）：Http 上推实现（append/rewrite 走 REST，断线落 sidecar 待推队列）；
+	// 恢复上下文改从 server 重放折叠（本地无 journal 文件）。
+	const serverUrl = process.env.NOVEL_SERVER_URL?.trim();
+	let journal: import("../../conversation/contract/journal/index.js").ConversationJournalService | undefined;
+	if (storedir !== undefined && storedir.trim() !== "") {
+		if (serverUrl !== undefined && serverUrl !== "") {
+			const accessFile = process.env.NOVEL_SERVER_ACCESS_FILE ?? "";
+			journal = new HttpConversationJournalService({
+				conversationId,
+				url: serverUrl,
+				pendingPath: join(storedir, "pending-push.jsonl"),
+				// main 进程持有会话并周期刷新落 access 文件（15min TTL；子进程现读现用）
+				getAccessToken: async () => {
+					try {
+						const raw = await readFileAsync(accessFile, "utf8");
+						return (JSON.parse(raw) as { accessToken?: string }).accessToken;
+					} catch {
+						return undefined;
+					}
+				},
+				// 租约由 run 生命周期管理（FR5：申请/心跳/释放），此处仅取持有值
+				getLeaseToken: () => currentLeaseToken,
+				definitionVersion: process.env.NOVEL_DEFINITION_VERSION,
+			});
+		} else {
+			journal = new FileConversationJournalService({
+				conversationId,
+				filePath: join(storedir, "journal.jsonl"),
+			});
+		}
+	}
 	await journal?.open();
+	// server 模式租约 token 槽（FR5 接线 run 生命周期申请；此处先暴露可更新引用）
+	let currentLeaseToken: string | undefined = process.env.NOVEL_LEASE_TOKEN;
 
 	// 恢复上下文：journal 已落盘 runs → run 边界 + resumeSeq（崩溃重派生续跑）。
 	// run 边界保留传递（context-compact PRD：压缩分区/摘要标记跨重启保持）
@@ -395,11 +423,19 @@ await skillRegistry.load();
 	let resumeRuns: { seq: number; messages: LLMessage[]; ts?: string }[] | undefined;
 	let resumeSeq: number | undefined;
 	if (journal !== undefined && storedir !== undefined) {
-		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
-		const runs = await readOnly.readRuns(conversationId);
-		runMessages = runs.flatMap((r) => r.messages);
-		resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));
-		resumeSeq = journal.lastSeq;
+		if (serverUrl !== undefined && serverUrl !== "") {
+			// server 模式恢复：重放账本按 run_seq 折叠（snapshot 重置基线 + append 追加）
+			const runs = await readRunsFromServer(serverUrl, conversationId);
+			runMessages = runs.flatMap((r) => r.messages);
+			resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));
+			resumeSeq = journal.lastSeq;
+		} else {
+			const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
+			const runs = await readOnly.readRuns(conversationId);
+			runMessages = runs.flatMap((r) => r.messages);
+			resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));
+			resumeSeq = journal.lastSeq;
+		}
 	}
 
 	// manager WS：单连接双工（expose conversation + getAPI 调 CMS）
@@ -1057,4 +1093,51 @@ function guardImporterHandle(handle: NovelHandle): NovelHandle {
 			return handle.mutateBatch(ms);
 		},
 	} as unknown as NovelHandle;
+}
+
+/**
+ * server 模式恢复：GET /v1/journal/:id/replay 重放，按 run_seq 折叠为 runs
+ * （snapshot 行重置基线 [run]，append 行追加增量；行序 = 账本全序）。
+ * 离线/未登录返回空（恢复上下文为空 = 新会话视角，待推队列会在连接恢复后补齐）。
+ */
+async function readRunsFromServer(
+	serverUrl: string,
+	conversationId: string,
+): Promise<Array<{ seq: number; messages: import("../../runtime/provider/types.js").LLMessage[]; ts?: string }>> {
+	const token = process.env.NOVEL_SERVER_ACCESS_FILE
+		? await (async () => {
+				try {
+					const raw = await readFileAsync(process.env.NOVEL_SERVER_ACCESS_FILE!, "utf8");
+					return (JSON.parse(raw) as { accessToken?: string }).accessToken;
+				} catch {
+					return undefined;
+				}
+			})()
+		: undefined;
+	if (token === undefined) return [];
+	let response: Response;
+	try {
+		response = await fetch(`${serverUrl}/v1/journal/${encodeURIComponent(conversationId)}/replay`, {
+			headers: { authorization: `Bearer ${token}` },
+		});
+	} catch {
+		return [];
+	}
+	if (response.status !== 200) return [];
+	const body = (await response.json()) as {
+		events?: Array<{ seq?: number; run_seq?: number; kind?: string; payload?: unknown; created_at?: number }>;
+	};
+	const byRun = new Map<number, { seq: number; messages: import("../../runtime/provider/types.js").LLMessage[]; ts?: string }>();
+	for (const event of body.events ?? []) {
+		const runSeq = event.run_seq ?? 0;
+		if (event.kind === "snapshot") {
+			const run = Array.isArray(event.payload) ? (event.payload[0] as { messages?: unknown }) : undefined;
+			const messages = (run?.messages ?? []) as import("../../runtime/provider/types.js").LLMessage[];
+			byRun.set(runSeq, { seq: runSeq, messages, ts: event.created_at ? new Date(event.created_at).toISOString() : undefined });
+		} else if (event.kind === "append" && byRun.has(runSeq)) {
+			const entry = byRun.get(runSeq)!;
+			entry.messages = [...entry.messages, ...((event.payload ?? []) as import("../../runtime/provider/types.js").LLMessage[])];
+		}
+	}
+	return [...byRun.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
 }

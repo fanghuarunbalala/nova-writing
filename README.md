@@ -88,10 +88,13 @@ pnpm gui:debug          # 同上，verbose 日志 + 调试模式
 ## 架构
 
 ```
-core/  @novel/core   harness 内核：agent loop、上下文压缩、小说域工具、SQLite 存储、多进程运行时
-ui/    @novel/ui     React 19 共享展示层（桌面 / Web 通用组件与领域逻辑）
-gui/   @novel/gui    Electron 桌面壳（Main / Preload / Renderer）
-docs/                PRD、架构文档、开发规范
+clients/desktop/core/  @novel/core   harness 内核：agent loop、上下文压缩、小说域工具、SQLite 存储、多进程运行时
+clients/desktop/ui/    @novel/ui     React 19 共享展示层（桌面 / Web 通用组件与领域逻辑）
+clients/desktop/gui/   @novel/gui    Electron 桌面壳（Main / Preload / Renderer）
+clients/android/       nova-android  Android 端 agent runtime（纯 JVM Kotlin 模块，与桌面同契约）
+cloud/server/          @novel/server 数据层 server：认证/账本/租约/审批/定义包分发
+protocol/              双端共享契约单一来源：定义包 golden/parity 夹具（TS 直读，Gradle Sync 到 Android 测试资源）
+docs/                  PRD、架构文档、开发规范
 ```
 
 想深入：[docs/architecture.md](docs/architecture.md)（进程拓扑与通信协议）、[docs/PRD/产品总览.md](docs/PRD/产品总览.md)（产品定位与核心流程）。

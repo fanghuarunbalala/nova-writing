@@ -17,10 +17,22 @@ import {
  * - `WRITE_FIXTURE=1 pnpm -C core vitest run src/runtime/definition/bundle.test.ts` 重新生成 golden 包；
  * - 默认模式逐字节比对——任何策略面变更（段文案/组清单/阈值/nudge）都会使测试变红，
  *   diff 即策略变更的 review 材料（四层对拍门禁的层1 种子）。
- * - golden 包同时是 Kotlin 端（android :core:runtime definition 包）的对拍夹具。
+ * - golden 包同时是 Kotlin 端（android :core:runtime definition 包）的对拍夹具；
+ * - 夹具已迁 `protocol/fixtures/`（双端共享单一来源，Gradle 侧由同步任务复制）。
  */
 
-const FIXTURE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "definition-novel-1.5.0.json");
+const FIXTURE_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "protocol",
+  "fixtures",
+  "definition-novel-1.5.0.json",
+);
 
 function toolGroupsForMain(): ToolGroupRef[] {
   return novelAgentDefinition.tools.toSnapshot().groupIds.map((id) => {

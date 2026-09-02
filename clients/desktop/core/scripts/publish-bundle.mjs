@@ -26,9 +26,11 @@ if (!user || !pass) {
 const fixturePath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
-  "src",
-  "runtime",
-  "definition",
+  "..",
+  "..",
+  "..",
+  "..",
+  "protocol",
   "fixtures",
   "definition-novel-1.5.0.json",
 );

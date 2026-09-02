@@ -1,0 +1,10 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+
+# 双端共享夹具由 Gradle Sync 任务从 protocol/ 复制，不入库
+core/runtime/src/test/resources/definition-*.json
+core/runtime/src/test/resources/parity-*.json

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -24,6 +24,8 @@ import type { ToolDef } from "../tool/ToolDef.js";
  */
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
+// protocol/fixtures/ 是双端共享夹具单一来源（与 bundle.test.ts 的 golden 同目录）
+const PARITY_FIXTURE = path.join(DIR, "..", "..", "..", "..", "..", "..", "protocol", "fixtures", "parity-sections.json");
 
 function golden(): DefinitionBundle {
   const toolGroups: ToolGroupRef[] = novelAgentDefinition.tools.toSnapshot().groupIds.map((id) => {
@@ -126,8 +128,9 @@ describe("包驱动装配：零漂移", () => {
           )
         : "",
     };
-    const file = path.join(DIR, "fixtures", "parity-sections.json");
+    const file = PARITY_FIXTURE;
     if (process.env.WRITE_PARITY === "1") {
+      mkdirSync(path.dirname(file), { recursive: true });
       writeFileSync(file, JSON.stringify(parity, null, 2) + "\n", "utf8");
       return;
     }

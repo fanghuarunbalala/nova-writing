@@ -48,8 +48,10 @@ import {
   type CredentialCipher,
   ServerAuthClient,
   ServerAuthSession,
+  ServerApprovalChannel,
   ServerEventBridge,
   ServerTokenStore,
+  LeaseClient,
   resolveRuntimeAgents,
   serializeSkillsEnv,
   listSkills,
@@ -316,6 +318,10 @@ function createManager(
     novelWs: { url: string; token: string };
   },
   providerLive: boolean,
+  serverMode?: {
+    conversationLease: NonNullable<import("@novel/core").ConversationManagerServerOptions>["conversationLease"];
+    approvals: NonNullable<import("@novel/core").ConversationManagerServerOptions>["serverApprovals"];
+  },
 ): ConversationManagerServer {
   // server 先声明：内存模式 factory 的 managerWait 需闭包引用（进程内直连同一队列）
   let server: ConversationManagerServer | undefined;
@@ -370,6 +376,8 @@ function createManager(
     storedirRoot: conversationsRoot(),
     workspaceProvider,
     logger,
+    ...(serverMode?.conversationLease !== undefined ? { conversationLease: serverMode.conversationLease } : {}),
+    ...(serverMode?.approvals !== undefined ? { serverApprovals: serverMode.approvals } : {}),
   });
   return server;
 }
@@ -662,8 +670,14 @@ async function main(): Promise<void> {
       url,
       getAccessToken: () => serverAuthSession.ensureAccessToken(),
       onEvent: (event) => {
-        // journal/approval/lease 事件原样转发 renderer（进度视图/审批中心各自消费）；
-        // approval_resolved → 本地审批队列回填在 FR4 接线
+        // approval_resolved（FR4）：他端（如手机）批掉 → 回填本地队列（幂等；先到者生效）
+        if (event.type === "approval_resolved" && typeof event.requestId === "string") {
+          const decision = event.decision === "approve" || event.decision === "reject" ? { kind: event.decision } : undefined;
+          if (decision !== undefined) {
+            void manager.resolveApproval(event.requestId, decision).catch(() => {});
+          }
+        }
+        // journal/lease 事件原样转发 renderer（进度视图/只读提示各自消费）
         const win = mainWindow;
         if (win === undefined || win.isDestroyed()) return;
         win.webContents.send(SERVER_EVENTS_CHANNEL, event);
@@ -690,6 +704,15 @@ async function main(): Promise<void> {
 
   // 当前工作区根路径（spawn 时经 env 注入子进程，agent 文件工具落点）
   let currentWorkspaceRoot: string | undefined;
+  // server 模式：会话租约注册表（FR5）+ 审批两段式通道（FR4）——配置了 server 且登录后才激活
+  const conversationLeases = new Map<string, { client: LeaseClient; token: string }>();
+  const serverChannelActive = async (): Promise<string | undefined> => {
+    const url = (await configStore.get()).server?.url;
+    if (url === undefined) return undefined;
+    return (await serverAuthSession.ensureAccessToken()) === undefined ? undefined : url;
+  };
+  const getLeaseTokenFor = (conversationId: string): string | undefined =>
+    conversationLeases.get(conversationId)?.token;
   const manager = createManager(() => currentJournalDir, () => currentWorkspaceRoot, {
     managerWs: {
       url: managerWs.url,
@@ -697,7 +720,47 @@ async function main(): Promise<void> {
       onConnected: (listener) => managerWs.onConversationConnected(listener),
     },
     novelWs: { url: novelWs.url, token: novelWs.token },
-  }, providerLive);
+  }, providerLive, {
+    conversationLease: {
+      acquire: async (conversationId) => {
+        const url = await serverChannelActive();
+        if (url === undefined) return {};
+        const client = new LeaseClient({ url, conversationId, getAccessToken: () => serverAuthSession.ensureAccessToken() });
+        const { leaseToken } = await client.acquire(); // 409 他端持有 → 抛错阻止 spawn（会话转只读提示）
+        client.startHeartbeat(leaseToken);
+        conversationLeases.set(conversationId, { client, token: leaseToken });
+        infoLog(`[main] lease acquired: ${conversationId}`);
+        return { NOVEL_LEASE_TOKEN: leaseToken };
+      },
+      release: async (conversationId) => {
+        const entry = conversationLeases.get(conversationId);
+        if (entry === undefined) return;
+        conversationLeases.delete(conversationId);
+        await entry.client.release(entry.token);
+        infoLog(`[main] lease released: ${conversationId}`);
+      },
+    },
+    approvals: {
+      submit: async (input) => {
+        const url = await serverChannelActive();
+        if (url === undefined) return;
+        await new ServerApprovalChannel({
+          url,
+          getAccessToken: () => serverAuthSession.ensureAccessToken(),
+          getLeaseToken: getLeaseTokenFor,
+        }).submit(input);
+      },
+      resolve: async (requestId, decision, comment) => {
+        const url = await serverChannelActive();
+        if (url === undefined) return;
+        await new ServerApprovalChannel({
+          url,
+          getAccessToken: () => serverAuthSession.ensureAccessToken(),
+          getLeaseToken: getLeaseTokenFor,
+        }).resolve(requestId, decision, comment);
+      },
+    },
+  });
   managerHolder.manager = manager;
   // wait 队列变化 → 通知 renderer（Phase B 接线 onApprovalsChanged；此处留 hook）
   const uiNotifyHolder: { notify?: () => void } = {};

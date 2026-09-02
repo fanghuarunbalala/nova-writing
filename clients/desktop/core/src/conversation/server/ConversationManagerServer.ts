@@ -94,6 +94,24 @@ export interface ConversationManagerServerOptions {
 	workspaceProvider?: () => string | undefined;
 	/** 结构化日志（缺省 noop；审批入队/决议、根 bypass 自动批准等关键链路埋点） */
 	logger?: Logger;
+	/**
+	 * server 审批两段式通道（PRD 桌面接入 FR4；缺省 = 纯本地审批）。
+	 * submit：本地征询入队后异步上 server（持久化 + 其它端 SSE 可见）；
+	 * resolve：本地决议后同步 server（跨端收敛，幂等）。
+	 */
+	serverApprovals?: {
+		submit(input: { conversationId: string; requestId: string; runSeq: number; calls: Array<{ name: string; arguments?: unknown }> }): Promise<void>;
+		resolve(requestId: string, decision: "approve" | "reject", comment?: string): Promise<void>;
+	};
+	/**
+	 * 会话租约钩子（PRD 桌面接入 FR5；缺省 = 无租约本地模式）。
+	 * acquire 在进程 spawn 前调用（返回注入子进程的 env，如 NOVEL_LEASE_TOKEN）；
+	 * 他端持有时应抛错阻止 spawn（会话转只读）。release 在会话退出（exit）时调用。
+	 */
+	conversationLease?: {
+		acquire(conversationId: string): Promise<Record<string, string>>;
+		release(conversationId: string): Promise<void>;
+	};
 }
 
 /** manager 进程侧实现（内存 factory 测试 / 进程 spawn 生产） */
@@ -126,6 +144,10 @@ export class ConversationManagerServer implements Contract {
 	private readonly spawner?: ConversationProcessSpawner;
 	/** 结构化日志（审批链路埋点；缺省 noop） */
 	private readonly logger: Logger;
+	/** server 审批两段式通道（缺省 undefined = 纯本地） */
+	private readonly serverApprovals?: ConversationManagerServerOptions["serverApprovals"];
+	/** 会话租约钩子（缺省 undefined = 本地模式） */
+	private readonly conversationLease?: NonNullable<ConversationManagerServerOptions["conversationLease"]>;
 
 	/**
 	 * 构造 ManagerServer
@@ -143,6 +165,8 @@ export class ConversationManagerServer implements Contract {
 		this.storedirRoot = opts?.storedirRoot;
 		this.workspaceProvider = opts?.workspaceProvider;
 		this.logger = (opts?.logger ?? noopLogger).child({ component: "conversation_manager" });
+		this.serverApprovals = opts?.serverApprovals;
+		this.conversationLease = opts?.conversationLease;
 		if (this.storedirRoot !== undefined) this.scanCatalog();
 	}
 
@@ -272,6 +296,10 @@ export class ConversationManagerServer implements Contract {
 			this.waitQueue.expireConversation(conversationId, new Date().toISOString());
 			this.childProcesses.delete(conversationId);
 			this.handles.delete(conversationId);
+			// 会话租约释放（FR5：会话收口；失败静默——孤儿租约由 TTL 回收）
+			if (this.conversationLease !== undefined) {
+				void this.conversationLease.release(conversationId).catch(() => {});
+			}
 			// main 侧拆除通知（gui-performance-2 功能点八：会话事件 SUB 关闭点）
 			this.notifyConversationExited(conversationId);
 		});
@@ -375,6 +403,9 @@ export class ConversationManagerServer implements Contract {
 		const storedir = this.allocStoredir(conversationId);
 		if (this.spawner) {
 			// 进程派生（生产）：manager 分配 storedir，等子进程 manager WS 报到后登记 handle
+			const leaseEnv = await this.conversationLease?.acquire(conversationId).catch((err) => {
+				throw err;
+			});
 			const { child, handle: handlePromise } = this.spawner.spawn({
 				conversationId,
 				agentType: opts.agentType,
@@ -382,7 +413,7 @@ export class ConversationManagerServer implements Contract {
 				storedir,
 				workspace: this.workspaceProvider?.(),
 				...(opts.task !== undefined ? { task: opts.task } : {}),
-				...(opts.extraEnv !== undefined ? { extraEnv: opts.extraEnv } : {}),
+				extraEnv: { ...(leaseEnv ?? {}), ...(opts.extraEnv ?? {}) },
 			});
 			this.childProcesses.set(conversationId, child);
 			this.summaries.set(conversationId, {
@@ -443,11 +474,13 @@ export class ConversationManagerServer implements Contract {
 			const existingChild = this.childProcesses.get(id);
 			if (handle === undefined || existingChild === undefined || existingChild.exitCode !== null) {
 				const storedir = this.allocStoredir(id);
+				const leaseEnv = await this.conversationLease?.acquire(id);
 				const { child, handle: spawnedPromise } = this.spawner.spawn({
 					conversationId: id,
 					agentType: "novel",
 					storedir,
 					workspace: this.workspaceProvider?.(),
+					...(leaseEnv !== undefined ? { extraEnv: leaseEnv } : {}),
 				});
 				const prevSummary = this.summaries.get(id);
 				this.childProcesses.set(id, child);
@@ -603,6 +636,14 @@ export class ConversationManagerServer implements Contract {
 			decisioner: parentId !== undefined ? "parent" : "ui",
 			toolCallCount: req.toolCalls.length,
 		});
+		// server 两段式（FR4）：征询上 server 持久化（其它端 SSE 可见、任意端可批）；失败静默不阻塞本地流。
+		// runSeq 从 requestId（approval:{convId}:{runSeq}:b{n}）解析。
+		void this.serverApprovals?.submit({
+			conversationId,
+			requestId: req.requestId,
+			runSeq: Number(req.requestId.split(":")[2] ?? 0) || 0,
+			calls: req.toolCalls.map((tc) => ({ name: tc.toolName, arguments: tc.args })),
+		}).catch(() => {});
 	}
 
 	/** 读会话当前生效模式（缺省 review；远程代理失败按 review 保守处理） */
@@ -699,6 +740,10 @@ export class ConversationManagerServer implements Contract {
 		const resolved = this.waitQueue.resolve(requestId, decision, new Date().toISOString());
 		if (!resolved) return false;
 		this.logger.info("approval.resolved", { requestId, decision: decision.kind });
+		// server 两段式（FR4）：本地决议同步 server（跨端收敛；幂等 409 容忍，失败静默由懒过期兜底）
+		if (this.serverApprovals !== undefined && (decision.kind === "approve" || decision.kind === "reject")) {
+			void this.serverApprovals.resolve(requestId, decision.kind).catch(() => {});
+		}
 		// 驻留直推：会话存活则经 handle 调 conversation 的 resolveApproval（阻塞解除）
 		const item = this.waitQueue.takeByRequestId(requestId);
 		if (item !== undefined) {

@@ -3,6 +3,7 @@ packages:
   - "ui"
   - "gui"
   - "evals"
+  - "server"
   - "mcp-servers/novel-fetch"
 
 allowBuilds:

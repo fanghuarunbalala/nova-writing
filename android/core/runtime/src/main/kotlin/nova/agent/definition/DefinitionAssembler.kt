@@ -40,23 +40,24 @@ class DefinitionAssembler(val bundle: DefinitionBundle) {
     }
 
     /**
-     * 组装 system prompt：static 段按 recipe 序拼接（空行分隔）；
-     * dynamic 段经 [dynamicRenderer] 渲染（渲染器可能读文件/查库，故为 suspend；返回 null/空 = 整段省略）。
+     * 组装 system prompt——拼接规则与桌面端 LoopContext.renderSystem 逐字节一致：
+     * static 各段按 recipe 序 join("\n")（空 static 段不过滤，现状行为），base 非空才参与；
+     * dynamic 段经 [dynamicRenderer] 渲染非空才参与；全部以单 "\n" 连接。
      */
     suspend fun assembleSystemPrompt(
         dynamicRenderer: (suspend (RecipeItem.Dynamic) -> String?)? = null,
     ): String {
+        val staticContents = bundle.prompt.recipe.mapNotNull { (it as? RecipeItem.Static)?.content }
         val parts = mutableListOf<String>()
+        val staticBase = staticContents.joinToString("\n")
+        if (staticBase.isNotEmpty()) parts.add(staticBase)
         for (item in bundle.prompt.recipe) {
-            when (item) {
-                is RecipeItem.Static -> if (item.content.isNotEmpty()) parts.add(item.content)
-                is RecipeItem.Dynamic -> {
-                    val rendered = dynamicRenderer?.invoke(item)
-                    if (!rendered.isNullOrEmpty()) parts.add(rendered)
-                }
+            if (item is RecipeItem.Dynamic) {
+                val rendered = dynamicRenderer?.invoke(item)
+                if (!rendered.isNullOrEmpty()) parts.add(rendered)
             }
         }
-        return parts.joinToString("\n\n")
+        return parts.joinToString("\n")
     }
 
     /** compact 链参数 → Android 侧 [CompactionConfig]（字段语义与桌面 AutoCompactOptions 一一映射）。 */

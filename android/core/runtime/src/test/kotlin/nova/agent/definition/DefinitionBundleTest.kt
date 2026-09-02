@@ -57,11 +57,11 @@ class DefinitionBundleTest {
     @Test
     fun assembleSystemPromptStaticsInRecipeOrder() = runTest {
         val assembler = DefinitionAssembler(golden())
-        // 不传渲染器：static 段按序拼接，dynamic 缺省省略
+        // 不传渲染器：static 按 legacy 规则拼接（单 \n，空段不过滤），dynamic 缺省省略
         val prompt = assembler.assembleSystemPrompt()
         val statics = golden().prompt.recipe.filterIsInstance<RecipeItem.Static>()
-        assertEquals(statics.map { it.content }.filter { it.isNotEmpty() }.joinToString("\n\n"), prompt)
-        // 传渲染器：dynamic 段按位插入
+        assertEquals(statics.map { it.content }.joinToString("\n"), prompt)
+        // 传渲染器：dynamic 段追加（以单 \n 连接）
         val withRenderer = assembler.assembleSystemPrompt { it.rendererId }
         assertTrue(withRenderer.contains("novel.story_appeal"))
         assertTrue(withRenderer.length > prompt.length)

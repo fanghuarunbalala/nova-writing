@@ -1,0 +1,27 @@
+{
+  "fixtureTools": [
+    {
+      "name": "TodoWrite",
+      "policy": "",
+      "guidance": ""
+    },
+    {
+      "name": "NovelRead",
+      "policy": "读取实体前先确认 id 存在",
+      "guidance": ""
+    },
+    {
+      "name": "NovelWrite",
+      "policy": "写入前必须带 baseRevision（乐观锁）",
+      "guidance": "段落写入指导：\n1. 先读后写\n2. 失败读版本号自纠"
+    },
+    {
+      "name": "Read",
+      "policy": "",
+      "guidance": "  "
+    }
+  ],
+  "toolPolicy": "# Using Tools\n- available tools: TodoWrite, NovelRead, NovelWrite, Read;\n读取实体前先确认 id 存在\n写入前必须带 baseRevision（乐观锁）",
+  "toolGuidance": "段落写入指导：\n1. 先读后写\n2. 失败读版本号自纠",
+  "environment": "# 环境信息\n- 当前日期：2026-09-02（Asia/Shanghai）\n- 平台：darwin\n- 工作目录：/workspace/nova\n- 模型：deepseek-chat"
+}

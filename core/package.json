@@ -27,7 +27,9 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-resources.mjs",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bundle:generate": "WRITE_FIXTURE=1 WRITE_PARITY=1 vitest run src/runtime/definition --silent",
+    "bundle:publish": "node scripts/publish-bundle.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

@@ -3,6 +3,7 @@ packages:
   - "ui"
   - "gui"
   - "evals"
+  - "server"
 
 allowBuilds:
   better-sqlite3: true

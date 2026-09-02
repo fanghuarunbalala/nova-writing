@@ -87,3 +87,16 @@ android/
 - **M4**：`:app`（AGP + Compose）——ChatScreen 打字机（collectAsStateWithLifecycle）、审批 BottomSheet、
   `AgentForegroundService`（dataSync 类型，会话 scope 挂服务不挂 ViewModel）、Keystore BYOK、SavedStateHandle 恢复向导。
 - **M5**：远程 MCP（Streamable HTTP 传输，工具层不变）、端间同步预留（事件流 + 版本向量 + 租约）。
+
+## v2 架构方向：数据层 server 化（已立项，见 docs/PRD/端云架构-数据层server化.md）
+
+端云分工已重新定义：**数据权威迁到 web server（`server/` 包，TS + Fastify + SQLite），runtime 留在端上（BYOK 直连模型）**。
+对本工程的影响：
+
+- `JournalStore` / 小说库接口不变，M4 增补 `HttpJournalStore` / `RemoteNovelStore` 实现（server REST + SSE）；
+  Room 降级为**读缓存**（SSE 事件失效）。
+- 审批门接 server 两段式队列：`onRequest` → `POST /v1/approvals`，任意端 resolve → SSE 决议回填
+  ApprovalGate——「手机挂起、桌面批」由此成立。
+- 租约由 server 仲裁（`POST /v1/leases`），run 执行前申请、心跳续期；多端只有一个能跑，其余只读看进度。
+- 认证（账号密码 + JWT 双令牌）见 `docs/PRD/认证-登录与多端会话.md`；BYOK key 永不进 server。
+- 跨端续跑 = server 重放 + 悬挂工具补完（本工程 `Recovery` 逻辑平移复用）+ 工具可用性声明降级。

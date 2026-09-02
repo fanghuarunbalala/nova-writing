@@ -32,13 +32,23 @@ class RoomJournalStore(
         lastSeq = db.journalDao().readAllRows().lastOrNull()?.seq ?: 0L
     }
 
-    override suspend fun appendSnapshot(runSeq: Int, messages: List<LLMessage>): JournalLine.Snapshot =
+    override suspend fun appendSnapshot(
+        runSeq: Int,
+        messages: List<LLMessage>,
+        definitionVersion: String?,
+    ): JournalLine.Snapshot =
         mutex.withLock {
             val seq = db.journalDao().insert(
-                JournalEventRow(runSeq = runSeq, kind = KIND_SNAPSHOT, payload = encode(messages))
+                JournalEventRow(
+                    runSeq = runSeq,
+                    kind = KIND_SNAPSHOT,
+                    payload = encode(messages),
+                    // definitionVersion 随 payload 行落库（读侧重放时从行 JSON 还原，见 readAll）
+                    extra = definitionVersion,
+                )
             )
             lastSeq = maxOf(lastSeq, seq)
-            JournalLine.Snapshot(seq, runSeq, messages)
+            JournalLine.Snapshot(seq, runSeq, messages, definitionVersion)
         }
 
     override suspend fun appendMessages(runSeq: Int, messages: List<LLMessage>): JournalLine.Append =
@@ -55,7 +65,10 @@ class RoomJournalStore(
         db.journalDao().readAllRows().forEach { row ->
             val messages = decode(row.payload)
             when (row.kind) {
-                KIND_SNAPSHOT -> runs[row.runSeq] = StoredRun(row.runSeq).apply { append(messages) }
+                KIND_SNAPSHOT -> runs[row.runSeq] = StoredRun(row.runSeq).apply {
+                    append(messages)
+                    definitionVersion = row.extra
+                }
                 else -> runs.getOrPut(row.runSeq) { StoredRun(row.runSeq) }.append(messages)
             }
         }

@@ -93,6 +93,9 @@ class AgentSession(
     model: String = "default",
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** 定义包（M2）：存在时压缩参数/审批覆盖由包装配，definitionVersion 落 journal。 */
+    private val definition: nova.agent.definition.DefinitionBundle? = null,
+    private val definitionCaps: nova.agent.definition.DefinitionAssembler.Capabilities? = null,
 ) {
     val scope = CoroutineScope(
         SupervisorJob() + dispatcher + CoroutineName("agent-session-$conversationId")
@@ -107,9 +110,16 @@ class AgentSession(
     val inbox = LoopInbox()
     private val steerChannel = Channel<String>(Channel.UNLIMITED)
 
-    private val registry = ToolRegistry().apply { tools.forEach { register(it) } }
+    private val registry = ToolRegistry().apply {
+        val assembler = definition?.let { nova.agent.definition.DefinitionAssembler(it) }
+        val effective = assembler?.applyToolPolicy(tools) ?: tools
+        effective.forEach { register(it) }
+    }
     private val toolDispatcher = ToolDispatcher(registry)
-    private val chain = CompactPolicyChain(journal, compactionConfig, defaultPolicies(compactionConfig, summarizer))
+    private val effectiveCompactionConfig = definition
+        ?.let { nova.agent.definition.DefinitionAssembler(it).toCompactionConfig() }
+        ?: compactionConfig
+    private val chain = CompactPolicyChain(journal, effectiveCompactionConfig, defaultPolicies(effectiveCompactionConfig, summarizer))
     private val loop = AgentLoop(
         conversationId = conversationId,
         provider = provider,
@@ -123,11 +133,22 @@ class AgentSession(
         model = model,
         clock = clock,
         steerSignals = steerChannel,
+        definitionVersion = definition?.definitionVersion,
     )
 
     private val seqCounter = AtomicInteger(0)
     private val runs = mutableListOf<StoredRun>()
     private var drainJob: Job? = null
+
+    init {
+        // 能力校验 fail-fast：包引用了端不支持的 renderer/policy/nudge/组 → 拒绝构造（回退缓存旧包由调用方处理）
+        if (definition != null && definitionCaps != null) {
+            val missing = nova.agent.definition.DefinitionAssembler(definition).validateCapabilities(definitionCaps)
+            require(missing.isEmpty()) {
+                "端能力不足以装配定义包 ${definition.definitionVersion}，缺失: $missing"
+            }
+        }
+    }
 
     @Volatile
     private var currentRunJob: Job? = null

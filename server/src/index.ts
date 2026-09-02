@@ -7,6 +7,7 @@ import { registerLedgerRoutes } from "./ledger.js";
 import { registerDomainRoutes } from "./domain.js";
 import { registerApprovalRoutes } from "./approvals.js";
 import { registerMemoryRoutes, newProjectId } from "./memory.js";
+import { registerDefinitionRoutes } from "./definitions.js";
 import type { FastifyInstance } from "fastify";
 
 export interface BuildOptions {
@@ -26,6 +27,7 @@ export async function buildServer(opts: BuildOptions = {}): Promise<{ app: Fasti
   registerDomainRoutes(app, db, hub, secret);
   registerApprovalRoutes(app, db, hub, secret);
   registerMemoryRoutes(app, db, hub, secret);
+  registerDefinitionRoutes(app, db, secret);
 
   // 项目路由（M1 owner-only）
   const guard = authGuard(secret);

@@ -24,7 +24,11 @@ interface JournalStore {
     /** 扫描既有文件恢复 lastSeq（容忍末尾断行）。幂等。 */
     suspend fun open()
 
-    suspend fun appendSnapshot(runSeq: Int, messages: List<LLMessage>): JournalLine.Snapshot
+    suspend fun appendSnapshot(
+        runSeq: Int,
+        messages: List<LLMessage>,
+        definitionVersion: String? = null,
+    ): JournalLine.Snapshot
 
     suspend fun appendMessages(runSeq: Int, messages: List<LLMessage>): JournalLine.Append
 
@@ -63,9 +67,13 @@ class JsonlJournalStore(
         }
     }
 
-    override suspend fun appendSnapshot(runSeq: Int, messages: List<LLMessage>): JournalLine.Snapshot =
+    override suspend fun appendSnapshot(
+        runSeq: Int,
+        messages: List<LLMessage>,
+        definitionVersion: String?,
+    ): JournalLine.Snapshot =
         mutex.withLock {
-            val line = JournalLine.Snapshot(seq = ++lastSeq, runSeq = runSeq, messages = messages)
+            val line = JournalLine.Snapshot(seq = ++lastSeq, runSeq = runSeq, messages = messages, definitionVersion = definitionVersion)
             writeLine(line)
             line
         }
@@ -91,7 +99,7 @@ class JsonlJournalStore(
                 return@forEachIndexed
             }
             when (decoded) {
-                is JournalLine.Snapshot -> runs[decoded.runSeq] = StoredRun(decoded.runSeq).apply { append(decoded.messages) }
+                is JournalLine.Snapshot -> runs[decoded.runSeq] = StoredRun(decoded.runSeq).apply { append(decoded.messages); definitionVersion = decoded.definitionVersion }
                 is JournalLine.Append -> runs.getOrPut(decoded.runSeq) { StoredRun(decoded.runSeq) }
                     .append(decoded.messages)
             }

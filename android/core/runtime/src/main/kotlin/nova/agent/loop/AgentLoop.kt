@@ -61,6 +61,8 @@ class AgentLoop(
     val maxTokens: Int? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val steerSignals: ReceiveChannel<String>? = null,
+    /** 本 run 装配所用的定义包版本（落 journal snapshot 行，重放解释的溯源标记）。 */
+    private val definitionVersion: String? = null,
 ) {
     private var batchSeq = 0
 
@@ -77,7 +79,7 @@ class AgentLoop(
         runs.add(currentRun)
         val ctx = LoopContext(runSeq, runs, model, sampling, maxTokens)
 
-        journal.appendSnapshot(runSeq, currentRun.messages.toList())
+        journal.appendSnapshot(runSeq, currentRun.messages.toList(), definitionVersion)
         emit(LoopEvent.RunStart(conversationId, runSeq))
         emit(LoopEvent.UserMessage(conversationId, runSeq, userText))
 

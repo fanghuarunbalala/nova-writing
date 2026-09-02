@@ -17,6 +17,8 @@ data class JournalEventRow(
     /** snapshot | append */
     val kind: String,
     val payload: String,
+    /** 附带元数据（snapshot 行存 definitionVersion）。 */
+    val extra: String? = null,
 )
 
 /**

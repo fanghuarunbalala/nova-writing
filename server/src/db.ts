@@ -101,6 +101,15 @@ function migrate(db: Database.Database): void {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (project_id, path)
     );
+
+    CREATE TABLE IF NOT EXISTS definitions (
+      definition_version TEXT PRIMARY KEY,
+      agent_type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      sha256 TEXT NOT NULL,
+      requires_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `);
 }
 

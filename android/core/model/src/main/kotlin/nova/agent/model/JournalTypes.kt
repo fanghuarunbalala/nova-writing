@@ -20,6 +20,8 @@ sealed interface JournalLine {
         override val seq: Long,
         val runSeq: Int,
         val messages: List<LLMessage>,
+        /** 该 run 使用的定义包版本（能力协商/重放解释的溯源标记，见定义包 PRD）。 */
+        val definitionVersion: String? = null,
     ) : JournalLine
 
     @Serializable
@@ -33,11 +35,13 @@ sealed interface JournalLine {
 
 /**
  * 重放出来的一个 run。summarized：T2 摘要折叠后置 true，只增不并、永不再摘要。
+ * definitionVersion：该 run 装配时使用的定义包版本（重放解释的溯源标记）。
  */
 data class StoredRun(
     val runSeq: Int,
     val messages: MutableList<LLMessage> = mutableListOf(),
     var summarized: Boolean = false,
+    var definitionVersion: String? = null,
 ) {
     /** 重放后追加（同一 run 的 append 行归并进同一 StoredRun）。 */
     fun append(messages: List<LLMessage>) {

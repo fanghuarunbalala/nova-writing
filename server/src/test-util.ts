@@ -69,7 +69,7 @@ export async function acquireLease(app: FastifyInstance, s: Session, conversatio
 export function openSse(baseUrl: string, query: string, headers: Record<string, string>) {
   const controller = new AbortController();
   const events: any[] = [];
-  let resolveReady: () => void;
+  let resolveReady: () => void = () => {};
   const ready = new Promise<void>((r) => (resolveReady = r));
   (async () => {
     try {

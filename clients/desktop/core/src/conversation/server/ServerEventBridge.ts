@@ -38,6 +38,8 @@ export class ServerEventBridge {
 	private since: number;
 	private stopped = false;
 	private loopPromise: Promise<void> | undefined;
+	/** 当前连接的取消器（stop 时中断挂起的 fetch/流读取，否则 runLoop 卡在读流里无法退出） */
+	private abortController: AbortController | undefined;
 	/** 测试钩子：等待下一次重连调度 */
 	protected nextSchedule: () => void = () => {};
 
@@ -60,6 +62,7 @@ export class ServerEventBridge {
 
 	async stop(): Promise<void> {
 		this.stopped = true;
+		this.abortController?.abort();
 		await this.loopPromise;
 		this.loopPromise = undefined;
 		this.opts.onStateChange?.("closed");
@@ -77,7 +80,10 @@ export class ServerEventBridge {
 					since: String(this.since),
 					...(this.opts.conversationId !== undefined ? { conversationId: this.opts.conversationId } : {}),
 				});
-				const response = await this.fetchImpl(`${this.opts.url}/v1/events?${query.toString()}`);
+				this.abortController = new AbortController();
+				const response = await this.fetchImpl(`${this.opts.url}/v1/events?${query.toString()}`, {
+					signal: this.abortController.signal,
+				});
 				if (!response.ok || response.body === null) throw new Error(`SSE 连接失败 ${response.status}`);
 				this.opts.onStateChange?.("open");
 				backoffIndex = 0;

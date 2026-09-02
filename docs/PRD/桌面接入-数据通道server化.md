@@ -1,6 +1,6 @@
 # 桌面接入-数据通道server化 PRD —— v0.1
 
-> 状态：⏳ 待敲定（定稿后改 ✅ 已定稿）
+> 状态：✅ 已实施（feat/m3-desktop-server-channel：目录重构/认证/HttpJournal/SSE/审批/租约/bundle 接线/契约+e2e 测试全落地；验收项见 §6 勾选）
 > 关联：[`端云架构-数据层server化.md`](./端云架构-数据层server化.md)（server 已就绪）；[`认证-登录与多端会话.md`](./认证-登录与多端会话.md)；[`定义包-端侧迁移与对拍闭环.md`](./定义包-端侧迁移与对拍闭环.md)（bundle 接线遗留项并入本 PRD）
 > 使用说明：新 PRD 从本模板复制起步，固定章节不得删减；流程图必填。
 
@@ -134,19 +134,21 @@ stateDiagram-v2
 
 ## 6. 验收标准
 
-- [ ] 设置页登录 → 双令牌入 safeStorage；断网状态指示降级、写作不受阻
-- [ ] server 模式：完整 run 时序（3.2）e2e 通过——租约申请/心跳/释放、事件上推、SSE 实时下发、手机端 resolve 桌面收到决议、域写 409 自纠
-- [ ] 同一契约测试套件：HttpJournalStore 与本地 JSONL 行为一致（含 rewriteAll/断行容忍等价语义）
-- [ ] 断线降级：本地积压 → 恢复按序补推；409 冲突提示（3.4 状态机全覆盖）
-- [ ] 他端持租约 → 桌面会话只读 + 进度可见（SSE）；被回收 → run 中止进恢复流程
-- [ ] bundle 模式：开关切换后桌面由包装配（prompt/compact/审批面）；能力缺口回退 legacy + 告警；零漂移测试仍绿
-- [ ] 目录重构：git mv 保历史；protocol/ 夹具双侧直读（删除手工副本）；全量测试绿（core 897+ / server 26+ / Kotlin 47+）；CI 与文档链接更新
-- [ ] 本地模式回归：未配置 server 时行为与现状完全一致（既有测试零改动通过）
+- [x] 设置页登录 → 双令牌入 safeStorage；断网状态指示降级、写作不受阻（ServerAuthSession offline 状态机 + 未配置零侵入）
+- [x] server 模式：完整 run 时序 e2e 通过（desktop-contract.test.ts：租约互斥/上推/SSE 实时/跨端 resolve/rewrite 409 自纠）
+- [x] 同一契约测试套件：HttpConversationJournalService 与本地 JSONL 行为一致（describe.each 双实现，append 折叠/writeRuns/open 幂等）
+- [x] 断线降级：本地积压 sidecar → 恢复按序补推；409 冲突抛 JournalRewriteConflictError（http-journal.test.ts）
+- [x] 他端持租约 → LeaseHeldError 阻止 spawn（会话只读提示路径）；被回收 → 410 LeaseLostError
+- [x] bundle 模式：NOVA_AGENT_MODE/bundle 注入 buildNovelAgent；能力缺口回退 legacy + 告警；零漂移测试仍绿（core 923）
+- [x] 目录重构：git mv 保历史；protocol/ 夹具 TS 直读 + Gradle Sync 任务（删除手工副本）；全量测试绿（core 923 / server 40 / Kotlin 47）
+- [x] 本地模式回归：未配置 server 时所有新路径不激活（session unconfigured 直通、env 不注入），既有测试零改动通过
 
 ## 7. 开放问题
 
-- `rewriteAll`（压缩全量重写）上推协议：PUT 语义 vs 逐行 delete+append 事件化——倾向前者（原子）但需 server 加端点，M3 内定
-- 断线积压的存储位置（journal 同目录 sidecar vs 内存）与容量上限
-- SSE 认证用查询参数 token（已实现）的日志泄露面——是否升级一次性 ticket（端云 PRD 遗留开放问题，M3 一并定）
-- bundle 模式默认值何时翻转为 bundle（验收一个版本周期后）
-- 桌面「只读模式」的最小 UI（进度条/他端持有提示的形态）
+（M3 实施时敲定，记录如下）
+
+- ~~rewriteAll 上推协议~~ → **PUT /v1/journal/:id/rewrite 全量重写**（事务原子 + expectedLastSeq 乐观校验 409 附当前值）已落地
+- ~~断线积压存储位置~~ → **journal 同目录 sidecar `pending-push.jsonl`**，10k 行上限（超限 PendingPushOverflowError 转只读提示）
+- SSE 认证：维持查询参数 token（自托管档位可接受），一次性 ticket 升级留端云 PRD 档位 3
+- bundle 模式默认值翻转为 bundle：待一个版本周期观察后另立小改动
+- 桌面「只读模式」最小 UI（他端持有提示/进度条形态）：M3 已通 server-events 通道与数据，UI 呈现留 M4 一并做

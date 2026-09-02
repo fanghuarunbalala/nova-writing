@@ -1140,18 +1140,25 @@ async function readRunsFromServer(
 	}
 	if (response.status !== 200) return [];
 	const body = (await response.json()) as {
-		events?: Array<{ seq?: number; run_seq?: number; kind?: string; payload?: unknown; created_at?: number }>;
+		events?: Array<{ seq?: number; run_seq?: number; kind?: string; payload?: string; created_at?: number }>;
 	};
 	const byRun = new Map<number, { seq: number; messages: import("../../runtime/provider/types.js").LLMessage[]; ts?: string }>();
 	for (const event of body.events ?? []) {
 		const runSeq = event.run_seq ?? 0;
+		// replay 行的 payload 是 JSON 字符串（server 原样返回存储列），先 parse 再折叠
+		let payload: unknown;
+		try {
+			payload = JSON.parse(event.payload ?? "null");
+		} catch {
+			payload = null;
+		}
 		if (event.kind === "snapshot") {
-			const run = Array.isArray(event.payload) ? (event.payload[0] as { messages?: unknown }) : undefined;
+			const run = Array.isArray(payload) ? (payload[0] as { messages?: unknown }) : undefined;
 			const messages = (run?.messages ?? []) as import("../../runtime/provider/types.js").LLMessage[];
 			byRun.set(runSeq, { seq: runSeq, messages, ts: event.created_at ? new Date(event.created_at).toISOString() : undefined });
 		} else if (event.kind === "append" && byRun.has(runSeq)) {
 			const entry = byRun.get(runSeq)!;
-			entry.messages = [...entry.messages, ...((event.payload ?? []) as import("../../runtime/provider/types.js").LLMessage[])];
+			entry.messages = [...entry.messages, ...((Array.isArray(payload) ? payload : []) as import("../../runtime/provider/types.js").LLMessage[])];
 		}
 	}
 	return [...byRun.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);

@@ -1,5 +1,6 @@
 /** Novel 前端公共出口：新架构（spec 前端架构设计）扁平导出。 */
 export * from "./app/index.js";
+export * from "./auth/index.js";
 export * from "./command/index.js";
 export * from "./domains/index.js";
 export * from "./extensions/index.js";

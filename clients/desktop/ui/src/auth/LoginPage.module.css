@@ -1,0 +1,266 @@
+/**
+ * LoginPage 视觉（docs/design-demos/login-page-demo.html 定稿对齐）：
+ * 全屏 bg 居中 surface 卡（400px）——品牌区（渐变方标 + 名称/标语）→ 标题/导语 →
+ * 表单三字段（地址带推荐徽标）→ 主按钮 → 次级辅助行（本地模式 · 注册）→ 信任脚注。
+ * 颜色/圆角/阴影/动画全部走 tokens（主题纪律：模块内零颜色字面量）。
+ */
+.page {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg);
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.card {
+  width: min(400px, 100%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: var(--space-8) var(--space-10) var(--space-6);
+  animation: var(--anim-view-in) 0.4s var(--ease-out) both;
+}
+
+/* 品牌区：渐变方标（对齐 demo brandMark）+ 名称/标语 */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.brandMark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--grad-accent);
+  display: grid;
+  place-items: center;
+  color: var(--color-on-accent);
+  font-family: var(--font-body);
+  font-size: var(--fs-18);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.03em;
+}
+
+.brandName {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  color: var(--color-fg);
+}
+
+.brandTag {
+  font-family: var(--font-kai);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+}
+
+.title {
+  margin: var(--space-6) 0 0;
+  font-size: var(--fs-22);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  color: var(--color-fg);
+}
+
+.lede {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-h2);
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+
+/* 表单 */
+.form {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+}
+
+.field {
+  margin-bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-1-5px);
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+}
+
+.badge {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--color-accent);
+  background: var(--color-accent-8-transparent);
+  border-radius: var(--radius-pill);
+  padding: var(--space-1-5px) var(--space-2);
+}
+
+.fieldHint {
+  margin-top: var(--space-1);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: var(--color-faint);
+}
+
+.passwordWrap {
+  position: relative;
+}
+
+.passwordWrap input {
+  width: 100%;
+  padding-right: var(--space-10);
+}
+
+.togglePassword {
+  position: absolute;
+  right: var(--space-1);
+  top: 50%;
+  transform: translateY(-50%);
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+  background: none;
+  border: 0;
+  padding: var(--space-1-5px) var(--space-2);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.togglePassword:hover {
+  color: var(--color-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+}
+
+.errorBanner {
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-h2);
+  line-height: 1.5;
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  animation: var(--anim-failed-shake) 0.3s var(--ease-out);
+}
+
+/* 次级辅助行：本地模式（faint）· 注册（accent 弱突出） */
+.auxRow {
+  margin-top: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.skipLink,
+.registerLink,
+.backLink {
+  font: inherit;
+  font-size: var(--fs-h2);
+  color: var(--color-faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.skipLink:hover,
+.backLink:hover {
+  color: var(--color-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.registerLink {
+  color: var(--color-accent);
+}
+
+.registerLink:hover {
+  filter: brightness(1.1);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auxDivider {
+  color: var(--color-border-strong);
+}
+
+.footnote {
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--fs-meta);
+  line-height: 1.7;
+  text-align: center;
+  color: var(--color-faint);
+}
+
+/* 成功态 */
+.successIcon {
+  width: 46px;
+  height: 46px;
+  margin: var(--space-2) auto 0;
+  border-radius: 50%;
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-22);
+}
+
+.successTitle {
+  margin: var(--space-4) 0 0;
+  text-align: center;
+  font-size: 17px;
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.successMeta {
+  margin: var(--space-2) 0 0;
+  text-align: center;
+  font-size: var(--fs-h2);
+  color: var(--color-muted);
+}
+
+.successMeta .mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--color-faint);
+  margin-left: var(--space-1);
+}
+
+.successNote {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-5);
+  font-size: var(--fs-meta);
+  line-height: 1.7;
+  color: var(--color-faint);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.successNote + button {
+  margin-top: 0;
+}
+
+.card > button {
+  width: 100%;
+}

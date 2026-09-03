@@ -1,8 +1,13 @@
 /**
  * runtime.files 工具组（Read / Glob / Write / Edit）——从旧 main 分支迁移。
  * 参数与行为对齐 CCB（file_path workspace 相对、沙盒限定、512KiB 上限）。
+ *
+ * ProjectFiles port（项目域上云 PRD FR5）：工具面只依赖接口，后端可换——
+ * - LocalProjectFiles：本地 workspace（node:fs + 既有沙盒，现状逻辑原样）；
+ * - RemoteProjectFiles：云项目（REST 到 server 文件 API，沙箱由 server 权威判定）；
+ * 工具 schema / prompt 面不随后端变化（模型无感知）。
  */
-import { readFile, writeFile, mkdir, readdir, stat, rename, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rename, rm } from "node:fs/promises";
 import { realpath } from "node:fs/promises";
 import { join, resolve, relative, sep, dirname } from "node:path";
 import type { ToolDef } from "../ToolDef.js";
@@ -13,8 +18,23 @@ import { ToolError } from "../errors.js";
 const PATH_MAX = 1024;
 const CONTENT_MAX = 512 * 1024;
 
+/** 文件后端原语：路径校验/沙盒由实现自持（工具不重复判定） */
+export interface ProjectFiles {
+  /** 读单个文件全文；不存在/越界抛错 */
+  read(relPath: string): Promise<string>;
+  /** 列出 prefix 前缀下的文件（相对路径 + 更新时间；本地可能不带 updatedAt） */
+  list(prefix: string): Promise<Array<{ path: string; updatedAt?: number }>>;
+  /** 整体写入（last-write-wins，对齐本地原子写语义；内容上限由实现/工具双重校验） */
+  write(relPath: string, content: string): Promise<void>;
+}
+
 /** 沙盒路径解析：workspace 相对路径 → 绝对路径，校验不逃逸沙盒（含 symlink 防护） */
-async function resolveInWorkspace(workspace: string, filePath: string): Promise<string> {
+export async function resolveInWorkspace(workspace: string, filePath: string): Promise<string> {
+  // 绝对形态显式拒绝（posix /、Windows 盘符、UNC \\）：resolve 会把它们当作外部根，
+  // relative 跨根的行为不保证产生 ".." 前缀（UNC 即对拍实测漏网形态）
+  if (filePath.startsWith("/") || filePath.startsWith("\\\\") || /^[a-zA-Z]:/.test(filePath)) {
+    throw new Error(`路径逃逸 workspace 沙盒: ${filePath}`);
+  }
   const abs = resolve(workspace, filePath);
   const rel = relative(workspace, abs);
   if (rel.startsWith("..") || rel.split(sep)[0] === ".." || abs === resolve(workspace)) {
@@ -74,6 +94,49 @@ async function writeFileAtomic(abs: string, content: string): Promise<void> {
   }
 }
 
+/** 本地 workspace 后端（现状逻辑原样收敛为 ProjectFiles） */
+export class LocalProjectFiles implements ProjectFiles {
+  constructor(private readonly workspace: string) {}
+
+  async read(relPath: string): Promise<string> {
+    const abs = await resolveInWorkspace(this.workspace, relPath);
+    return readFile(abs, "utf8");
+  }
+
+  async list(prefix: string): Promise<Array<{ path: string }>> {
+    const out: string[] = [];
+    await walkList(this.workspace, this.workspace, out);
+    return out
+      .map((p) => p.split(sep).join("/"))
+      .filter((p) => p.startsWith(prefix))
+      .map((path) => ({ path }));
+  }
+
+  async write(relPath: string, content: string): Promise<void> {
+    const abs = await resolveInWorkspace(this.workspace, relPath);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFileAtomic(abs, content);
+  }
+}
+
+/** 递归列出全部文件（相对 workspace 原生分隔符） */
+async function walkList(root: string, dir: string, out: string[]): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    const abs = join(dir, e.name);
+    if (e.isDirectory()) {
+      await walkList(root, abs, out);
+    } else {
+      out.push(relative(root, abs));
+    }
+  }
+}
+
 /** 解析 tool args JSON，校验必填 file_path */
 function parseArgs(call: ToolCall): Record<string, unknown> {
   try {
@@ -87,28 +150,29 @@ function parseArgs(call: ToolCall): Record<string, unknown> {
 }
 
 /**
- * 创建 files 四件套 ToolDef（handler 闭包 workspace 做沙盒限定）
- * @param workspace 工作区绝对路径
+ * 创建 files 四件套 ToolDef（后端可注入——本地 workspace 字符串或 ProjectFiles port）
+ * @param backend workspace 绝对路径（本地项目）或 ProjectFiles 实现（云项目）
  * @param options approval=false 时 Write/Edit 免审批（后台非交互会话用，如
  *   BookAnalyst 的 analyst.files 组——无人应答审批，requireApproval 会永久挂起）
  * @returns Read/Glob/Write/Edit 四个工具定义
  */
 export function createFileTools(
-  workspace: string,
+  backend: string | ProjectFiles,
   options?: { requireApproval?: boolean },
 ): ToolDef[] {
-  // 文件写默认免审批：workspace 沙盒内、本地可逆，对齐主代理「本地可逆动作可直接做」
+  // 文件写默认免审批：workspace 沙盒内、本地可逆，对齐主代理「本地可逆动作可以直接做」
   // （谨慎行动段）；显式 requireApproval: true 才强制征询（预留未来高风险文件会话）。
   const approval = options?.requireApproval === true;
+  const files: ProjectFiles = typeof backend === "string" ? new LocalProjectFiles(backend) : backend;
   return [
-    readTool(workspace),
-    globTool(workspace),
-    writeTool(workspace, approval),
-    editTool(workspace, approval),
+    readTool(files),
+    globTool(files),
+    writeTool(files, approval),
+    editTool(files, approval),
   ];
 }
 
-function readTool(workspace: string): ToolDef {
+function readTool(files: ProjectFiles): ToolDef {
   return {
     name: "Read",
     version: "1.0.0",
@@ -132,8 +196,7 @@ function readTool(workspace: string): ToolDef {
     handler: {
       execute: async (call) => {
         const args = parseArgs(call);
-        const abs = await resolveInWorkspace(workspace, String(args.file_path));
-        const content = await readFile(abs, "utf8");
+        const content = await files.read(String(args.file_path));
         if (content.length > CONTENT_MAX) throw new Error("文件超过 512 KiB，请分段读取");
         const lines = content.split("\n");
         const offset = typeof args.offset === "number" ? args.offset : 0;
@@ -145,7 +208,7 @@ function readTool(workspace: string): ToolDef {
   };
 }
 
-function globTool(workspace: string): ToolDef {
+function globTool(files: ProjectFiles): ToolDef {
   return {
     name: "Glob",
     version: "1.0.0",
@@ -168,15 +231,17 @@ function globTool(workspace: string): ToolDef {
         const pattern = String(args.pattern);
         if (pattern.startsWith("/") || pattern.includes("..")) throw new Error("非法 glob 模式");
         const regex = globToRegex(pattern);
-        const matches: string[] = [];
-        await walk(workspace, workspace, regex, matches);
-        return matches.join("\n");
+        // 用模式的静态前缀缩小列举面（远程后端一次 list(prefix) 而非全量）
+        const entries = await files.list(globStaticPrefix(pattern));
+        const matched = entries.filter((e) => regex.test(e.path));
+        matched.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+        return matched.map((e) => e.path).join("\n");
       },
     },
   };
 }
 
-function writeTool(workspace: string, approval: boolean): ToolDef {
+function writeTool(files: ProjectFiles, approval: boolean): ToolDef {
   return {
     name: "Write",
     version: "1.0.0",
@@ -207,16 +272,14 @@ function writeTool(workspace: string, approval: boolean): ToolDef {
         const args = parseArgs(call);
         const content = String(args.content);
         if (content.length > CONTENT_MAX) throw new Error("内容超过 512 KiB");
-        const abs = await resolveInWorkspace(workspace, String(args.file_path));
-        await mkdir(dirname(abs), { recursive: true });
-        await writeFileAtomic(abs, content);
+        await files.write(String(args.file_path), content);
         return `已写入 ${args.file_path}`;
       },
     },
   };
 }
 
-function editTool(workspace: string, approval: boolean): ToolDef {
+function editTool(files: ProjectFiles, approval: boolean): ToolDef {
   return {
     name: "Edit",
     version: "1.0.0",
@@ -244,19 +307,27 @@ function editTool(workspace: string, approval: boolean): ToolDef {
     handler: {
       execute: async (call) => {
         const args = parseArgs(call);
-        const abs = await resolveInWorkspace(workspace, String(args.file_path));
+        const relPath = String(args.file_path);
         const oldStr = String(args.old_string);
         const newStr = String(args.new_string);
-        const content = await readFile(abs, "utf8");
+        const content = await files.read(relPath);
         if (!content.includes(oldStr)) throw new Error("old_string 未在文件中命中");
         const replaceAll = args.replace_all === true;
         const result = replaceAll ? content.split(oldStr).join(newStr) : content.replace(oldStr, newStr);
         if (result.length > CONTENT_MAX) throw new Error("结果超过 512 KiB");
-        await writeFileAtomic(abs, result);
+        await files.write(relPath, result);
         return `已替换${replaceAll ? "（全部）" : ""}`;
       },
     },
   };
+}
+
+/** glob 模式的静态前缀（首个通配符前的目录段，含尾 /）；用于缩小 list 面 */
+function globStaticPrefix(pattern: string): string {
+  const idx = pattern.search(/[*?]/);
+  const head = idx === -1 ? pattern : pattern.slice(0, idx);
+  const slash = head.lastIndexOf("/");
+  return slash === -1 ? "" : head.slice(0, slash + 1);
 }
 
 /** 简单 glob → 正则（支持单星、双星与多级通配） */
@@ -284,23 +355,4 @@ function globToRegex(pattern: string): RegExp {
     }
   }
   return new RegExp(`^${re}$`);
-}
-
-/** 递归遍历匹配 glob */
-async function walk(root: string, dir: string, regex: RegExp, out: string[]): Promise<void> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const e of entries) {
-    const abs = join(dir, e.name);
-    const rel = relative(root, abs).split(sep).join("/");
-    if (e.isDirectory()) {
-      await walk(root, abs, regex, out);
-    } else if (regex.test(rel)) {
-      out.push(rel);
-    }
-  }
 }

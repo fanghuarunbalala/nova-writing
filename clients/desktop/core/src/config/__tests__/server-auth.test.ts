@@ -122,6 +122,25 @@ describe("ServerAuthSession", () => {
 		expect(touched).toBe(false);
 	});
 
+	it("restore 末尾发状态通知（首次登录 url 补设场景：login emit 时 url 未就位）", async () => {
+		const fetchMock: FetchLike = async (url) => {
+			if (url.endsWith("/v1/auth/login")) {
+				return jsonResponse(200, { deviceId: "dev_1", accessToken: "a0", refreshToken: "r0" });
+			}
+			return jsonResponse(404, {});
+		};
+		const { session } = makeSession(fetchMock);
+		const states: ServerAuthState[] = [];
+		session.onStatusChange((s) => states.push(s));
+		await session.restore(undefined);
+		await session.login(new ServerAuthClient("http://srv", fetchMock), "alice", "pw12345678", "桌面端");
+		await session.restore("http://srv"); // ConfigServer.serverLogin 的落地路径
+		// 第二次通知（restore 补发）时 url 已就位 → ensureAccessToken 可用
+		const withUrl = states.find((s) => s.url === "http://srv");
+		expect(withUrl).toMatchObject({ status: "online", username: "alice" });
+		expect(states.length).toBeGreaterThanOrEqual(2);
+	});
+
 	it("注册：201 直接返回双令牌 → 注册即登录（状态在线）", async () => {
 		const fetchMock: FetchLike = async (url) => {
 			if (url.endsWith("/v1/auth/register")) {

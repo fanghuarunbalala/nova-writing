@@ -7,7 +7,7 @@
  * 老 main 进程（无 serverLogin/serverRegister 方法）降级：注册入口隐藏、登录给出提示。
  */
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, RefreshCw, ShieldCheck, Smartphone } from "lucide-react";
 import type { ServerAuthState } from "@novel/core";
 import type { ApplicationConfigurationClient } from "../settings/ApplicationConfigurationClient.js";
 import { Button } from "../shared/primitives/Button.js";
@@ -148,7 +148,30 @@ export function LoginPage({ configuration, onSkip, onEnterWorkspace }: LoginPage
   // ---- 表单态 ----
   const copy = MODE_COPY[mode];
   return (
-    <div className={styles.page} aria-label="登录同步服务">
+    <div className={`${styles.page} ${styles.split}`} aria-label="登录同步服务">
+      {/* 宽窗口左侧品牌/价值区（<960px 隐藏，回落居中单卡）——消除大画布上的空旷感 */}
+      <aside className={styles.hero} aria-hidden="true">
+        <div className={styles.heroBrand}>
+          <span className={styles.brandMark} aria-hidden="true">N</span>
+          <span className={styles.brandName}>Nova Writing</span>
+        </div>
+        <p className={styles.heroTag}>把一桩旧事，写成一本新书——<br />现在，每一端都是同一本书。</p>
+        <ul className={styles.heroPoints}>
+          <li>
+            <Icon icon={RefreshCw} size="sm" />
+            <span>实时同步——会话数据上推你自己的 server</span>
+          </li>
+          <li>
+            <Icon icon={Smartphone} size="sm" />
+            <span>多端接续——手机查看进度、任意设备续写</span>
+          </li>
+          <li>
+            <Icon icon={ShieldCheck} size="sm" />
+            <span>本地优先——不登录也完整可用，数据不出你的电脑</span>
+          </li>
+        </ul>
+      </aside>
+      <div className={styles.formSide}>
       <div className={styles.card}>
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true">N</span>
@@ -274,6 +297,7 @@ export function LoginPage({ configuration, onSkip, onEnterWorkspace }: LoginPage
           <br />
           未登录也可完整使用本地写作功能；随时可在 设置 → Server 登录
         </p>
+      </div>
       </div>
     </div>
   );

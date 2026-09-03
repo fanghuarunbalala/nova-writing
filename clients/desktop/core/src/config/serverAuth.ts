@@ -238,6 +238,10 @@ export class ServerAuthSession {
 		this.deviceId = persisted?.deviceId;
 		this.needRelogin = false;
 		this.offline = false;
+		// 状态通知：登录落地路径是 login(emit) → 宿主写配置 → restore(设 url)——
+		// 首次登录时 emit 早于 url 就位（ensureAccessToken 返回空，access 文件未写、
+		// SSE 桥未起订），restore 末尾补发使下游（writeServerAccessFile/桥）拿到完整态
+		this.emit();
 		return this.state();
 	}
 

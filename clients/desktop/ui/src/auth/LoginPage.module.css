@@ -18,6 +18,76 @@
   z-index: var(--z-launch);
 }
 
+.split {
+  align-items: center;
+}
+
+@media (min-width: 960px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--space-10);
+    padding: var(--space-8) var(--space-16);
+  }
+}
+
+.hero {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-5);
+    max-width: 480px;
+    padding-left: var(--space-10);
+    animation: var(--anim-view-in) 0.5s 0.05s var(--ease-out) both;
+  }
+}
+
+.heroBrand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.heroTag {
+  margin: 0;
+  font-family: var(--font-kai);
+  font-size: var(--fs-display);
+  line-height: 1.7;
+  color: var(--color-muted);
+}
+
+.heroPoints {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.heroPoints li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--fs-h2);
+  color: var(--color-muted);
+}
+
+.heroPoints svg {
+  color: var(--color-accent-ink);
+  flex: none;
+}
+
+.formSide {
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
 .card {
   width: min(400px, 100%);
   background: var(--color-surface);

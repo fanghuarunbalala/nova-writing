@@ -5,6 +5,8 @@
  * 颜色/圆角/阴影/动画全部走 tokens（主题纪律：模块内零颜色字面量）。
  */
 .page {
+  position: fixed;
+  inset: 0;
   height: 100%;
   min-height: 0;
   display: grid;
@@ -12,6 +14,8 @@
   background: var(--color-bg);
   overflow-y: auto;
   padding: var(--space-8) var(--space-4);
+  /* 盖过向导/设置对话框（z 50/51）；与启动遮罩同层（登录门期不会同时出现启动编排） */
+  z-index: var(--z-launch);
 }
 
 .card {
@@ -227,7 +231,7 @@
 .successTitle {
   margin: var(--space-4) 0 0;
   text-align: center;
-  font-size: 17px;
+  font-size: var(--fs-16-5);
   font-weight: var(--fw-semibold);
   color: var(--color-fg);
 }
@@ -241,7 +245,7 @@
 
 .successMeta .mono {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--fs-12-5);
   color: var(--color-faint);
   margin-left: var(--space-1);
 }

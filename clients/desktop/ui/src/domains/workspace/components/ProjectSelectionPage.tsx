@@ -10,8 +10,9 @@
  * 整页缩放模糊退场（welcome-leave），后续由 NovelApp 的启动编排接管（分步加载遮罩
  * → 工作台 boot-in）。
  */
-import { ArrowRight, FileUp, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Cloud, FileUp, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { useState, type CSSProperties } from "react";
+import type { ServerAuthState } from "@novel/core";
 import type {
   WorkspaceControllerSnapshot,
   WorkspaceSessionView,
@@ -66,6 +67,12 @@ export interface ProjectSelectionPageProps {
   readonly onDeleteRecent: (workspaceId: string) => Promise<boolean>;
   /** 重开新手引导向导（缺省隐藏入口） */
   readonly onOpenGuide?: () => void;
+  /** server 登录状态（缺省 undefined = 宿主未接线，隐藏同步入口卡） */
+  readonly serverAuthState?: ServerAuthState;
+  /** 打开登录页（未登录入口卡点击；清跳过记忆重开登录门） */
+  readonly onOpenLogin?: () => void;
+  /** 已登录态点击入口卡 → 设置 → Server（设备管理/登出） */
+  readonly onOpenSettings?: () => void;
 }
 
 export function ProjectSelectionPage({
@@ -76,6 +83,9 @@ export function ProjectSelectionPage({
   onOpenRecent,
   onDeleteRecent,
   onOpenGuide,
+  serverAuthState,
+  onOpenLogin,
+  onOpenSettings,
 }: ProjectSelectionPageProps) {
   const busy =
     snapshot.phase === "loading" ||
@@ -108,6 +118,36 @@ export function ProjectSelectionPage({
           <div className={styles.brandName}>Novel</div>
           <div className={styles.brandTag}>把一桩旧事，写成一本新书。</div>
         </div>
+        {serverAuthState !== undefined && onOpenLogin !== undefined ? (
+          <button
+            type="button"
+            className={styles.syncCard}
+            data-online={serverAuthState.username !== undefined ? "true" : undefined}
+            onClick={serverAuthState.username !== undefined ? onOpenSettings : onOpenLogin}
+          >
+            <span className={styles.syncIcon} aria-hidden="true">
+              <Icon icon={Cloud} size="sm" />
+            </span>
+            <span className={styles.syncText}>
+              {serverAuthState.username !== undefined ? (
+                <>
+                  <strong className={styles.syncTitle}>
+                    已连接同步 · {serverAuthState.username}
+                  </strong>
+                  <small className={styles.syncSub}>点击管理设备与连接（设置 → Server）</small>
+                </>
+              ) : (
+                <>
+                  <strong className={styles.syncTitle}>登录同步服务</strong>
+                  <small className={styles.syncSub}>多端接续——手机查看进度、任意设备续写</small>
+                </>
+              )}
+            </span>
+            <span className={styles.projOpen} aria-hidden="true">
+              <Icon icon={ArrowRight} size="sm" />
+            </span>
+          </button>
+        ) : null}
         <h2 className={styles.secTitle}>最近的项目</h2>
         {snapshot.recent.length === 0 ? (
           <p className={styles.empty}>还没有打开过项目——从下方「新建项目」开始</p>

@@ -157,6 +157,69 @@
   cursor: default;
 }
 
+/* 同步入口卡（登录页的欢迎页常驻入口）：比项目卡更低调（surface-2 底、无边框卡感），
+   未登录点击开登录门；已在线展示 用户名 并转设置管理 */
+.syncCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  margin-bottom: var(--space-26px);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+  animation: var(--anim-view-in) 0.5s 0.1s var(--ease-out) both;
+}
+
+.syncCard:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
+}
+
+.syncIcon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-ink);
+  background: var(--color-accent-8-transparent);
+}
+
+.syncCard[data-online="true"] .syncIcon {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.syncText {
+  flex: 1;
+  min-width: 0;
+}
+
+.syncTitle {
+  display: block;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  color: var(--color-fg);
+}
+
+.syncSub {
+  display: block;
+  margin-top: var(--space-2px);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .projCover {
   width: 46px;
   height: 60px;

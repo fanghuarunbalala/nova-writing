@@ -8,10 +8,16 @@
  * platform/commandSource/configurationClient 保留在 props 表面（组合层契约）；
  * 桌面专属扩展槽（titlebar/commands）在壳加扩展点后接入（Phase B）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Logger, NovelApiClient } from "@novel/core";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { Logger, NovelApiClient, ServerAuthState } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 import type { ApplicationCommandSource } from "../command/index.js";
+import {
+  clearLoginGateSkip,
+  hasSkippedLoginGate,
+  LoginPage,
+  markLoginGateSkipped,
+} from "../auth/index.js";
 import {
   completeOnboarding,
   hasCompletedOnboarding,
@@ -156,6 +162,68 @@ function NovelAppReady({
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  // 登录门（本地模式缺省 · opt-in 引导）：undecided 期用不透明底遮欢迎页防闪；
+  // 未登录且未曾跳过 → open；跳过记住（localStorage），欢迎页/设置入口可重开
+  const [loginGate, setLoginGate] = useState<"undecided" | "open" | "closed">("undecided");
+  const [serverAuthState, setServerAuthState] = useState<ServerAuthState | undefined>(undefined);
+  const refreshServerAuth = useCallback(async () => {
+    const pending = configurationClient?.serverAuth?.();
+    if (pending === undefined) return;
+    try {
+      setServerAuthState(await pending);
+    } catch {
+      // 查询失败维持现状
+    }
+  }, [configurationClient]);
+  useEffect(() => {
+    void refreshServerAuth();
+  }, [refreshServerAuth]);
+  useEffect(() => {
+    if (configurationClient === undefined) {
+      setLoginGate("closed");
+      return;
+    }
+    const fetchState = configurationClient.serverAuth;
+    if (fetchState === undefined) {
+      setLoginGate("closed");
+      return;
+    }
+    if (hasSkippedLoginGate()) {
+      setLoginGate("closed");
+      return;
+    }
+    let cancelled = false;
+    const pending = fetchState();
+    if (pending !== undefined) {
+      void pending
+        .then((state) => {
+          if (cancelled) return;
+          // 已登录（username）或曾配置过 server.url → 不拦；纯 unconfigured → 弹登录门
+          if (state === undefined || state.username !== undefined || state.url !== undefined) {
+            setLoginGate("closed");
+          } else {
+            setLoginGate("open");
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setLoginGate("open");
+        });
+    } else {
+      // 老 main 进程返回空（方法存在但调用未定义面）按未登录处理
+      setLoginGate("open");
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [configurationClient]);
+  const closeLoginGate = useCallback(() => {
+    setLoginGate("closed");
+    void refreshServerAuth();
+  }, [refreshServerAuth]);
+  const openLoginGate = useCallback(() => {
+    clearLoginGateSkip();
+    setLoginGate("open");
+  }, []);
   // 从文件导入创建项目（欢迎页入口；对话框自管流程，成功后交回常规打开编排）
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   // 导入解构进度（当前项目 analyzing 期间 3s 轮询；右下角浮标 + 完成/失败 toast）
@@ -205,9 +273,11 @@ function NovelAppReady({
     void workspaceController.openStartupWorkspace();
   }, [workspaceController]);
   // 首启新手引导：有配置客户端（桌面宿主）且未完成时弹向导。完成标记优先主进程文件
-  // （跨实例一致可见），localStorage 仅作回退与一次性迁移源
+  // （跨实例一致可见），localStorage 仅作回退与一次性迁移源。
+  // 登录门打开期间暂缓（先登录/跳过，再引导——两层门不叠加）
   useEffect(() => {
     if (configurationClient === undefined) return;
+    if (loginGate !== "closed") return;
     let cancelled = false;
     void (async () => {
       if (onboardingPort !== undefined) {
@@ -227,7 +297,7 @@ function NovelAppReady({
     return () => {
       cancelled = true;
     };
-  }, [configurationClient, onboardingPort]);
+  }, [configurationClient, onboardingPort, loginGate]);
   const refreshModelConfigured = useCallback(async () => {
     if (configurationClient === undefined) return;
     try {
@@ -274,6 +344,9 @@ function NovelAppReady({
           <>
             <ProjectSelectionPage
               snapshot={workspaceSnapshot}
+              serverAuthState={serverAuthState}
+              onOpenLogin={openLoginGate}
+              onOpenSettings={openSettings}
               onChoose={() => {
                 void workspaceController.chooseAndOpen();
               }}
@@ -311,6 +384,32 @@ function NovelAppReady({
               libraryEnabled={libraryEnabled}
               onDismiss={dismissGuide}
             />
+            {/* 登录门：不透明全屏，盖在欢迎页/引导之上（LaunchOverlay 之下由 z 刻度保证）；
+                undecided 期遮底防欢迎页闪现（仅可能开门时才遮） */}
+            {loginGate === "open" ? (
+              <LoginPage
+                configuration={configurationClient!}
+                onSkip={() => {
+                  markLoginGateSkipped();
+                  closeLoginGate();
+                }}
+                onEnterWorkspace={closeLoginGate}
+              />
+            ) : loginGate === "undecided" &&
+                configurationClient?.serverAuth !== undefined &&
+                !hasSkippedLoginGate() ? (
+              <div
+                aria-hidden="true"
+                style={
+                  {
+                    position: "fixed",
+                    inset: 0,
+                    background: "var(--color-bg)",
+                    zIndex: "var(--z-launch)",
+                  } as CSSProperties
+                }
+              />
+            ) : null}
           </>
         ) : (
           <ApplicationShell

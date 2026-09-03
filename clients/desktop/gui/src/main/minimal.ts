@@ -554,7 +554,15 @@ async function main(): Promise<void> {
   const cipher: CredentialCipher = safeStorage.isEncryptionAvailable()
     ? {
         encrypt: async (secret) => safeStorage.encryptString(secret).toString("base64"),
-        decrypt: async (ciphertext) => safeStorage.decryptString(Buffer.from(ciphertext, "base64")),
+        // 旧版明文凭据兼容：safeStorage 接入前 config.json 存的是明文，解密失败按原文返回
+        // （下次 credential.save 时自然重写为密文——渐进迁移，不炸启动）
+        decrypt: async (ciphertext) => {
+          try {
+            return safeStorage.decryptString(Buffer.from(ciphertext, "base64"));
+          } catch {
+            return ciphertext;
+          }
+        },
       }
     : (infoLog("[main] safeStorage 不可用，凭据回退明文存储"), plaintextCipher);
   const configStore = new NodeApplicationConfigStore({

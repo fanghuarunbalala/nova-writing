@@ -29,6 +29,8 @@ declare global {
     };
     novelEvents?: {
       onConversationEvent: (callback: (payload: unknown) => void) => () => void;
+      /** server 认证状态推送（preload 已暴露；payload = ServerAuthState） */
+      onServerAuthChange?: (callback: (state: unknown) => void) => () => void;
     };
     novelWindow?: {
       platform: "win" | "mac";
@@ -84,6 +86,7 @@ const configurationClient = {
   // server 模式认证（main 侧 ServerAuthSession；旧 server 未暴露时 undefined → 面板隐藏表单外的功能）
   serverAuth: () => configApi.serverAuth?.(),
   serverLogin: (url: string, username: string, password: string) => configApi.serverLogin?.(url, username, password),
+  serverRegister: (url: string, username: string, password: string) => configApi.serverRegister?.(url, username, password),
   serverLogout: () => configApi.serverLogout?.(),
   serverDevices: () => configApi.serverDevices?.(),
   serverKickDevice: (deviceId: string) => configApi.serverKickDevice?.(deviceId),

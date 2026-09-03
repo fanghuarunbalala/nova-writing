@@ -7,7 +7,8 @@
  */
 export interface SseEvent {
   type: string;
-  conversationId: string;
+  /** 会话域事件（journal/approval）携带；项目域事件（file_changed/domain_changed）无此字段 */
+  conversationId?: string;
   [key: string]: unknown;
 }
 

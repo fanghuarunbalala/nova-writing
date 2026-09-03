@@ -237,6 +237,8 @@ export interface ConfigApi {
 	serverAuth?(): Promise<ServerAuthState>
 	/** 登录 server（双令牌落加密文件；失败抛错由 UI 呈现） */
 	serverLogin?(url: string, username: string, password: string): Promise<ServerAuthState>
+	/** 注册 server 账号（server 201 直接返回双令牌 = 注册即登录）；失败抛错（username_taken/weak_password 等） */
+	serverRegister?(url: string, username: string, password: string): Promise<ServerAuthState>
 	/** 登出（吊销 refresh + 清本地令牌；url 配置保留） */
 	serverLogout?(): Promise<ServerAuthState>
 	/** 设备会话列表（需在线） */

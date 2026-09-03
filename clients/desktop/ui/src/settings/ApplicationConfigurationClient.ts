@@ -63,6 +63,8 @@ export interface ApplicationConfigurationClient {
    */
   serverAuth?(): Promise<ServerAuthState> | undefined;
   serverLogin?(url: string, username: string, password: string): Promise<ServerAuthState> | undefined;
+  /** 注册 server 账号（注册即登录）；失败抛错（username_taken/weak_password 等） */
+  serverRegister?(url: string, username: string, password: string): Promise<ServerAuthState> | undefined;
   serverLogout?(): Promise<ServerAuthState> | undefined;
   serverDevices?(): Promise<ServerDeviceInfo[]> | undefined;
   serverKickDevice?(deviceId: string): Promise<void> | undefined;

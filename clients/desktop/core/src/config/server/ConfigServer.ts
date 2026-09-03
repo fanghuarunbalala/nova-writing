@@ -83,6 +83,13 @@ export class ConfigServer {
 							await this.serverAuth!.session.restore(url);
 							return this.serverAuth!.session.state();
 						},
+						serverRegister: async (url: string, username: string, password: string): Promise<ServerAuthState> => {
+							// 注册即登录（server 201 带双令牌）；落地路径与 serverLogin 对称
+							await this.serverAuth!.session.register(this.serverAuth!.clientFactory(url), username, password, this.serverAuth!.deviceName);
+							await this.serverAuth!.onLoginUrlPersist(url);
+							await this.serverAuth!.session.restore(url);
+							return this.serverAuth!.session.state();
+						},
 						serverLogout: async (): Promise<ServerAuthState> => {
 							await this.serverAuth!.session.logout();
 							return this.serverAuth!.session.state();

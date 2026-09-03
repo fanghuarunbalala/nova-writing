@@ -122,6 +122,42 @@ describe("ServerAuthSession", () => {
 		expect(touched).toBe(false);
 	});
 
+	it("注册：201 直接返回双令牌 → 注册即登录（状态在线）", async () => {
+		const fetchMock: FetchLike = async (url) => {
+			if (url.endsWith("/v1/auth/register")) {
+				return jsonResponse(201, { userId: "u1", deviceId: "dev_9", accessToken: "a-r", refreshToken: "r-r" });
+			}
+			return jsonResponse(404, {});
+		};
+		const { session } = makeSession(fetchMock);
+		await session.restore("http://srv");
+		await session.register(new ServerAuthClient("http://srv", fetchMock), "newuser", "pw12345678", "桌面端");
+		expect(session.state()).toMatchObject({ status: "online", username: "newuser", deviceId: "dev_9" });
+		// 注册落地的令牌可续（refresh 路径可用）
+		expect(await session.ensureAccessToken()).toBe("a-r");
+	});
+
+	it("注册错误：409 username_taken / 400 weak_password 错误码透传（不落令牌）", async () => {
+		let mode: "taken" | "weak" = "taken";
+		const fetchMock: FetchLike = async () =>
+			mode === "taken"
+				? jsonResponse(409, { code: "username_taken", message: "用户名已存在" })
+				: jsonResponse(400, { code: "weak_password", message: "密码至少 8 位" });
+		const { session } = makeSession(fetchMock);
+		await session.restore("http://srv");
+		const client = new ServerAuthClient("http://srv", fetchMock);
+		await expect(session.register(client, "dup", "pw12345678", "桌面端")).rejects.toMatchObject({
+			code: "username_taken",
+			status: 409,
+		});
+		mode = "weak";
+		await expect(session.register(client, "ok", "short", "桌面端")).rejects.toMatchObject({
+			code: "weak_password",
+			status: 400,
+		});
+		expect(session.state().username).toBeUndefined();
+	});
+
 	it("登录 → 过期前 1min 主动轮换（一次一换）→ 复用检测 401 清令牌要求重登", async () => {
 		let clock = 1_000_000;
 		const now = () => clock;

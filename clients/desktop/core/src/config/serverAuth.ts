@@ -72,6 +72,18 @@ export class ServerAuthClient {
 		};
 	}
 
+	/** 注册（登录页「注册账号」入口；server 201 直接返回双令牌 = 注册即登录） */
+	async register(username: string, password: string, deviceName: string): Promise<ServerAuthTokens & { deviceId: string }> {
+		const body = await this.postJson("/v1/auth/register", { username, password, deviceName }, 201);
+		return {
+			accessToken: this.str(body, "accessToken"),
+			accessExpiresAt: this.now() + ACCESS_TTL_MS,
+			refreshToken: this.str(body, "refreshToken"),
+			username,
+			deviceId: this.str(body, "deviceId"),
+		};
+	}
+
 	/** 刷新（一次一换；401 = 复用检测/过期/吊销，调用方应清令牌） */
 	async refresh(refreshToken: string): Promise<ServerAuthTokens> {
 		const body = await this.postJson("/v1/auth/refresh", { refreshToken }, 200);
@@ -253,8 +265,17 @@ export class ServerAuthSession {
 
 	/** 登录成功 → 存令牌 + 状态转在线 */
 	async login(client: ServerAuthClient, username: string, password: string, deviceName: string): Promise<void> {
-		const result = await client.login(username, password, deviceName);
-		this.tokens = { ...result, username };
+		await this.establishTokens(await client.login(username, password, deviceName));
+	}
+
+	/** 注册成功（server 直接返回双令牌）→ 与登录同一落地路径：注册即登录 */
+	async register(client: ServerAuthClient, username: string, password: string, deviceName: string): Promise<void> {
+		await this.establishTokens(await client.register(username, password, deviceName));
+	}
+
+	/** 双令牌落地（login/register 共用）：内存 + 加密文件 + 状态转在线 */
+	private async establishTokens(result: ServerAuthTokens & { deviceId: string }): Promise<void> {
+		this.tokens = { ...result, username: result.username };
 		this.deviceId = result.deviceId;
 		this.offline = false;
 		this.needRelogin = false;

@@ -19,6 +19,8 @@ import type {
 } from "../controller/WorkspaceController.js";
 import { Button } from "../../../shared/primitives/Button.js";
 import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
+import { Dialog } from "../../../shared/primitives/Dialog.js";
+import { Input } from "../../../shared/primitives/Input.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import { formatRelativeTime } from "../../../shared/format/relativeTime.js";
 import styles from "./ProjectSelectionPage.module.css";
@@ -73,6 +75,14 @@ export interface ProjectSelectionPageProps {
   readonly onOpenLogin?: () => void;
   /** 已登录态点击入口卡 → 设置 → Server（设备管理/登出） */
   readonly onOpenSettings?: () => void;
+  /** 云项目分区（项目域上云 FR4；登录且宿主接线时渲染：server 项目列表 + 起新建） */
+  readonly cloudSection?: {
+    readonly projects: ReadonlyArray<{ id: string; name: string; lastActivityAt: number | null; archived: boolean }>;
+    readonly busy?: boolean;
+    readonly error?: string;
+    readonly onCreate: (name: string) => void;
+    readonly onOpen: (project: { id: string; name: string }) => void;
+  };
 }
 
 export function ProjectSelectionPage({
@@ -86,6 +96,7 @@ export function ProjectSelectionPage({
   serverAuthState,
   onOpenLogin,
   onOpenSettings,
+  cloudSection,
 }: ProjectSelectionPageProps) {
   const busy =
     snapshot.phase === "loading" ||
@@ -97,6 +108,9 @@ export function ProjectSelectionPage({
   // 结束（无论成败）即关闭——失败详情经 controller error 通道展示在页面错误区
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceSessionView | undefined>(undefined);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  // 云项目新建（项目域上云 FR4）：仅命名，无目录对话框
+  const [cloudCreateOpen, setCloudCreateOpen] = useState(false);
+  const [cloudName, setCloudName] = useState("");
   const confirmDelete = async (): Promise<void> => {
     if (deleteTarget === undefined || deleteBusy) return;
     setDeleteBusy(true);
@@ -148,7 +162,60 @@ export function ProjectSelectionPage({
             </span>
           </button>
         ) : null}
-        <h2 className={styles.secTitle}>最近的项目</h2>
+        {cloudSection !== undefined ? (
+          <>
+            <div className={styles.cloudHead}>
+              <h2 className={styles.secTitle}>云端项目</h2>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={cloudSection.busy === true}
+                leadingIcon={<Icon icon={Plus} size="sm" />}
+                onClick={() => setCloudCreateOpen(true)}
+              >
+                新建云端项目
+              </Button>
+            </div>
+            {cloudSection.error !== undefined ? (
+              <p className={styles.error} role="status">{cloudSection.error}</p>
+            ) : null}
+            {cloudSection.projects.length === 0 ? (
+              <p className={styles.empty}>还没有云端项目——起个名字就开一本新书（无需选文件夹，多端同步）</p>
+            ) : (
+              <ul className={styles.recentList}>
+                {cloudSection.projects
+                  .filter((p) => !p.archived)
+                  .map((p) => (
+                    <li key={p.id} className={styles.projItem}>
+                      <button
+                        type="button"
+                        className={styles.projCard}
+                        onClick={() => cloudSection.onOpen({ id: p.id, name: p.name })}
+                      >
+                        <span className={styles.cloudCover} aria-hidden="true">
+                          <Icon icon={Cloud} size="sm" />
+                        </span>
+                        <span className={styles.projText}>
+                          <strong className={styles.projName}>{p.name}</strong>
+                          {p.lastActivityAt !== null ? (
+                            <small className={styles.projSub}>
+                              {formatRelativeTime(p.lastActivityAt)} · 云端 · 多端接续
+                            </small>
+                          ) : (
+                            <small className={styles.projSub}>云端 · 多端接续</small>
+                          )}
+                        </span>
+                        <span className={styles.projOpen}>
+                          打开 <Icon icon={ArrowRight} size="sm" />
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </>
+        ) : null}
+        <h2 className={styles.secTitle}>{cloudSection !== undefined ? "本地项目" : "最近的项目"}</h2>
         {snapshot.recent.length === 0 ? (
           <p className={styles.empty}>还没有打开过项目——从下方「新建项目」开始</p>
         ) : (
@@ -252,6 +319,56 @@ export function ProjectSelectionPage({
         busy={deleteBusy}
         onConfirm={() => void confirmDelete()}
       />
+      {cloudSection !== undefined ? (
+        <Dialog
+          open={cloudCreateOpen}
+          onOpenChange={(next) => {
+            if (!next) setCloudCreateOpen(false);
+          }}
+          title="新建云端项目"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                disabled={cloudSection.busy === true}
+                onClick={() => setCloudCreateOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                disabled={cloudSection.busy === true || cloudName.trim().length === 0}
+                loading={cloudSection.busy === true}
+                onClick={() => {
+                  const name = cloudName.trim();
+                  if (name === "") return;
+                  setCloudCreateOpen(false);
+                  setCloudName("");
+                  cloudSection.onCreate(name);
+                }}
+              >
+                创建并打开
+              </Button>
+            </>
+          }
+        >
+          <div className={styles.cloudForm}>
+            <label className={styles.cloudFormLabel} htmlFor="cloud-project-name">
+              项目名
+            </label>
+            <Input
+              id="cloud-project-name"
+              value={cloudName}
+              autoFocus
+              placeholder="如：雪落长街"
+              onChange={(event) => setCloudName(event.currentTarget.value)}
+            />
+            <p className={styles.cloudFormHint}>
+              只需一个名字——项目保存在你的 server 上，任何设备登录即可接续写作。
+            </p>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

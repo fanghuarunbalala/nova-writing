@@ -90,6 +90,18 @@ export interface NovelAppProps {
   readonly overlays?: ReactNode;
   /** 窗口控制（PRD WC；桌面宿主经 preload 桥注入，透传到 TopBar） */
   readonly windowChrome?: WindowChromeProps;
+  /**
+   * 云项目通道（项目域上云 FR4；gui 宿主注入，缺省隐藏云端分区）：
+   * list 拉 server 项目；create/openProject 返回打开引用（经 workspaceController.open）。
+   */
+  readonly cloudProjects?: CloudProjectsPort;
+}
+
+/** 云项目通道（renderer → main workspace-rpc） */
+export interface CloudProjectsPort {
+  list(): Promise<Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean }>>;
+  create(name: string): Promise<{ referenceId: string; label: string } | undefined>;
+  openProject(projectId: string, name: string): Promise<{ referenceId: string; label: string }>;
 }
 
 export function NovelApp(props: NovelAppProps) {
@@ -122,6 +134,7 @@ function NovelAppReady({
   extensions,
   overlays,
   windowChrome,
+  cloudProjects,
 }: NovelAppReadyProps) {
   const toastStore = useMemo(() => new ToastStore(), []);
   const domainStores = useMemo(
@@ -166,6 +179,46 @@ function NovelAppReady({
   // 未登录且未曾跳过 → open；跳过记住（localStorage），欢迎页/设置入口可重开
   const [loginGate, setLoginGate] = useState<"undecided" | "open" | "closed">("undecided");
   const [serverAuthState, setServerAuthState] = useState<ServerAuthState | undefined>(undefined);
+  // 云项目分区（登录后拉取；登录门关闭/状态变化时刷新）
+  const [cloudList, setCloudList] = useState<Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean }>>([]);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudError, setCloudError] = useState<string | undefined>(undefined);
+  const refreshCloudProjects = useCallback(async () => {
+    if (cloudProjects === undefined || serverAuthState?.username === undefined) {
+      setCloudList([]);
+      return;
+    }
+    try {
+      setCloudList(await cloudProjects.list());
+    } catch {
+      setCloudList([]);
+    }
+  }, [cloudProjects, serverAuthState?.username]);
+  useEffect(() => {
+    void refreshCloudProjects();
+  }, [refreshCloudProjects]);
+  const createCloudProject = useCallback(async (name: string) => {
+    if (cloudProjects === undefined || cloudBusy) return;
+    setCloudBusy(true);
+    setCloudError(undefined);
+    try {
+      const ref = await cloudProjects.create(name);
+      if (ref !== undefined) await workspaceController.open(ref);
+    } catch (cause) {
+      setCloudError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [cloudProjects, cloudBusy, workspaceController]);
+  const openCloudProject = useCallback(async (project: { id: string; name: string }) => {
+    if (cloudProjects === undefined) return;
+    try {
+      const ref = await cloudProjects.openProject(project.id, project.name);
+      await workspaceController.open(ref);
+    } catch (cause) {
+      setCloudError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [cloudProjects, workspaceController]);
   const refreshServerAuth = useCallback(async () => {
     const pending = configurationClient?.serverAuth?.();
     if (pending === undefined) return;
@@ -359,6 +412,17 @@ function NovelAppReady({
               }}
               onDeleteRecent={(workspaceId) => workspaceController.deleteRecent(workspaceId)}
               onOpenGuide={openGuide}
+              cloudSection={
+                cloudProjects !== undefined && serverAuthState?.username !== undefined
+                  ? {
+                      projects: cloudList,
+                      busy: cloudBusy,
+                      error: cloudError,
+                      onCreate: (name: string) => void createCloudProject(name),
+                      onOpen: (project: { id: string; name: string }) => void openCloudProject(project),
+                    }
+                  : undefined
+              }
             />
             <ProjectImportDialog
               open={importDialogOpen}

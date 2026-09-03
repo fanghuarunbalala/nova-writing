@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { rm } from "node:fs/promises";
 import { basename, dirname, join, parse as parsePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   Conversation,
   ConversationManagerServer,
@@ -1219,6 +1219,8 @@ async function main(): Promise<void> {
     workspaceRoot: string;
     label: string;
     lastOpenedAt: string;
+    /** 云项目（项目域上云）：server 上的项目 id——open 时注入 NOVA_PROJECT_ID 给会话子进程 */
+    cloudProjectId?: string;
   }
   // 最近工作区注册表：id→root 反查（openRecent 修复）+ 重启恢复（roots 重新入白名单）
   const registryPath = join(app.getPath("userData"), "workspaces.json");
@@ -1272,6 +1274,33 @@ async function main(): Promise<void> {
     } catch (e) {
       console.warn("[main] workspaces registry removal persist failed:", e);
     }
+  };
+
+  // 云项目登记（项目域上云 FR4）：本地缓存目录（workspace 兜底面：设计稿/技能缓存/
+  // journal sidecar）+ 注册表条目带 cloudProjectId；workspaceId = 缓存目录哈希（与
+  // locator.resolve 同源，recordOpenInRegistry 幂等更新不丢 cloudProjectId）
+  const registerCloudEntry = (projectId: string, name: string): { referenceId: string; label: string } => {
+    const cacheRoot = join(app.getPath("userData"), "cloud-projects");
+    const workspaceRoot = join(cacheRoot, projectId);
+    mkdirSync(workspaceRoot, { recursive: true });
+    const workspaceId = createHash("sha1").update(workspaceRoot).digest("hex").slice(0, 12);
+    const existing = registryEntries.find((e) => e.workspaceId === workspaceId);
+    if (existing !== undefined) {
+      existing.label = name;
+      existing.lastOpenedAt = new Date().toISOString();
+      existing.cloudProjectId = projectId;
+    } else {
+      registryEntries.push({
+        workspaceId,
+        workspaceRoot,
+        label: name,
+        lastOpenedAt: new Date().toISOString(),
+        cloudProjectId: projectId,
+      });
+    }
+    saveRegistry();
+    allowedWorkspaceReferences.add(workspaceRoot);
+    return { referenceId: workspaceId, label: name };
   };
 
   // 允许 open 的 referenceId 白名单：仅 pickWorkspace（原生目录对话框）返回的路径可设为工作区，
@@ -1427,8 +1456,59 @@ async function main(): Promise<void> {
             label: e.label,
             lastOpenedAt: e.lastOpenedAt,
             rootPath: e.workspaceRoot,
+            ...(e.cloudProjectId !== undefined ? { cloud: true } : {}),
           })),
       ),
+    // ---- 云项目（项目域上云 FR4）：server 为权威，本地仅缓存目录 + 注册表登记 ----
+    cloudProjects: {
+      list: async (): Promise<Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean }>> => {
+        const url = (await configStore.get()).server?.url;
+        const token = await serverAuthSession.ensureAccessToken();
+        if (url === undefined || token === undefined) return [];
+        try {
+          const res = await fetch(`${url.replace(/\/+$/, "")}/v1/projects`, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) return [];
+          const body = (await res.json()) as {
+            projects?: Array<{ id: string; name: string; lastActivityAt: number | null; archivedAt: number | null }>;
+          };
+          return (body.projects ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            lastActivityAt: p.lastActivityAt,
+            archived: p.archivedAt !== null,
+          }));
+        } catch {
+          return [];
+        }
+      },
+      /** 新建云项目：server 建实体 → 本地缓存目录 + 注册表登记（含 cloudProjectId）→ 打开引用 */
+      create: async (name: string): Promise<{ referenceId: string; label: string } | undefined> => {
+        const url = (await configStore.get()).server?.url;
+        const token = await serverAuthSession.ensureAccessToken();
+        if (url === undefined || token === undefined) throw new Error("未登录 server（先在登录页或设置 → Server 登录）");
+        const trimmed = name.trim();
+        if (trimmed.length === 0 || trimmed.length > 64) throw new Error("项目名需 1 – 64 字符");
+        const res = await fetch(`${url.replace(/\/+$/, "")}/v1/projects`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ name: trimmed }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { message?: string };
+          throw new Error(body.message ?? `创建失败（HTTP ${res.status}）`);
+        }
+        const created = (await res.json()) as { id: string; name: string };
+        return registerCloudEntry(created.id, trimmed);
+      },
+      /** 打开已有云项目（他端创建 / 本端未登记）：登记后返回打开引用 */
+      openProject: async (projectId: string, name: string): Promise<{ referenceId: string; label: string }> => {
+        const existing = registryEntries.find((e) => e.cloudProjectId === projectId);
+        if (existing !== undefined) return { referenceId: existing.workspaceId, label: existing.label };
+        return registerCloudEntry(projectId, name);
+      },
+    },
     open: async (reference: { referenceId: string; label: string }) => {
       // referenceId 两种来源：最近列表传 workspaceId（哈希，注册表反查 root）；
       // 目录选择器传 root 路径（白名单校验）
@@ -1489,6 +1569,15 @@ async function main(): Promise<void> {
       }
       workspaceLock = lockResult.lock;
       currentWorkspaceRoot = location.workspaceRoot;
+      // 云项目标识（项目域上云 FR4）：当前项目绑 cloudProjectId → 子进程注入 NOVA_PROJECT_ID
+      //（RemoteNovelStore/RemoteProjectFiles/journal HTTP 全套激活）；本地项目清除
+      const cloudEntry = registryEntries.find((e) => e.workspaceId === location.workspaceId);
+      if (cloudEntry?.cloudProjectId !== undefined) {
+        process.env.NOVA_PROJECT_ID = cloudEntry.cloudProjectId;
+        infoLog(`[main] cloud project active: ${cloudEntry.cloudProjectId}`);
+      } else {
+        delete process.env.NOVA_PROJECT_ID;
+      }
       rebindLibraryService();
       return recordOpenInRegistry(location, label);
     },

@@ -98,6 +98,15 @@ interface WorkspaceSessionDto {
   /** registry 透传：最后打开时间（ISO）与工作区根目录（旧数据缺省） */
   lastOpenedAt?: string;
   rootPath?: string;
+  /** 云项目条目（项目域上云）：设置页/欢迎页云端分区标识 */
+  cloud?: boolean;
+}
+/** 云项目视图（server /v1/projects） */
+interface CloudProjectDto {
+  id: string;
+  name: string;
+  lastActivityAt: number | null;
+  archived: boolean;
 }
 interface WorkspaceApi {
   pickWorkspace(): Promise<{ referenceId: string; label: string } | undefined>;
@@ -115,6 +124,12 @@ interface WorkspaceApi {
   markOnboardingDone(): Promise<void>;
   /** 删除项目（仅非当前项目；主进程彻底删除应用侧 storeDir 并移出注册表） */
   delete(workspaceId: string): Promise<void>;
+  /** 云项目（项目域上云 FR4；旧 main 未暴露时 undefined → 欢迎页隐藏云端分区） */
+  cloudProjects?: {
+    list(): Promise<CloudProjectDto[]>;
+    create(name: string): Promise<{ referenceId: string; label: string } | undefined>;
+    openProject(projectId: string, name: string): Promise<{ referenceId: string; label: string }>;
+  };
 }
 const workspaceTransport = electronIpcTransport({ endpoint: bridge as never, channel: "workspace-rpc" });
 const workspaceApi = wrap<WorkspaceApi>(workspaceTransport);
@@ -232,6 +247,7 @@ function AppRoot() {
         configurationClient={configurationClient}
         onboardingPort={onboardingPort}
         windowChrome={windowChrome}
+        cloudProjects={workspaceApi.cloudProjects}
       />
     </StrictMode>
   );

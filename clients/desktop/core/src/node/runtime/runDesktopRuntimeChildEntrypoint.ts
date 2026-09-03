@@ -19,6 +19,8 @@ import { EventPublisher } from "../../event/EventPublisher.js";
 import { conversationEventsAddr } from "../../event/topics.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { HttpConversationJournalService } from "../../conversation/persistence/HttpConversationJournalService.js";
+import { RemoteNovelStore } from "../../cloud/RemoteNovelStore.js";
+import { RemoteProjectFiles } from "../../cloud/RemoteProjectFiles.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { FileConversationStateJournalService } from "../../conversation/persistence/FileConversationStateJournalService.js";
 import { journalListener } from "../../conversation/JournalBridge.js";
@@ -343,9 +345,22 @@ await skillRegistry.load();
 	// novel-db：经 kkrpc/ws 连接 main 的 NovelDbWsServer（协议定稿 transport；token 走 subprotocol）。
 	// 无 NOVEL_DB_WS_URL（独立脚本/开发）回退进程内内存 store。
 	// BookAnalyst 分支：不经 WS，进程内直开该书 book.db（唯一写者，PRD library F5）。
+	// 云项目分支（项目域上云 FR6）：进程内 RemoteNovelStore（投影+oplog）替代本地 novel.db。
 	let novelHandle: NovelHandle;
 	let analystStore: SqliteNovelStore | undefined;
 	const novelWsUrl = process.env.NOVEL_DB_WS_URL;
+	const cloudProjectId = process.env.NOVA_PROJECT_ID?.trim();
+	const cloudServerUrl = process.env.NOVA_SERVER_URL?.trim();
+	const cloudAccessToken = async (): Promise<string | undefined> => {
+		const file = process.env.NOVA_SERVER_ACCESS_FILE;
+		if (file === undefined || file === "") return undefined;
+		try {
+			const raw = await readFileAsync(file, "utf8");
+			return (JSON.parse(raw) as { accessToken?: string }).accessToken;
+		} catch {
+			return undefined;
+		}
+	};
 	if (isAnalyst && analystTask !== undefined) {
 		analystStore = new SqliteNovelStore(bookDbPath(workspace, analystTask.bookId));
 		const store = analystStore;
@@ -353,6 +368,20 @@ await skillRegistry.load();
 			query: (q: NovelQuery) => store.query(q),
 			mutate: (m: NovelMutation) => store.mutate(m),
 			mutateBatch: (ms: readonly NovelMutation[]) => store.mutateBatch(ms),
+		} as unknown as NovelHandle;
+	} else if (cloudProjectId !== undefined && cloudProjectId !== "" && cloudServerUrl !== undefined && cloudServerUrl !== "") {
+		const cloudStore = new RemoteNovelStore({
+			url: cloudServerUrl,
+			projectId: cloudProjectId,
+			sessionTag: `${conversationId}-${process.pid}`,
+			getAccessToken: cloudAccessToken,
+			getLeaseToken: () => currentLeaseToken,
+			getConversationId: () => conversationId,
+		});
+		novelHandle = {
+			query: (q: NovelQuery) => cloudStore.query(q),
+			mutate: (m: NovelMutation) => cloudStore.mutate(m),
+			mutateBatch: (ms: readonly NovelMutation[]) => cloudStore.mutateBatch(ms),
 		} as unknown as NovelHandle;
 	} else if (novelWsUrl !== undefined && novelWsUrl.trim() !== "") {
 		const wsToken = process.env.NOVEL_DB_WS_TOKEN;
@@ -771,6 +800,16 @@ await skillRegistry.load();
 			workspace,
 			provider: loopProvider,
 			handle: novelHandle,
+			// 云项目（项目域上云 FR5）：文件四件套走 server（沙箱 server 权威判定）
+			...(cloudProjectId !== undefined && cloudProjectId !== "" && cloudServerUrl !== undefined && cloudServerUrl !== ""
+				? {
+						filesBackend: new RemoteProjectFiles({
+							url: cloudServerUrl,
+							projectId: cloudProjectId,
+							getAccessToken: cloudAccessToken,
+						}),
+					}
+				: {}),
 			// bundle 模式（FR6，NOVA_AGENT_MODE=bundle）：定义包驱动装配（包经
 			// NOVA_DEFINITION_BUNDLE 文件注入——server resolve 拉取后由宿主落盘/缓存）
 			...(agentBundle !== undefined ? { bundle: agentBundle } : {}),

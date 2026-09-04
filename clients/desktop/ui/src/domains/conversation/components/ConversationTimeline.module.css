@@ -24,6 +24,17 @@
   gap: var(--space-4);
 }
 
+/* 分段加载（⑤）：滚动到顶部触发 loadOlder 时的顶部指示条（与 .system 同款弱化形态） */
+.loadingOlder {
+  max-width: var(--max-w-composer);
+  margin: 0 auto var(--space-2);
+  padding: var(--space-1) 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
 .system {
   padding: var(--space-1) 0;
   text-align: center;

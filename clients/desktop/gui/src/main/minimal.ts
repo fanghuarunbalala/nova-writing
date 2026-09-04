@@ -7,7 +7,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, screen } from "
 import type { OpenDialogOptions, SaveDialogOptions } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { basename, dirname, join, parse as parsePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ import {
   EventPublisher,
   EventSubscriber,
   FileConversationJournalService,
+  FileConversationJournalReadOnlyService,
   bindFocusChannel,
   requestFocus,
   type FocusChannelHandle,
@@ -1270,6 +1271,48 @@ async function main(): Promise<void> {
   /** 当前已绑定的 storeDir（与 currentNovelStore 配对；rebindWorkspace 幂等短路判定用） */
   let currentStoreDir: string | undefined;
 
+  /**
+   * 云会话预加载（纯云端化 ⑤）：项目打开后后台预热最近 K 个会话——server 账本增量
+   * 播种到本地镜像 + 触发一次折叠读（填充读侧模块级缓存）。点开会话时历史零网络、
+   * 零折叠等待（打开时的 lease 钩子播种仍会做一次增量对账保证新鲜）。
+   * 尽力而为：离线/切项目/异常静默中止。
+   */
+  const prewarmCloudConversations = async (projectId: string): Promise<void> => {
+    const url = await serverChannelActive();
+    const journalRoot = currentJournalDir;
+    if (url === undefined || journalRoot === undefined || process.env.NOVA_PROJECT_ID !== projectId) return;
+    try {
+      const dirs = readdirSync(journalRoot, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .flatMap((e) => {
+          try {
+            return [{ id: e.name, mtimeMs: statSync(join(journalRoot, e.name)).mtimeMs }];
+          } catch {
+            return [];
+          }
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        .slice(0, 5);
+      for (const dir of dirs) {
+        if (process.env.NOVA_PROJECT_ID !== projectId || currentJournalDir !== journalRoot) return;
+        await seedJournalMirrorFromServer({
+          url,
+          conversationId: dir.id,
+          mirrorPath: join(journalRoot, dir.id, "journal.jsonl"),
+          getAccessToken: () => serverAuthSession.ensureAccessToken(),
+        });
+        // 预热折叠缓存（读侧模块级；一次 1-run 读即完成整文件折叠入缓存）
+        await new FileConversationJournalReadOnlyService({ journalDir: journalRoot }).history(dir.id, {
+          latest: true,
+          limit: 1,
+        });
+      }
+      infoLog(`[main] cloud conversation prewarm: ${dirs.length} conversations (${projectId})`);
+    } catch {
+      // 预加载尽力而为：失败静默
+    }
+  };
+
   /** 数据库与会话目录随 workspace 重绑：关旧库 → 开新库 → manager rescope；
    *  storeDir undefined（关闭工作区）= 全部清空回空态。open 返回前完成，渲染端随后 refetch 即新数据。
    *  同 storeDir 且库仍打开 = 幂等重开直接返回——rescope 会无条件 terminate 全部会话，
@@ -1563,6 +1606,8 @@ async function main(): Promise<void> {
       if (cloudEntry?.cloudProjectId !== undefined) {
         process.env.NOVA_PROJECT_ID = cloudEntry.cloudProjectId;
         infoLog(`[main] cloud project active: ${cloudEntry.cloudProjectId}`);
+        // 预加载（⑤）：最近会话后台播种镜像 + 预热折叠缓存（fire-and-forget）
+        void prewarmCloudConversations(cloudEntry.cloudProjectId);
       } else {
         delete process.env.NOVA_PROJECT_ID;
       }

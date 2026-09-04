@@ -10,11 +10,41 @@ import { proxy } from "kkrpc/remote-refs";
 import type { ConversationHandle } from "../conversation/contract/handle/index.js";
 import type { AskRecordedPayload, ProjectedEvent, ToolPreview } from "../conversation/contract/events/index.js";
 import type { ConversationId, ConversationMode } from "../conversation/contract/types/index.js";
+import type { JournalHistoryOpts } from "../conversation/contract/journal/index.js";
 import { CardProjection, type CardDescriptor } from "../conversation/CardProjection.js";
 import { RPCError } from "../rpc/RPCError.js";
 
 /** delta 高发路径的合并发布窗口（ms）：置脏 → 32ms 尾沿才 join/拷贝/发布（gui-performance-2 功能点三） */
 const DIRTY_PUBLISH_MS = 32;
+
+/**
+ * 历史分段页大小（run 粒度；纯云端化 ⑤）：首开只拉最近一页（+1 探测是否还有更早），
+ * 滚动到顶部经 loadOlder 向前翻页。前向补拉（resume/eseq 断档）维持 256 不变。
+ */
+const HISTORY_PAGE_RUNS = 50;
+
+/**
+ * 历史页修剪（limit+1 探测语义）：超出页大小的最早 run 丢弃（留给 loadOlder），
+ * 返回修剪后事件 + 是否还有更早 + 保留页的最小 run seq（loadOlder 的 before 游标）。
+ */
+function trimHistoryPage(events: readonly ProjectedEvent[], pageRuns: number): {
+	events: ProjectedEvent[];
+	hasMore: boolean;
+	oldestSeq: number | undefined;
+} {
+	const seqs = [
+		...new Set(events.flatMap((e) => ("seq" in e && typeof e.seq === "number" ? [e.seq] : []))),
+	].sort((a, b) => a - b);
+	if (seqs.length <= pageRuns) {
+		return { events: [...events], hasMore: false, oldestSeq: seqs[0] };
+	}
+	const cutoff = seqs[seqs.length - pageRuns]!;
+	return {
+		events: events.filter((e) => !("seq" in e && typeof e.seq === "number") || e.seq >= cutoff),
+		hasMore: true,
+		oldestSeq: cutoff,
+	};
+}
 
 /** 投影状态（精简：无 replay/following 阶段） */
 export type ConversationProjectionState = "idle" | "running" | "stopped" | "error";
@@ -94,6 +124,13 @@ export interface ConversationProjectionSnapshot {
 	timeline: readonly ConversationTimelineItem[];
 	/** 工具调用卡片（CardProjection 派生） */
 	cards: readonly CardDescriptor[];
+	/**
+	 * 分段加载（纯云端化 ⑤）：journal 还有更早 run 未载入（timeline 仅含最近若干 run，
+	 * UI 滚动到顶部可触发 loadOlder 向前翻页）。首开拉最近 HISTORY_PAGE_RUNS 个 run。
+	 */
+	canLoadOlder: boolean;
+	/** loadOlder 在途（UI 顶部加载指示） */
+	loadingOlder: boolean;
 	/** 当前生效模式（mode.changed 权威事件派生；未收到前 undefined → UI 查询兜底） */
 	mode?: ConversationMode;
 	/** 待生效模式（mode.pending 瞬态事件派生；mode.changed 到达后清除） */
@@ -105,10 +142,7 @@ export interface ConversationProjectionSnapshot {
 export type ConversationProjectionListener = () => void;
 
 /** history 查询注入（journal 投影读取重放；返回 ProjectedEvent 序列，与实时订阅同形态） */
-export type ConversationProjectionHistory = (opts: {
-	fromSeq?: number;
-	limit?: number;
-}) => Promise<ProjectedEvent[]>;
+export type ConversationProjectionHistory = (opts: JournalHistoryOpts) => Promise<ProjectedEvent[]>;
 
 /**
  * 平台事件源（gui-performance-2 功能点八）：Electron ZMQ 推送通道的 renderer 侧
@@ -160,6 +194,10 @@ export class ConversationProjection {
 	private modePending?: ConversationMode;
 	private revision = 0;
 	private lastAppliedSequence = 0;
+	/** 分段加载（纯云端化 ⑤）：已载最早 run seq（loadOlder 的 before 游标；undefined = 全量已载/未开） */
+	private oldestLoadedSeq: number | undefined;
+	private canLoadOlder = false;
+	private loadingOlder = false;
 	private state: ConversationProjectionState = "idle";
 	private error?: ConversationProjectionErrorSnapshot;
 	private snapshot: ConversationProjectionSnapshot;
@@ -259,9 +297,22 @@ export class ConversationProjection {
 			} else {
 				await this.handle.subscribeEvents(proxy(onEvent));
 			}
-			// ② 拉 journal 已落盘历史并应用（fromSeq 从当前进度之后开始）
-			const events = await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
+			// ② 拉 journal 已落盘历史并应用：
+			// 首开（lastAppliedSequence=0）→ 最近一页（分段加载：长会话首屏不整读，
+			//   limit+1 探测是否还有更早；更早的经 loadOlder 向前翻页）；
+			// resume/断档恢复 → fromSeq 前向增量（语义不变）。
+			const firstOpen = this.lastAppliedSequence === 0;
+			const fetched = firstOpen
+				? await this.history({ latest: true, limit: HISTORY_PAGE_RUNS + 1 })
+				: await this.history({ fromSeq: this.lastAppliedSequence + 1, limit: 256 });
 			if (this.stopRequested || generation !== this.generation) return;
+			let events = fetched;
+			if (firstOpen) {
+				const page = trimHistoryPage(fetched, HISTORY_PAGE_RUNS);
+				events = page.events;
+				this.canLoadOlder = page.hasMore;
+				this.oldestLoadedSeq = page.oldestSeq;
+			}
 			this.replayingHistory = true;
 			try {
 				for (const event of events) {
@@ -324,6 +375,105 @@ export class ConversationProjection {
 	async resume(): Promise<void> {
 		await this.stop();
 		await this.start();
+	}
+
+	/**
+	 * 加载更早的历史页（纯云端化 ⑤ 分段加载；UI 滚动到顶部触发）。
+	 * 实现：detached-timeline 重放——把更早页事件在隔离工作区里过同一 apply 状态机
+	 * （分段/工具行/卡片生成逻辑零复制），完成后重编号为「当前最小 sequence 之下」的
+	 * 递减段并 unshift（positional sequence 是纯排序键：时间分隔符 -0.5 / UI 幽灵项
+	 * 9M+ / card 区间走 run-seq 空间，均不受影响；既有项引用与序号不动 → WeakMap
+	 * 映射缓存保持命中）。进行中的流式项（活跃 assistant 工作区）全程隔离不受扰动。
+	 * @returns 是否实际前插了新内容（false = 已翻尽/进行中/未运行）
+	 */
+	async loadOlder(): Promise<boolean> {
+		if (this.state !== "running" || !this.canLoadOlder || this.loadingOlder) return false;
+		if (this.oldestLoadedSeq === undefined) return false;
+		this.loadingOlder = true;
+		this.publish();
+		try {
+			const fetched = await this.history({ before: this.oldestLoadedSeq, limit: HISTORY_PAGE_RUNS + 1 });
+			if (this.stopRequested) return false;
+			const page = trimHistoryPage(fetched, HISTORY_PAGE_RUNS);
+			if (page.events.length === 0) {
+				this.canLoadOlder = false;
+				return false;
+			}
+			this.canLoadOlder = page.hasMore;
+			this.oldestLoadedSeq = page.oldestSeq;
+			// —— detached 重放：隔离工作区（timeline/nextSeq/活跃 assistant 机器）——
+			const saved = this.saveWorkingState();
+			const savedTimeline = this.timeline;
+			const savedNextSeq = this.nextSeq;
+			this.timeline = [];
+			this.nextSeq = 1;
+			this.activeAssistantSeq = undefined;
+			this.activeSegments = [];
+			this.activeSegmentText = "";
+			this.continuingIntoLastSegment = false;
+			this.textSinceLastTool = "";
+			this.pendingFullText = undefined;
+			this.activeIndex = -1;
+			this.activeItemDirty = false;
+			this.replayingHistory = true;
+			try {
+				for (const event of page.events) this.apply(event);
+				this.finalizeAssistant();
+			} finally {
+				this.replayingHistory = false;
+			}
+			const prepended = this.timeline;
+			this.timeline = savedTimeline;
+			this.nextSeq = savedNextSeq;
+			this.restoreWorkingState(saved);
+			if (prepended.length === 0) return false;
+			// 重编号：prepended[i] = minSeq - N + i（严格小于既有最小、内部递增）
+			const minSeq = this.timeline.reduce((min, item) => Math.min(min, item.sequence), Number.POSITIVE_INFINITY);
+			const base = Number.isFinite(minSeq) ? minSeq : this.nextSeq;
+			const n = prepended.length;
+			for (let i = 0; i < n; i += 1) prepended[i]!.sequence = base - n + i;
+			this.timeline.unshift(...prepended);
+			this.cardsDirty = true;
+			this.publish();
+			return true;
+		} catch (err) {
+			console.error("[projection.load_older_failed]", err);
+			return false;
+		} finally {
+			this.loadingOlder = false;
+			this.publish();
+		}
+	}
+
+	/** 活跃 assistant 工作区快照（loadOlder detached 重放前后隔离/恢复） */
+	private saveWorkingState() {
+		return {
+			activeAssistantSeq: this.activeAssistantSeq,
+			activeSegments: this.activeSegments,
+			activeSegmentText: this.activeSegmentText,
+			continuingIntoLastSegment: this.continuingIntoLastSegment,
+			textSinceLastTool: this.textSinceLastTool,
+			pendingFullText: this.pendingFullText,
+			liveState: this.liveState,
+			thinkingChars: this.thinkingChars,
+			activeIndex: this.activeIndex,
+			activeItemDirty: this.activeItemDirty,
+			lastAppliedSequence: this.lastAppliedSequence,
+		};
+	}
+
+	private restoreWorkingState(saved: ReturnType<ConversationProjection["saveWorkingState"]>): void {
+		this.activeAssistantSeq = saved.activeAssistantSeq;
+		this.activeSegments = saved.activeSegments;
+		this.activeSegmentText = saved.activeSegmentText;
+		this.continuingIntoLastSegment = saved.continuingIntoLastSegment;
+		this.textSinceLastTool = saved.textSinceLastTool;
+		this.pendingFullText = saved.pendingFullText;
+		this.liveState = saved.liveState;
+		this.thinkingChars = saved.thinkingChars;
+		this.activeIndex = saved.activeIndex;
+		this.activeItemDirty = saved.activeItemDirty;
+		this.lastAppliedSequence = saved.lastAppliedSequence;
 	}
 
 	/** 应用一条 ProjectedEvent */
@@ -735,6 +885,8 @@ export class ConversationProjection {
 			...(this.thinkingChars !== undefined ? { thinkingChars: this.thinkingChars } : {}),
 			timeline: Object.freeze([...this.timeline]),
 			cards: this.cachedCards,
+			canLoadOlder: this.canLoadOlder,
+			loadingOlder: this.loadingOlder,
 			...(this.mode !== undefined ? { mode: this.mode } : {}),
 			...(this.modePending !== undefined ? { modePending: this.modePending } : {}),
 			...(this.error !== undefined ? { error: this.error } : {}),

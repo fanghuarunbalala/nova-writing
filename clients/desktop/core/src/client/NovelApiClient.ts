@@ -11,7 +11,7 @@ import type { NovelStore } from "../novel/store.js";
 import type { ConversationRef, ConversationSummary } from "../manager/contract/types.js";
 import type { ConversationHandle, ConversationId } from "../conversation/contract/index.js";
 import type { OutputEvent, ProjectedEvent } from "../conversation/contract/events/index.js";
-import type { ConversationJournalReadOnlyService } from "../conversation/contract/journal/index.js";
+import type { ConversationJournalReadOnlyService, JournalHistoryOpts } from "../conversation/contract/journal/index.js";
 import { FileConversationJournalReadOnlyService } from "../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { toRPCError } from "../rpc/call.js";
 import { RPCError } from "../rpc/RPCError.js";
@@ -106,7 +106,7 @@ export interface ConversationApi {
 	 */
 	history(
 		conversationId: ConversationId,
-		opts?: { fromSeq?: number; limit?: number },
+		opts?: JournalHistoryOpts,
 	): Promise<OutputEvent[]>;
 	/**
 	 * 投影读取历史（journal 完整事件 → 投影层 → ProjectedEvent 序列）。
@@ -118,7 +118,7 @@ export interface ConversationApi {
 	 */
 	projectedHistory(
 		conversationId: ConversationId,
-		opts?: { fromSeq?: number; limit?: number },
+		opts?: JournalHistoryOpts,
 	): Promise<ProjectedEvent[]>;
 	/**
 	 * 查询会话当前生效模式（review/bypass/compose；mode.set 待下次 run 生效）。
@@ -328,7 +328,7 @@ export interface NovelApiClientOptions {
 	 */
 	history?: (
 		conversationId: ConversationId,
-		opts?: { fromSeq?: number; limit?: number },
+		opts?: JournalHistoryOpts,
 	) => Promise<OutputEvent[]>;
 	/**
 	 * projectedHistory 查询注入（同 history 的内存测试/特殊装配面）。
@@ -336,7 +336,7 @@ export interface NovelApiClientOptions {
 	 */
 	projectedHistory?: (
 		conversationId: ConversationId,
-		opts?: { fromSeq?: number; limit?: number },
+		opts?: JournalHistoryOpts,
 	) => Promise<ProjectedEvent[]>;
 	/** 书库面注入（内存测试用；renderer 经 wrap 不经此构造） */
 	library?: LibraryApi;

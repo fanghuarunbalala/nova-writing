@@ -663,3 +663,90 @@ describe("ConversationProjection AskUserQuestion 留影（工具行 ask 载荷�
     expect(toolRows[0]?.ask).toBeUndefined();
   });
 });
+
+describe("ConversationProjection 历史分段加载（纯云端化 ⑤）", () => {
+  /** 60 个 run 的 journal 页服务：latest / before 两种游标语义 */
+  function makePagedHistory(totalRuns: number) {
+    const calls: Array<Record<string, unknown>> = [];
+    const eventsOfRun = (i: number): ProjectedEvent[] => [
+      {
+        type: "user.message",
+        persist: true,
+        seq: i,
+        text: `第 ${i} 轮`,
+        conversationId: "c1",
+        ts: new Date().toISOString(),
+      } as ProjectedEvent,
+      {
+        type: "run-end",
+        persist: true,
+        seq: i,
+        runSeq: i,
+        conversationId: "c1",
+        ts: new Date().toISOString(),
+      } as ProjectedEvent,
+    ];
+    const history = async (opts: { fromSeq?: number; limit?: number; before?: number; latest?: boolean }) => {
+      calls.push({ ...opts });
+      const limit = opts.limit ?? totalRuns;
+      let runs: number[];
+      if (opts.before !== undefined) {
+        runs = Array.from({ length: totalRuns }, (_, k) => k + 1).filter((i) => i < opts.before!);
+        runs = runs.slice(Math.max(0, runs.length - limit));
+      } else if (opts.latest === true) {
+        runs = Array.from({ length: totalRuns }, (_, k) => k + 1).slice(Math.max(0, totalRuns - limit));
+      } else {
+        runs = Array.from({ length: totalRuns }, (_, k) => k + 1).filter((i) => i >= (opts.fromSeq ?? 1));
+        runs = runs.slice(0, limit);
+      }
+      return runs.flatMap(eventsOfRun);
+    };
+    return { history, calls };
+  }
+
+  it("首开只载最近一页（latest + limit+1 探测），canLoadOlder=true；loadOlder 前插且既有项引用不变", async () => {
+    const fake = fakeHandle();
+    const { history, calls } = makePagedHistory(60);
+    const proj = new ConversationProjection(fake.handle, "c1", history);
+    await proj.start();
+    // 首拉形态：latest + 51 探测
+    expect(calls[0]).toMatchObject({ latest: true, limit: 51 });
+    const snap = proj.getSnapshot();
+    // 只含最近 50 run（修剪掉了探测用的第 11 个）
+    const users = snap.timeline.filter((i) => i.kind === "user");
+    expect(users).toHaveLength(50);
+    expect((users[0] as { text: string }).text).toBe("第 11 轮");
+    expect(snap.canLoadOlder).toBe(true);
+    // 既有尾项引用（loadOlder 后必须保持——UI WeakMap 映射缓存依赖）
+    const tailRef = snap.timeline[snap.timeline.length - 1];
+
+    // loadOlder：before=11（当前最早 run），返回 run 1..10（10 < 51 → 翻尽）
+    const prepended = await proj.loadOlder();
+    expect(prepended).toBe(true);
+    expect(calls[1]).toMatchObject({ before: 11, limit: 51 });
+    const next = proj.getSnapshot();
+    const nextUsers = next.timeline.filter((i) => i.kind === "user");
+    expect(nextUsers).toHaveLength(60);
+    expect((nextUsers[0] as { text: string }).text).toBe("第 1 轮");
+    expect(next.canLoadOlder).toBe(false);
+    // 前插项序号严格小于既有项（index 10 = 原首项「第 11 轮」）；既有项引用不变
+    expect(next.timeline[0]!.sequence).toBeLessThan(next.timeline[10]!.sequence);
+    expect((next.timeline[10] as { text: string }).text).toBe("第 11 轮");
+    expect(next.timeline[next.timeline.length - 1]).toBe(tailRef);
+
+    // 翻尽后再触发 → false 且不再发请求
+    calls.length = 0;
+    await expect(proj.loadOlder()).resolves.toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("短会话（run 数 ≤ 页大小）首开全量载入，canLoadOlder=false", async () => {
+    const fake = fakeHandle();
+    const { history } = makePagedHistory(3);
+    const proj = new ConversationProjection(fake.handle, "c1", history);
+    await proj.start();
+    const snap = proj.getSnapshot();
+    expect(snap.timeline.filter((i) => i.kind === "user")).toHaveLength(3);
+    expect(snap.canLoadOlder).toBe(false);
+  });
+});

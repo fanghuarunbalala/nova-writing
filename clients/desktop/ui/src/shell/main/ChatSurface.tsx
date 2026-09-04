@@ -565,6 +565,9 @@ function ActiveChatSurface({
         items={timelineWithGhosts}
         streamingSequence={projection?.lastAppliedSequence ?? 0}
         bottomReserve={bottomReserve}
+        canLoadOlder={projection?.canLoadOlder === true}
+        loadingOlder={projection?.loadingOlder === true}
+        onRequestOlder={() => session.loadOlder()}
         onMessageReferenceClick={onReferenceClick}
         resolveReference={resolveReference}
         onResolveAsking={onResolveAsking}

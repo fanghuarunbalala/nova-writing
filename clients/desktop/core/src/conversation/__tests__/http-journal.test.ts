@@ -326,4 +326,35 @@ describe("HttpConversationJournalService 本地镜像（纯云端化 FR2）", ()
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+
+	it("竞态去重（纯云端化 ④）：写通行已在盘后，拉回同批行不重复落盘（gs 追加时点过滤）", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "nova-hj-m-"));
+		const mirrorPath = join(dir, "journal.jsonl");
+		try {
+			// fetch 无视 since 恒返 gs=23/24 两行（模拟「尾扫描→fetch」窗口滞后于写通路径）
+			const { fetchImpl } = makeFetch((req) => {
+				if (req.method === "POST") return { status: 201, body: { seq: req.body.runSeq === 1 ? 23 : 24 } };
+				return {
+					status: 200,
+					body: {
+						events: [
+							{ seq: 23, run_seq: 1, kind: "snapshot", payload: JSON.stringify([{ seq: 1, messages: [] }]) },
+							{ seq: 24, run_seq: 1, kind: "append", payload: JSON.stringify([{ type: "user", content: "x" }]) },
+						],
+						lastSeq: 24,
+					},
+				};
+			});
+			const service = makeService({ fetchImpl, pendingPath: join(dir, "pending.jsonl"), mirrorPath });
+			await service.open(); // 初始对账（拉回 23/24 并落盘——冷启动全量）
+			await service.appendRun(run(1, [])); // POST 201 → gs=23 写通（已在盘，去重）
+			await service.appendRunMessages(1, []); // POST 201 → gs=24 写通（同上）
+			await service.reconcile(); // 再对账：fetch 仍回 23/24 → 追加时点过滤，不重复
+			const rows = await readMirror(mirrorPath);
+			expect(rows).toHaveLength(2); // gs=23/24 各一次
+			expect(rows.map((r: any) => r.gs)).toEqual([23, 24]);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 });

@@ -21,6 +21,7 @@ import {
 	LeaseHeldError,
 	ServerApprovalChannel,
 	ServerEventBridge,
+	seedJournalMirrorFromServer,
 	type ConversationJournalService,
 	type LLMessage,
 	type RunContext,
@@ -219,8 +220,7 @@ describe("桌面数据通道", () => {
 		expect(replay.events.filter((e) => e.kind === "append").length).toBe(0);
 	});
 
-	it("本地镜像增量恢复（纯云端化 FR2）：写通 → 重开只拉增量 → File 读侧折叠/投影可用", { timeout: 20_000 }, async () => {
-		const leaseRes = await app.inject({ method: "POST", url: "/v1/leases", headers: auth(session), payload: { conversationId: "conv-mirror" } });
+	it("本地镜像增量恢复（纯云端化 FR2）：写通 → 重开只拉增量 → File 读侧折叠/投影可用", { timeout: 20_000 }, async () => {		const leaseRes = await app.inject({ method: "POST", url: "/v1/leases", headers: auth(session), payload: { conversationId: "conv-mirror" } });
 		const mirrorLease = (leaseRes.json() as { leaseToken: string }).leaseToken;
 		const dir = await mkdtemp(join(tmpdir(), "nova-mirror-"));
 		const mirrorPath = join(dir, "conv-mirror", "journal.jsonl");
@@ -272,6 +272,49 @@ describe("桌面数据通道", () => {
 		// 第二进程续写 → 镜像追加
 		await j2.appendRun(run(2, [user("镜像-重启后")]));
 		expect((await readFile(mirrorPath, "utf8")).split("\n").filter(Boolean)).toHaveLength(3);
+	});
+
+	it("main 预播种（纯云端化 ④）：无子进程参与 → 镜像可读/投影非空 → 子进程 open 不产生重复", { timeout: 20_000 }, async () => {
+		const leaseRes = await app.inject({ method: "POST", url: "/v1/leases", headers: auth(session), payload: { conversationId: "conv-seed" } });
+		const seedLease = (leaseRes.json() as { leaseToken: string }).leaseToken;
+		const dir = await mkdtemp(join(tmpdir(), "nova-seed-"));
+		const mirrorPath = join(dir, "conv-seed", "journal.jsonl");
+		// 1. 上推两条（不经镜像——旧版本会话/他端写入的形态）；snapshot 载荷 = [RunContext]
+		const seeded: Array<[string, unknown[]]> = [
+			["snapshot", [run(1, [user("预播种-第一条")])]],
+			["append", [user("预播种-第二条")]],
+		];
+		for (const [kind, payload] of seeded) {
+			const res = await app.inject({
+				method: "POST", url: "/v1/runs/conv-seed/events", headers: auth(session),
+				payload: { runSeq: 1, kind, messages: payload, leaseToken: seedLease },
+			});
+			expect(res.statusCode).toBe(201);
+		}
+		// 2. main 预播种（无任何子进程/renderer 参与）：server → 本地镜像
+		await seedJournalMirrorFromServer({
+			url: baseUrl,
+			conversationId: "conv-seed",
+			mirrorPath,
+			getAccessToken: async () => session.accessToken,
+		});
+		// 3. renderer 形态的读侧：镜像折叠 + 投影立即可读（不等子进程对账）
+		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: dir });
+		const runs = await readOnly.readRuns("conv-seed");
+		expect((runs[0]!.messages as Array<{ content: string }>).map((m) => m.content)).toEqual(["预播种-第一条", "预播种-第二条"]);
+		expect((await readOnly.projectedHistory("conv-seed", {})).length).toBeGreaterThan(0);
+		// 4. 子进程随后 open（Http + mirrorPath）：增量对账零追加（无重复行）
+		const journal = new HttpConversationJournalService({
+			conversationId: "conv-seed",
+			url: baseUrl,
+			getAccessToken: async () => session.accessToken,
+			getLeaseToken: () => seedLease,
+			pendingPath: join(dir, "pending.jsonl"),
+			mirrorPath,
+		});
+		await journal.open();
+		expect(journal.lastSeq).toBe(1);
+		expect((await readFile(mirrorPath, "utf8")).split("\n").filter(Boolean)).toHaveLength(2);
 	});
 
 	it("断线状态机（PRD 3.4）：网络断 → 写入落 sidecar → 恢复 → open 按序补推清队", { timeout: 20_000 }, async () => {

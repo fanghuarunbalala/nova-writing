@@ -53,6 +53,7 @@ import {
   ServerEventBridge,
   ServerTokenStore,
   LeaseClient,
+  seedJournalMirrorFromServer,
   resolveRuntimeAgents,
   serializeSkillsEnv,
   listSkills,
@@ -831,6 +832,17 @@ async function main(): Promise<void> {
       acquire: async (conversationId) => {
         const url = await serverChannelActive();
         if (url === undefined) return {} as Record<string, string>;
+        // 云会话预播种（纯云端化 ④）：spawn 前把 server 账本增量落到本地镜像——
+        // renderer 的一次性 projectedHistory 读取不必等子进程对账（首开即回显旧消息）；
+        // 追加侧按 gs 去重，与子进程/他实例并发安全；离线/失败内部静默
+        if (process.env.NOVA_PROJECT_ID !== undefined && currentJournalDir !== undefined) {
+          await seedJournalMirrorFromServer({
+            url,
+            conversationId,
+            mirrorPath: join(currentJournalDir, conversationId, "journal.jsonl"),
+            getAccessToken: () => serverAuthSession.ensureAccessToken(),
+          });
+        }
         const client = new LeaseClient({ url, conversationId, getAccessToken: () => serverAuthSession.ensureAccessToken() });
         const { leaseToken } = await client.acquire(); // 409 他端持有 → 抛错阻止 spawn（会话转只读提示）
         client.startHeartbeat(leaseToken);

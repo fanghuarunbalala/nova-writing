@@ -219,6 +219,61 @@ describe("桌面数据通道", () => {
 		expect(replay.events.filter((e) => e.kind === "append").length).toBe(0);
 	});
 
+	it("本地镜像增量恢复（纯云端化 FR2）：写通 → 重开只拉增量 → File 读侧折叠/投影可用", { timeout: 20_000 }, async () => {
+		const leaseRes = await app.inject({ method: "POST", url: "/v1/leases", headers: auth(session), payload: { conversationId: "conv-mirror" } });
+		const mirrorLease = (leaseRes.json() as { leaseToken: string }).leaseToken;
+		const dir = await mkdtemp(join(tmpdir(), "nova-mirror-"));
+		const mirrorPath = join(dir, "conv-mirror", "journal.jsonl");
+		// 记录 replay 请求的 since 参数（验证增量而非全量）
+		const replaySince: Array<number | null> = [];
+		const countingFetch: typeof fetch = async (input, init) => {
+			const url = String(input);
+			if (url.includes("/replay")) {
+				replaySince.push(Number(new URL(url).searchParams.get("since") ?? "0"));
+			}
+			return fetch(input as string, init);
+		};
+		const makeJournal = () =>
+			new HttpConversationJournalService({
+				conversationId: "conv-mirror",
+				url: baseUrl,
+				getAccessToken: async () => session.accessToken,
+				getLeaseToken: () => mirrorLease,
+				pendingPath: join(dir, "pending-push.jsonl"),
+				mirrorPath,
+				fetchImpl: countingFetch as never,
+			});
+
+		// 第一进程：写入写通镜像
+		const j1 = makeJournal();
+		await j1.open();
+		await j1.appendRun(run(1, [user("镜像-第一条")]));
+		await j1.appendRunMessages(1, [user("镜像-第二条")]);
+		const mirrorLines = (await readFile(mirrorPath, "utf8")).split("\n").filter(Boolean);
+		expect(mirrorLines).toHaveLength(2);
+		const tailGs = (JSON.parse(mirrorLines[1]!) as { gs: number }).gs;
+
+		// 第二进程（模拟重启）：open 只发一次增量 replay（since = 镜像尾 gs）
+		replaySince.length = 0;
+		const j2 = makeJournal();
+		await j2.open();
+		expect(replaySince).toEqual([tailGs]);
+		// 游标对齐（run 级）
+		expect(j2.lastSeq).toBe(1);
+
+		// File 读侧（main 的 history 代读/子进程恢复共用实现）：折叠 + 投影非空（UI 历史自愈）
+		const readOnly = new FileConversationJournalReadOnlyService({ journalDir: dir });
+		const runs = await readOnly.readRuns("conv-mirror");
+		expect(runs.map((r) => r.seq)).toEqual([1]);
+		expect((runs[0]!.messages as Array<{ content: string }>).map((m) => m.content)).toEqual(["镜像-第一条", "镜像-第二条"]);
+		const projected = await readOnly.projectedHistory("conv-mirror", {});
+		expect(projected.length).toBeGreaterThan(0);
+
+		// 第二进程续写 → 镜像追加
+		await j2.appendRun(run(2, [user("镜像-重启后")]));
+		expect((await readFile(mirrorPath, "utf8")).split("\n").filter(Boolean)).toHaveLength(3);
+	});
+
 	it("断线状态机（PRD 3.4）：网络断 → 写入落 sidecar → 恢复 → open 按序补推清队", { timeout: 20_000 }, async () => {
 		// 独立会话 + 租约；fetch 外包一层可断网开关（server 真实响应）
 		const leaseRes = await app.inject({ method: "POST", url: "/v1/leases", headers: auth(session), payload: { conversationId: "conv-flap" } });

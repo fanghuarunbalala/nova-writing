@@ -5,6 +5,10 @@
  * 真契约集成见 cloud/server 包 cloud-novel-store.test.ts。
  */
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { RemoteNovelStore } from "../../cloud/RemoteNovelStore.js";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -123,5 +127,86 @@ describe("RemoteNovelStore", () => {
 		});
 		await store.query({ op: "characters.list" });
 		expect(skips).toHaveLength(1);
+	});
+});
+
+describe("RemoteNovelStore 域快照缓存（纯云端化 FR3）", () => {
+	function makeCachedHarness(cachePath: string) {
+		const oplog: Array<{ id: string; kind: string; seq: number; data: unknown }> = [];
+		let seq = 0;
+		const requests: string[] = [];
+		const fetchImpl = async (url: string, init?: RequestInit): Promise<Response> => {
+			const method = init?.method ?? "GET";
+			requests.push(`${method} ${url.replace(/^.*\/v1/, "")}`);
+			if (url.includes("/domain/snapshot")) {
+				return jsonResponse(200, { cursor: seq, entities: [...oplog] });
+			}
+			if (url.includes("/domain/delta")) {
+				const since = Number(new URL(url).searchParams.get("since") ?? "0");
+				return jsonResponse(200, { cursor: seq, entities: oplog.filter((e) => e.seq > since) });
+			}
+			if (method === "POST" && url.includes("/domain/mutate")) {
+				const body = JSON.parse(String(init?.body)) as { mutations: Array<{ id: string; data: unknown }> };
+				for (const m of body.mutations) oplog.push({ id: m.id, kind: "novel_mutation", seq: ++seq, data: m.data });
+				return jsonResponse(200, { results: [], seq });
+			}
+			return jsonResponse(404, {});
+		};
+		const make = (sessionTag: string) =>
+			new RemoteNovelStore({
+				url: "http://srv",
+				projectId: "prj_c",
+				sessionTag,
+				getAccessToken: async () => "jwt",
+				getLeaseToken: () => "lease-1",
+				getConversationId: () => "conv-c",
+				fetchImpl,
+				cachePath,
+			});
+		return { make, requests };
+	}
+
+	it("首实例 snapshot 落缓存；第二实例只发 delta（免全量）且数据一致", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "nova-rns-cache-"));
+		const cachePath = join(dir, "domain-snapshot.json");
+		try {
+			const h = makeCachedHarness(cachePath);
+			const a = h.make("session-a");
+			await a.mutate({ op: "character.create", id: "char-1", input: { name: "沈砚" } });
+			// 缓存已立即落盘（mutate 后即时 persist）
+			expect(existsSync(cachePath)).toBe(true);
+
+			// 新实例（如重启后的子进程）：载入缓存 → 首个 query 只发 delta，不再 snapshot
+			const before = h.requests.length;
+			const b = h.make("session-b");
+			const list = (await b.query({ op: "characters.list" })) as Array<{ name: string }>;
+			expect(list.map((c) => c.name)).toEqual(["沈砚"]);
+			const bRequests = h.requests.slice(before);
+			expect(bRequests.some((r) => r.includes("/domain/snapshot"))).toBe(false);
+			expect(bRequests.some((r) => r.includes("/domain/delta"))).toBe(true);
+
+			// 缓存载入后自身 op 重放不丢（sessionTag 进程唯一性约束的行为面）
+			const c = h.make("session-c");
+			const again = (await c.query({ op: "characters.list" })) as Array<{ name: string }>;
+			expect(again.map((x) => x.name)).toEqual(["沈砚"]);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("缓存损坏 → 按未命中回退全量 snapshot", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "nova-rns-cache-"));
+		const cachePath = join(dir, "domain-snapshot.json");
+		try {
+			await writeFile(cachePath, "{ 损坏的 JSON", "utf8");
+			const h = makeCachedHarness(cachePath);
+			h.requests.length = 0;
+			const store = h.make("session-x");
+			// 无 oplog 的空项目：损坏缓存不得让 query 炸——回退 snapshot 正常应答
+			await expect(store.query({ op: "characters.list" })).resolves.toEqual([]);
+			expect(h.requests.some((r) => r.includes("/domain/snapshot"))).toBe(true);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
 	});
 });

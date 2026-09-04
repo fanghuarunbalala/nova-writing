@@ -57,6 +57,12 @@ export interface HttpConversationJournalServiceOptions {
 	getLeaseToken: () => string | undefined;
 	/** sidecar 断线队列文件路径（journal 同目录） */
 	pendingPath: string;
+	/**
+	 * 本地镜像文件路径（纯云端化 FR2，= File 版 journal.jsonl 同位）：server 权威的只读
+	 * 性能副本——POST/PUT 成功后写通；恢复路径「镜像折叠 + replay?since= 增量合并」。
+	 * 缺省不启用（旧行为：无本地文件）。
+	 */
+	mirrorPath?: string;
 	/** 附加定义包版本（账本行透传） */
 	definitionVersion?: string;
 	/** 可注入 fetch */
@@ -68,6 +74,30 @@ interface PendingEvent {
 	runSeq: number;
 	kind: "snapshot" | "append";
 	messages: unknown[];
+}
+
+/**
+ * 镜像行：与 File 版 journal.jsonl 同行协议（snapshot 行带 run / append 行带 messages，
+ * 读侧 FileConversationJournalReadOnlyService 零改动兼容），额外内嵌 gs = server 账本
+ * 全局行号——既做本地增量游标（replay?since=gs），也使崩溃后重拉可按 gs 去重。
+ */
+interface MirrorRow {
+	/** run seq（与 File 版行协议一致） */
+	seq: number;
+	kind: "snapshot" | "append";
+	run?: unknown;
+	messages?: unknown[];
+	ts: string;
+	/** server 账本全局 seq（读侧忽略的附加字段） */
+	gs: number;
+}
+
+/** server replay 响应行（账本原行；payload 为 JSON 字符串） */
+interface ReplayRow {
+	seq?: number;
+	run_seq?: number;
+	kind?: string;
+	payload?: string;
 }
 
 /** journal 写侧 server 实现（append 上推 + rewrite 全量重写 + 断线 sidecar 补推） */
@@ -129,24 +159,137 @@ export class HttpConversationJournalService implements Contract {
 		await this.flush();
 	}
 
-	/** 崩溃恢复/对账：重放 server 账本，对齐 serverLastSeq 与 lastRunSeq（run 级） */
+	/** 崩溃恢复/对账：有镜像走增量（replay?since=镜像尾 gs），无镜像保持全量；
+	 *  对齐 serverLastSeq（账本全局末序，rewrite 校验基线）与 lastRunSeq（run 级） */
 	async reconcile(): Promise<void> {
 		const token = await this.opts.getAccessToken();
 		if (token === undefined) return;
-		let response: Response;
-		try {
-			response = await this.fetchImpl(`${this.opts.url}/v1/journal/${encodeURIComponent(this.opts.conversationId)}/replay`, {
-				method: "GET",
-				headers: { authorization: `Bearer ${token}` },
-			});
-		} catch {
-			return; // 离线：留给 drainPending / 后续写路径
+		if (this.opts.mirrorPath !== undefined) {
+			await this.reconcileWithMirror(token);
+			return;
 		}
-		if (response.status !== 200) return;
-		const body = (await response.json()) as { events?: Array<{ seq?: number; run_seq?: number }> };
-		for (const event of body.events ?? []) {
+		const body = await this.fetchReplay(token, 0);
+		if (body === undefined) return;
+		for (const event of body.events) {
 			this.serverLastSeq = Math.max(this.serverLastSeq, event.seq ?? 0);
 			this.lastRunSeq = Math.max(this.lastRunSeq, event.run_seq ?? 0);
+		}
+	}
+
+	/** GET replay（增量参数可缺省）；离线/非 200/旧 server 无 lastSeq 时按行内 max 推导 */
+	private async fetchReplay(
+		token: string,
+		since: number,
+	): Promise<{ events: ReplayRow[]; lastSeq: number } | undefined> {
+		let response: Response;
+		try {
+			response = await this.fetchImpl(
+				`${this.opts.url}/v1/journal/${encodeURIComponent(this.opts.conversationId)}/replay${since > 0 ? `?since=${since}` : ""}`,
+				{ method: "GET", headers: { authorization: `Bearer ${token}` } },
+			);
+		} catch {
+			return undefined; // 离线：留给 drainPending / 后续写路径
+		}
+		if (response.status !== 200) return undefined;
+		const body = (await response.json()) as { events?: ReplayRow[]; lastSeq?: number };
+		const events = body.events ?? [];
+		const derived = events.reduce((max, e) => Math.max(max, e.seq ?? 0), 0);
+		return { events, lastSeq: typeof body.lastSeq === "number" ? body.lastSeq : derived };
+	}
+
+	/** 镜像增量对账：尾行 gs 为游标；lastSeq < 尾序 = 账本被 rewrite 收缩 → 全量重建镜像 */
+	private async reconcileWithMirror(token: string): Promise<void> {
+		const tail = await this.readMirrorTail();
+		this.lastRunSeq = Math.max(this.lastRunSeq, tail.runSeq);
+		let body = await this.fetchReplay(token, tail.gs);
+		if (body === undefined) return;
+		if (body.lastSeq < tail.gs) {
+			body = await this.fetchReplay(token, 0);
+			if (body === undefined) return;
+			await this.rewriteMirror(body.events);
+		} else {
+			await this.appendMirror(
+				this.toMirrorRows(body.events.filter((e) => (e.seq ?? 0) > tail.gs)),
+			);
+		}
+		this.serverLastSeq = Math.max(this.serverLastSeq, body.lastSeq);
+		for (const event of body.events) {
+			this.lastRunSeq = Math.max(this.lastRunSeq, event.run_seq ?? 0);
+		}
+	}
+
+	// ---- 本地镜像（纯云端化 FR2：server 权威的只读性能副本，写失败静默——派生数据） ----
+
+	/** 扫描镜像尾：最后一条完好行的 gs / run seq（末尾半行/损坏行向前容忍；无镜像 = 0） */
+	private async readMirrorTail(): Promise<{ gs: number; runSeq: number }> {
+		const path = this.opts.mirrorPath;
+		if (path === undefined) return { gs: 0, runSeq: 0 };
+		try {
+			if (!existsSync(path)) return { gs: 0, runSeq: 0 };
+			const lines = (await readFile(path, "utf8")).split("\n").filter(Boolean);
+			for (let i = lines.length - 1; i >= 0; i -= 1) {
+				try {
+					const parsed = JSON.parse(lines[i]!) as { gs?: number; seq?: number };
+					if (typeof parsed.gs === "number" && typeof parsed.seq === "number") {
+						return { gs: parsed.gs, runSeq: parsed.seq };
+					}
+				} catch {
+					// 末尾半行/损坏行：继续向前找完好行
+				}
+			}
+		} catch {
+			// 读失败按无镜像处理（下次成功写路径自然重建）
+		}
+		return { gs: 0, runSeq: 0 };
+	}
+
+	/** 待推事件 + server 全局 seq → 镜像行（snapshot 行带 run、append 行带 messages，同 File 版协议） */
+	private mirrorRowOf(event: PendingEvent, gs: number): MirrorRow {
+		const ts = new Date().toISOString();
+		return event.kind === "snapshot"
+			? { seq: event.runSeq, kind: "snapshot", run: event.messages[0], ts, gs }
+			: { seq: event.runSeq, kind: "append", messages: event.messages, ts, gs };
+	}
+
+	/** server 账本行 → 镜像行（memory-write/domain-mutation 等非消息行不入镜像） */
+	private toMirrorRows(events: ReplayRow[]): MirrorRow[] {
+		const rows: MirrorRow[] = [];
+		for (const e of events) {
+			if (e.kind !== "snapshot" && e.kind !== "append") continue;
+			let payload: unknown[];
+			try {
+				payload = JSON.parse(e.payload ?? "[]") as unknown[];
+			} catch {
+				continue;
+			}
+			rows.push(
+				e.kind === "snapshot"
+					? { seq: e.run_seq ?? 0, kind: "snapshot", run: payload[0], ts: new Date().toISOString(), gs: e.seq ?? 0 }
+					: { seq: e.run_seq ?? 0, kind: "append", messages: payload, ts: new Date().toISOString(), gs: e.seq ?? 0 },
+			);
+		}
+		return rows;
+	}
+
+	private async appendMirror(rows: MirrorRow[]): Promise<void> {
+		const path = this.opts.mirrorPath;
+		if (path === undefined || rows.length === 0) return;
+		try {
+			mkdirSync(dirname(path), { recursive: true });
+			await appendFile(path, `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`, "utf8");
+		} catch {
+			// 镜像是派生缓存：写失败静默（server 权威不受影响）
+		}
+	}
+
+	private async rewriteMirror(events: ReplayRow[]): Promise<void> {
+		const path = this.opts.mirrorPath;
+		if (path === undefined) return;
+		try {
+			mkdirSync(dirname(path), { recursive: true });
+			await writeFile(path, `${this.toMirrorRows(events).map((r) => JSON.stringify(r)).join("\n")}\n`, "utf8");
+		} catch {
+			// 同上：派生缓存写失败静默
 		}
 	}
 
@@ -185,6 +328,7 @@ export class HttpConversationJournalService implements Contract {
 		if (response.status === 201) {
 			const body = (await response.json()) as { seq: number };
 			this.serverLastSeq = Math.max(this.serverLastSeq, body.seq);
+			await this.appendMirror([this.mirrorRowOf(event, body.seq)]);
 			return;
 		}
 		if (response.status >= 500) {
@@ -212,6 +356,12 @@ export class HttpConversationJournalService implements Contract {
 		if (response.status === 200) {
 			const result = (await response.json()) as { lastSeq: number };
 			this.serverLastSeq = result.lastSeq;
+			// rewrite 后新行逐行全局 seq 未知 → 全量重放一次重建镜像（rewrite 罕见，代价可接受）
+			if (this.opts.mirrorPath !== undefined) {
+				const token = await this.opts.getAccessToken();
+				const body = token !== undefined ? await this.fetchReplay(token, 0) : undefined;
+				if (body !== undefined) await this.rewriteMirror(body.events);
+			}
 			return;
 		}
 		if (response.status === 409) {
@@ -282,6 +432,7 @@ export class HttpConversationJournalService implements Contract {
 			if (response.status !== 201) return false;
 			const body = (await response.json()) as { seq: number };
 			this.serverLastSeq = Math.max(this.serverLastSeq, body.seq);
+			await this.appendMirror([this.mirrorRowOf(event, body.seq)]);
 			return true;
 		} catch {
 			return false;

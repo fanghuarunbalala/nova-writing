@@ -11,7 +11,7 @@
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile as readFileAsync } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
 import { Conversation, type ConversationEventPublisher, type ManagerWaitChannel } from "../../conversation/server/Conversation.js";
@@ -391,6 +391,8 @@ await skillRegistry.load();
 			getAccessToken: cloudAccessToken,
 			getLeaseToken: () => currentLeaseToken,
 			getConversationId: () => conversationId,
+			// 域快照缓存（纯云端化 FR3）：workspace 即 main 的云项目缓存目录
+			cachePath: join(workspace, ".novel", "cache", "domain-snapshot.json"),
 		});
 		novelHandle = {
 			query: (q: NovelQuery) => cloudStore.query(q),
@@ -448,6 +450,9 @@ await skillRegistry.load();
 				conversationId,
 				url: serverUrl,
 				pendingPath: join(storedir, "pending-push.jsonl"),
+				// 本地镜像（纯云端化 FR2）：与 File 版同位的 journal.jsonl——server 权威的
+				// 只读性能副本，写通 + open() 增量对账；main 的 history 代读读同一文件
+				mirrorPath: join(storedir, "journal.jsonl"),
 				// main 进程持有会话并周期刷新落 access 文件（15min TTL；子进程现读现用）
 				getAccessToken: async () => {
 					try {
@@ -479,13 +484,18 @@ await skillRegistry.load();
 	let resumeSeq: number | undefined;
 	if (journal !== undefined && storedir !== undefined) {
 		if (serverUrl !== undefined && serverUrl !== "") {
-			// server 模式恢复：重放账本按 run_seq 折叠（snapshot 重置基线 + append 追加）
-			const runs = await readRunsFromServer(serverUrl, conversationId);
+			// server 模式恢复：open() 已对账过的本地镜像折叠（同 File 版读侧行协议）；
+			// journal 非 Http 实例（理论不可达）或无镜像时降级 server 全量重放
+			const runs =
+				journal instanceof HttpConversationJournalService
+					? await new FileConversationJournalReadOnlyService({ journalDir: dirname(storedir) }).readRuns(conversationId)
+					: await readRunsFromServer(serverUrl, conversationId);
 			runMessages = runs.flatMap((r) => r.messages);
 			resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));
 			resumeSeq = journal.lastSeq;
 		} else {
-			const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
+			// journalDir = conversations 根（storedir 是 <root>/<cid>，读侧再拼 <cid>）
+			const readOnly = new FileConversationJournalReadOnlyService({ journalDir: dirname(storedir) });
 			const runs = await readOnly.readRuns(conversationId);
 			runMessages = runs.flatMap((r) => r.messages);
 			resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));

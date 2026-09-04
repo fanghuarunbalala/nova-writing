@@ -13,6 +13,8 @@
  * 期 1 云项目离线不可写（与 RemoteProjectFiles 一致）。
  */
 import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { InMemoryNovelStore } from "../novel/InMemoryNovelStore.js";
 import type { NovelStore } from "../novel/store.js";
 import type { NovelMutation } from "../novel/contract/mutation.js";
@@ -23,7 +25,8 @@ export type RemoteStoreFetch = (input: string, init?: RequestInit) => Promise<Re
 export interface RemoteNovelStoreOptions {
 	url: string;
 	projectId: string;
-	/** 会话标签：本会话上推的 oplog 在 delta 重放时跳过（已本地应用） */
+	/** 会话标签：本会话上推的 oplog 在 delta 重放时跳过（已本地应用）。须进程内唯一——
+	 *  固定值会让重启后的新投影跳过自身旧操作（丢数据） */
 	sessionTag: string;
 	getAccessToken: () => Promise<string | undefined>;
 	/** 域写需租约（server domain/mutate 校验，对齐会话执行权） */
@@ -32,6 +35,12 @@ export interface RemoteNovelStoreOptions {
 	fetchImpl?: RemoteStoreFetch;
 	/** 重放单条失败时的钩子（schema 演进前向兼容：跳过并告警） */
 	onReplaySkip?: (mutation: NovelMutation, cause: unknown) => void;
+	/**
+	 * 域快照缓存文件（纯云端化 FR3）：{cursor, entities} 持久化——命中时 init 免全量
+	 * snapshot、仅 delta 补齐。tmp+rename 原子写；(cursor, entities) 成对一致，落后
+	 * 版本由 delta 自愈；损坏按未命中处理。多进程共写安全（成对原子 + delta 回退）。
+	 */
+	cachePath?: string;
 }
 
 interface OplogEntity {
@@ -47,19 +56,32 @@ export class RemoteNovelStore implements NovelStore {
 	private readonly fetchImpl: RemoteStoreFetch;
 	private cursor = 0;
 	private ready = false;
+	/** 已见 oplog 全量（缓存写盘用；delta 追加，与 cursor 成对一致） */
+	private entities: OplogEntity[] = [];
+	private lastPersistAt = 0;
+	private persistTimer: NodeJS.Timeout | undefined;
 
 	constructor(options: RemoteNovelStoreOptions) {
 		this.opts = options;
 		this.fetchImpl = options.fetchImpl ?? ((i, j) => fetch(i, j));
 	}
 
-	/** 启动：snapshot 全量重放（首个 query 前自动调用） */
+	/**
+	 * 启动：缓存命中 → 载入投影+cursor（首个 query 的 sync 仅拉 delta）；未命中 →
+	 * snapshot 全量重放。两者都会在首个 query 前自动调用。
+	 */
 	async init(): Promise<void> {
 		if (this.ready) return;
+		if (await this.loadCache()) {
+			this.ready = true;
+			return;
+		}
 		const body = (await this.request("GET", `/domain/snapshot`)) as { cursor: number; entities: OplogEntity[] };
 		this.cursor = 0;
+		this.entities = body.entities;
 		this.replay(body.entities);
 		this.ready = true;
+		await this.persistCache();
 	}
 
 	async query(q: Parameters<NovelStore["query"]>[0]): Promise<unknown> {
@@ -80,10 +102,12 @@ export class RemoteNovelStore implements NovelStore {
 		return results;
 	}
 
-	/** 增量重放（本会话条目跳过） */
+	/** 增量重放（本会话条目跳过）+ oplog 累积（缓存落盘） */
 	private async sync(): Promise<void> {
 		const body = (await this.request("GET", `/domain/delta?since=${this.cursor}`)) as { cursor: number; entities: OplogEntity[] };
+		if (body.entities.length > 0) this.entities.push(...body.entities);
 		this.replay(body.entities);
+		this.schedulePersist();
 	}
 
 	private async replay(entities: OplogEntity[]): Promise<void> {
@@ -99,7 +123,8 @@ export class RemoteNovelStore implements NovelStore {
 		}
 	}
 
-	/** oplog 追加（批一次上行；失败抛错——server 权威不缺记） */
+	/** oplog 追加（批一次上行；失败抛错——server 权威不缺记）。
+	 *  成功后 sync 一次：拉回自身操作（sessionTag 跳过重放、cursor 前进）并落缓存 */
 	private async upload(ms: readonly NovelMutation[]): Promise<void> {
 		const mutations = ms.map((mutation) => ({
 			kind: "novel_mutation",
@@ -114,6 +139,9 @@ export class RemoteNovelStore implements NovelStore {
 			[200],
 		);
 		void response;
+		await this.sync();
+		// 写路径立即落盘（不等节流）：mutate 是用户级低频操作，缩小丢失窗口
+		await this.persistCache();
 	}
 
 	private async request(method: string, path: string, body?: unknown, expectOk?: number[]): Promise<unknown> {
@@ -146,5 +174,61 @@ export class RemoteNovelStore implements NovelStore {
 		}
 		const errorBody = (await response.json().catch(() => ({}))) as { message?: string; code?: string };
 		throw new Error(errorBody.message ?? `云项目域请求失败（HTTP ${response.status} ${errorBody.code ?? ""}）`);
+	}
+
+	// ---- 域快照缓存（纯云端化 FR3） ----
+
+	/** 载入缓存：合法则播种投影 + cursor（返回 true）；不存在/损坏/形状不符返回 false */
+	private async loadCache(): Promise<boolean> {
+		const path = this.opts.cachePath;
+		if (path === undefined) return false;
+		try {
+			const parsed = JSON.parse(await readFile(path, "utf8")) as {
+				version?: number;
+				cursor?: number;
+				entities?: OplogEntity[];
+			};
+			if (parsed.version !== 1 || typeof parsed.cursor !== "number" || !Array.isArray(parsed.entities)) {
+				return false;
+			}
+			this.cursor = 0;
+			this.entities = parsed.entities;
+			this.replay(parsed.entities);
+			this.lastPersistAt = Date.now();
+			return true;
+		} catch {
+			return false; // 缓存损坏/不存在 → 全量 snapshot 重建
+		}
+	}
+
+	/** 节流落盘：3s 窗口内多次 sync 合并为一次尾沿写（进程退出漏写由下次载入的 delta 自愈） */
+	private schedulePersist(): void {
+		if (this.opts.cachePath === undefined) return;
+		if (this.persistTimer !== undefined) return;
+		const delay = Math.max(0, 3_000 - (Date.now() - this.lastPersistAt));
+		this.persistTimer = setTimeout(() => {
+			this.persistTimer = undefined;
+			void this.persistCache();
+		}, delay);
+		this.persistTimer.unref?.();
+	}
+
+	/** 原子写（tmp + rename）；失败静默清 tmp——缓存是派生数据，(cursor, entities) 成对一致 */
+	private async persistCache(): Promise<void> {
+		const path = this.opts.cachePath;
+		if (path === undefined) return;
+		this.lastPersistAt = Date.now();
+		const tmp = `${path}.${process.pid}.tmp`;
+		try {
+			await mkdir(dirname(path), { recursive: true });
+			await writeFile(tmp, JSON.stringify({ version: 1, cursor: this.cursor, entities: this.entities }), "utf8");
+			await rename(tmp, path);
+		} catch {
+			try {
+				await rm(tmp, { force: true });
+			} catch {
+				// 清理失败忽略
+			}
+		}
 	}
 }

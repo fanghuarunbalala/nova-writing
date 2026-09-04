@@ -34,9 +34,7 @@ import {
   BookImportService,
   createLibraryFace,
   LibraryService,
-  ProjectImportService,
-  createProjectImportFace,
-  ImportProcessRunner,
+  RemoteNovelStore,
   electronIpcTransport,
   startConversationManagerWsServer,
   startNovelDbWsServer,
@@ -101,8 +99,6 @@ const rendererHtml = existsSync(join(baseDir, "minimal.html"))
   ? join(baseDir, "minimal.html")
   : join(baseDir, "..", "minimal", "minimal.html");
 const childScript = join(baseDir, "..", "..", "..", "core", "scripts", "desktop-child.mjs");
-/** 项目导入后台进程脚本（耗时解析/落库不堵主进程事件循环；布局表达式同 childScript） */
-const importWorkerScript = join(baseDir, "..", "..", "..", "core", "scripts", "project-import-worker.mjs");
 /** 内置技能根（gui/resources/builtin-skills；启动时预装到 userData/skills，已存在跳过） */
 const builtinSkillsRoot = join(baseDir, "..", "..", "..", "gui", "resources", "builtin-skills");
 const IPC_CHANNEL = "novel-rpc";
@@ -506,12 +502,48 @@ async function main(): Promise<void> {
     ]),
   );
 
-  // novel 库随 workspace 热重绑（<storeDir>/novel.db，open/close 时切换）：
+  // novel 库随 workspace 热重绑（本地项目 = <storeDir>/novel.db；云项目 = main 内
+  // RemoteNovelStore——纯云端化 FR4，UI 手动域写经 server oplog），open/close 时切换：
   // publishingStore 对象身份恒定（novel WS 子进程通道与 serverApi 不重建），内部委托当前库
-  let currentNovelStore: SqliteNovelStore | undefined;
+  let currentNovelStore: NovelStore | undefined;
   const requireNovelStore = (): NovelStore => {
     if (currentNovelStore === undefined) throw new Error("未打开工作区（novel store 未初始化）");
     return currentNovelStore;
+  };
+
+  // 云项目 UI 域通道（纯云端化 FR4）：云项目打开时 rebindWorkspace 装配——写前懒申请
+  // ui-<projectId> 编辑租约（conversation id 与会话租约不同、不互斥；域级并发由
+  // entity_version 乐观锁兜底），关闭/切库时释放。sessionTag 带进程唯一后缀（重启后
+  // 新投影不跳过自身旧操作，防重放丢数据）。
+  let cloudDomain:
+    | {
+        projectId: string;
+        store: RemoteNovelStore;
+        lease?: { client: LeaseClient; token: string };
+      }
+    | undefined;
+  const ensureCloudUiLease = async (): Promise<void> => {
+    if (cloudDomain === undefined || cloudDomain.lease !== undefined) return;
+    const url = await serverChannelActive();
+    if (url === undefined) throw new Error("未登录 server（云端项目不可写，请先登录并确认 server 可达）");
+    const conversationId = `ui-${cloudDomain.projectId}`;
+    const client = new LeaseClient({
+      url,
+      conversationId,
+      getAccessToken: () => serverAuthSession.ensureAccessToken(),
+    });
+    const { leaseToken } = await client.acquire(); // 409 他端 UI 编辑中 → 抛 LeaseHeldError（文案透传 UI）
+    client.startHeartbeat(leaseToken);
+    cloudDomain.lease = { client, token: leaseToken };
+    infoLog(`[main] ui lease acquired: ${conversationId}`);
+  };
+  const releaseCloudDomain = async (): Promise<void> => {
+    const channel = cloudDomain;
+    cloudDomain = undefined;
+    if (channel?.lease !== undefined) {
+      await channel.lease.client.release(channel.lease.token);
+      infoLog(`[main] ui lease released: ui-${channel.projectId}`);
+    }
   };
 
   // novel.changed 广播：ZeroMQ PUB/SUB（mutate 成功 → publish；订阅 → rpc 通知 renderer 刷新）。
@@ -522,6 +554,7 @@ async function main(): Promise<void> {
   const publishingStore: NovelStore = {
     query: (q) => requireNovelStore().query(q),
     mutate: async (m) => {
+      if (cloudDomain !== undefined) await ensureCloudUiLease();
       const result = await requireNovelStore().mutate(m);
       const entities = deriveChangeEntities(m, result);
       for (const entity of entities) {
@@ -539,6 +572,7 @@ async function main(): Promise<void> {
     },
     // 批内原子：整批成功才逐项广播（失败回滚不广播）
     mutateBatch: async (ms) => {
+      if (cloudDomain !== undefined) await ensureCloudUiLease();
       const results = await requireNovelStore().mutateBatch(ms);
       for (let i = 0; i < ms.length; i++) {
         const m = ms[i]!;
@@ -711,9 +745,14 @@ async function main(): Promise<void> {
     if (url !== undefined) {
       process.env.NOVEL_SERVER_URL = url;
       process.env.NOVEL_SERVER_ACCESS_FILE = serverAccessFile;
+      // 云分支别名（纯云端化 FR5）：子进程 Remote 装配读 NOVA_* 前缀——两套并存注入
+      process.env.NOVA_SERVER_URL = url;
+      process.env.NOVA_SERVER_ACCESS_FILE = serverAccessFile;
     } else {
       delete process.env.NOVEL_SERVER_URL;
       delete process.env.NOVEL_SERVER_ACCESS_FILE;
+      delete process.env.NOVA_SERVER_URL;
+      delete process.env.NOVA_SERVER_ACCESS_FILE;
     }
   };
   await applyServerEnv();
@@ -898,152 +937,10 @@ async function main(): Promise<void> {
   });
   infoLog(`[main] library root: ${libraryRoot}`);
 
-  // ── 项目导入（欢迎页「从文件导入创建项目」）：确定性导入 + ProjectImporter 后台解构 ──
-  // 与书库区分：内容直接落进新项目 novel.db（可继续写作）。依赖的 workspace 机制
-  // （locator/registry/rebindWorkspace）在下方声明——钩子为惰性求值闭包，调用时已就绪。
-  // 耗时操作（zip 解压/大文本解析/分批落库）经独立子进程执行——主进程零阻塞，
-  // 阶段进度经 projectImport.createProgress 轮询（对话框动画）。
-  // 导入链路日志（worker spawn/阶段/stderr 转发/终态 + 解构进度观测）——console JSON
-  const projectImportLogger = createConsoleLogger().child({ component: "project_import" });
-  const projectImportService = new ProjectImportService({ logger: projectImportLogger });
-  const projectImportRunner = new ImportProcessRunner({
-    workerScript: importWorkerScript,
-    logger: projectImportLogger,
-  });
-  const allowedImportSources = new Set<string>();
-  let importAnalysisConversationId: string | undefined;
-  /** 解构会话 journal 路径（Read 批次调用 = 确定性进度信号） */
-  const importJournalPathOf = (): string | undefined => {
-    const root = currentJournalDir;
-    return importAnalysisConversationId === undefined || root === undefined
-      ? undefined
-      : join(root, importAnalysisConversationId, "journal.jsonl");
-  };
-  const projectImportFace = createProjectImportFace({
-    service: projectImportService,
-    runner: () => projectImportRunner,
-    logger: projectImportLogger,
-    workspaceRoot: () => currentWorkspaceRoot,
-    store: () => currentNovelStore,
-    pickFile: async () => {
-      const result = await openDialogModal({
-        title: "选择要导入的书稿",
-        properties: ["openFile"],
-        filters: [{ name: "书稿文本", extensions: ["txt", "zip"] }],
-      });
-      const path = result.canceled ? undefined : result.filePaths[0];
-      if (path === undefined) return null;
-      allowedImportSources.add(path);
-      return path;
-    },
-    allowedSources: () => allowedImportSources,
-    // 新建项目目录：与「新建项目」同款 save 对话框（标题区分场景）
-    createWorkspaceDir: async () => {
-      infoLog("[import-create] requesting target dir (save dialog)");
-      const lastRoot = [...registryEntries].sort((a, b) =>
-        b.lastOpenedAt.localeCompare(a.lastOpenedAt),
-      )[0]?.workspaceRoot;
-      const result = await saveDialogModal({
-        title: "新建导入项目文件夹",
-        buttonLabel: "新建并导入",
-        defaultPath: lastRoot !== undefined ? join(dirname(lastRoot), "新建项目") : undefined,
-        properties: ["createDirectory", "showHiddenFiles"],
-      });
-      if (result.canceled || result.filePath === undefined || result.filePath === "") {
-        infoLog("[import-create] target canceled → rpc will return {canceled:true}");
-        return undefined;
-      }
-      const root = result.filePath;
-      infoLog(`[import-create] target picked root=${root}`);
-      try {
-        mkdirSync(root, { recursive: true });
-      } catch (e) {
-        console.warn("[main] create import workspace directory failed:", root, e);
-        throw new Error(`无法在所选位置创建文件夹：${root}`);
-      }
-      allowedWorkspaceReferences.add(root);
-      return { referenceId: root, label: basename(root) };
-    },
-    // 绑定全新工作区（不登记最近列表——commit 才登记；rollback 清库删目录）
-    bindFreshWorkspace: async (reference) => {
-      const workspaceRoot = reference.referenceId;
-      const location = await locator.resolve(workspaceRoot);
-      await rebindWorkspace(location.storeDir);
-      currentWorkspaceRoot = location.workspaceRoot;
-      rebindLibraryService();
-      projectImportLogger.info("import_workspace.bound", {
-        workspaceRoot: location.workspaceRoot,
-        storeDir: location.storeDir,
-      });
-      return {
-        workspaceRoot: location.workspaceRoot,
-        store: requireNovelStore(),
-        // 后台进程执行 apply 时子进程自开该文件（WAL 多连接；完成即关）
-        dbPath: join(location.storeDir, "novel.db"),
-        commit: async () => {
-          const lastOpenedAt = new Date().toISOString();
-          const existing = registryEntries.find((e) => e.workspaceId === location.workspaceId);
-          if (existing !== undefined) {
-            existing.label = reference.label;
-            existing.lastOpenedAt = lastOpenedAt;
-          } else {
-            registryEntries.push({
-              workspaceId: location.workspaceId,
-              workspaceRoot: location.workspaceRoot,
-              label: reference.label,
-              lastOpenedAt,
-            });
-          }
-          saveRegistry();
-          projectImportLogger.info("import_workspace.committed", { workspaceId: location.workspaceId });
-        },
-        rollback: async () => {
-          try {
-            currentNovelStore?.close();
-          } catch (e) {
-            console.warn("[main] novel store close failed on import rollback:", e);
-          }
-          await rebindWorkspace(undefined);
-          currentWorkspaceRoot = undefined;
-          rebindLibraryService();
-          allowedWorkspaceReferences.delete(workspaceRoot);
-          rmSync(location.storeDir, { recursive: true, force: true });
-          rmSync(workspaceRoot, { recursive: true, force: true });
-        },
-      };
-    },
-    spawner: () =>
-      (process.env.NOVEL_PROVIDER_API_KEY ?? "").trim() !== "" && currentWorkspaceRoot !== undefined
-        ? {
-            spawn: (opts) => {
-              projectImportLogger.info("import_analysis.spawn", { agentType: opts.agentType });
-              return manager.spawnConversation(opts).then(
-                (ref) => {
-                  projectImportLogger.info("import_analysis.registered", {
-                    conversationId: ref.conversationId,
-                  });
-                  importAnalysisConversationId = ref.conversationId;
-                  return { conversationId: ref.conversationId };
-                },
-                (err: unknown) => {
-                  projectImportLogger.error("import_analysis.spawn_failed", {
-                    error: err instanceof Error ? err.message : String(err),
-                  });
-                  throw err;
-                },
-              );
-            },
-          }
-        : undefined,
-    spawnUnavailableReason: () =>
-      (process.env.NOVEL_PROVIDER_API_KEY ?? "").trim() === ""
-        ? "模型 provider 未配置——内容已导入，配置模型后可重试解构"
-        : "解构会话不可用（需已打开工作区）",
-    analysisJournalPath: importJournalPathOf,
-  });
-
   // journalDir 传函数形态：history 代读随 workspace 重绑现取当前会话根
-  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: () => currentJournalDir, library: libraryFace, projectImport: projectImportFace });
+  //（纯云端化 FR7：项目导入 face 下线——本地目录语义与云-only 相悖；core 服务与测试保留，
+  //  renderer 侧入口随后续 ui commit 移除，期间调用得到明确的「未装配」RPC 错误）
+  const serverApi = createNovelApiServer({ manager, novel: publishingStore, proxy, journalDir: () => currentJournalDir, library: libraryFace });
 
   // 主窗口引用（IPC sender 校验 + 定向发送；窗口创建晚于端点注册）
   let mainWindow: BrowserWindow | undefined;
@@ -1195,7 +1092,7 @@ async function main(): Promise<void> {
     e.preventDefault();
     shutdownReady = true;
     try {
-      currentNovelStore?.close();
+      if (currentNovelStore instanceof SqliteNovelStore) currentNovelStore.close();
     } catch (e2) {
       console.warn("[main] novel store close failed on quit:", e2);
     }
@@ -1231,9 +1128,6 @@ async function main(): Promise<void> {
   // open/close 时热重绑（rebindWorkspace），实现数据库与会话的项目级隔离
   const storageRoot = join(app.getPath("userData"), "novel-storage");
   const locator = new NodeWorkspaceStoreLocator({ storageRoot });
-  // 旧全局数据位置（项目隔离引入前）：首个打开的项目一次性继承（move 后原位置清空，幂等）
-  const legacyGlobalDbPath = join(app.getPath("userData"), "novel.db");
-  const legacyConversationsRoot = join(storageRoot, "conversations");
 
   interface WorkspaceRegistryEntry {
     workspaceId: string;
@@ -1330,18 +1224,21 @@ async function main(): Promise<void> {
   const allowedWorkspaceReferences = new Set<string>(registryEntries.map((e) => e.workspaceRoot));
 
   // 他实例"在新窗口打开"派发的启动上下文（spawn env 注入）：启动即摘取（防向会话子进程/
-  // 孙实例传播），路径入 open 白名单（来源为他实例用户经原生选择器/注册表的授权，信任级
-  // 等同本实例命令行），由 renderer 经 takeStartupWorkspace 取走后自动打开
+  // 孙实例传播）。值优先为 registry workspaceId（云-only 派发形态，registry 反查 label），
+  // 兼容旧实例传的 root 路径（入 open 白名单——来源为他实例经注册表/选择器的授权），
+  // 由 renderer 经 takeStartupWorkspace 取走后自动打开
   let startupWorkspace: { referenceId: string; label: string } | undefined;
-  const startupWorkspaceRoot = process.env.NOVEL_OPEN_WORKSPACE;
-  if (startupWorkspaceRoot !== undefined && startupWorkspaceRoot.trim() !== "") {
+  const startupWorkspaceRef = process.env.NOVEL_OPEN_WORKSPACE;
+  if (startupWorkspaceRef !== undefined && startupWorkspaceRef.trim() !== "") {
     delete process.env.NOVEL_OPEN_WORKSPACE;
-    allowedWorkspaceReferences.add(startupWorkspaceRoot);
-    startupWorkspace = {
-      referenceId: startupWorkspaceRoot,
-      label: basename(startupWorkspaceRoot),
-    };
-    infoLog(`[main] startup workspace from spawn: ${startupWorkspaceRoot}`);
+    const registryHit = registryEntries.find((e) => e.workspaceId === startupWorkspaceRef);
+    if (registryHit !== undefined) {
+      startupWorkspace = { referenceId: registryHit.workspaceId, label: registryHit.label };
+    } else {
+      allowedWorkspaceReferences.add(startupWorkspaceRef);
+      startupWorkspace = { referenceId: startupWorkspaceRef, label: basename(startupWorkspaceRef) };
+    }
+    infoLog(`[main] startup workspace from spawn: ${startupWorkspaceRef}`);
   }
 
   // 新手引导完成标记：主进程文件（userData/onboarding.json）——localStorage 在多实例
@@ -1358,37 +1255,25 @@ async function main(): Promise<void> {
     }
   };
 
-  /** 旧全局数据一次性迁移进首个打开项目的 storeDir（失败跳过，按全新库处理） */
-  const adoptLegacyData = (storeDir: string): void => {
-    const hasLegacy = existsSync(legacyGlobalDbPath) || existsSync(legacyConversationsRoot);
-    if (!hasLegacy) return;
-    try {
-      // 目录不存在视作空（可继承）；已有项目数据不覆盖
-      if (existsSync(storeDir) && readdirSync(storeDir).length > 0) return;
-      mkdirSync(storeDir, { recursive: true });
-      if (existsSync(legacyGlobalDbPath)) renameSync(legacyGlobalDbPath, join(storeDir, "novel.db"));
-      if (existsSync(legacyConversationsRoot)) {
-        renameSync(legacyConversationsRoot, join(storeDir, "conversations"));
-      }
-      infoLog("[main] legacy global data adopted into workspace storeDir");
-    } catch (e) {
-      console.warn("[main] legacy data adoption failed (start fresh):", e);
-    }
-  };
-
   /** 当前已绑定的 storeDir（与 currentNovelStore 配对；rebindWorkspace 幂等短路判定用） */
   let currentStoreDir: string | undefined;
 
-  /** 数据库与会话目录随 workspace 重绑：关旧库 → 开新库（<storeDir>/novel.db）→ manager rescope；
+  /** 数据库与会话目录随 workspace 重绑：关旧库 → 开新库 → manager rescope；
    *  storeDir undefined（关闭工作区）= 全部清空回空态。open 返回前完成，渲染端随后 refetch 即新数据。
    *  同 storeDir 且库仍打开 = 幂等重开直接返回——rescope 会无条件 terminate 全部会话，
-   *  「导入创建 → openDirect 同项目」若重复 rebind 会把刚派生的 ProjectImporter 解构会话当场杀掉 */
-  const rebindWorkspace = async (storeDir: string | undefined): Promise<void> => {
+   *  「导入创建 → openDirect 同项目」若重复 rebind 会把刚派生的 ProjectImporter 解构会话当场杀掉。
+   *  云项目（纯云端化 FR4）：不落本地 novel.db，main 内 RemoteNovelStore 直连 server 域通道
+   *  （UI 手动域写经 oplog；sessionTag 进程唯一），快照缓存落 workspace 缓存目录。 */
+  const rebindWorkspace = async (
+    storeDir: string | undefined,
+    cloud?: { projectId: string; workspaceRoot: string },
+  ): Promise<void> => {
     if (storeDir !== undefined && storeDir === currentStoreDir && currentNovelStore !== undefined) {
       return;
     }
+    await releaseCloudDomain();
     try {
-      currentNovelStore?.close();
+      if (currentNovelStore instanceof SqliteNovelStore) currentNovelStore.close();
     } catch (e) {
       console.warn("[main] novel store close failed on rebind:", e);
     }
@@ -1398,7 +1283,21 @@ async function main(): Promise<void> {
     if (storeDir !== undefined) {
       currentJournalDir = join(storeDir, "conversations");
       mkdirSync(currentJournalDir, { recursive: true });
-      currentNovelStore = new SqliteNovelStore(join(storeDir, "novel.db"));
+      if (cloud !== undefined) {
+        const store = new RemoteNovelStore({
+          url: (await configStore.get()).server?.url ?? "",
+          projectId: cloud.projectId,
+          sessionTag: `ui-${cloud.projectId}-${process.pid}`,
+          getAccessToken: () => serverAuthSession.ensureAccessToken(),
+          getLeaseToken: () => cloudDomain?.lease?.token,
+          getConversationId: () => `ui-${cloud.projectId}`,
+          cachePath: join(cloud.workspaceRoot, ".novel", "cache", "domain-snapshot.json"),
+        });
+        cloudDomain = { projectId: cloud.projectId, store };
+        currentNovelStore = store;
+      } else {
+        currentNovelStore = new SqliteNovelStore(join(storeDir, "novel.db"));
+      }
       currentStoreDir = storeDir;
     }
     await manager.rescope(currentJournalDir);
@@ -1482,7 +1381,9 @@ async function main(): Promise<void> {
       ),
     // ---- 云项目（项目域上云 FR4）：server 为权威，本地仅缓存目录 + 注册表登记 ----
     cloudProjects: {
-      list: async (): Promise<Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean }>> => {
+      list: async (): Promise<
+        Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean; referenceId?: string }>
+      > => {
         const url = (await configStore.get()).server?.url;
         const token = await serverAuthSession.ensureAccessToken();
         if (url === undefined || token === undefined) return [];
@@ -1492,13 +1393,15 @@ async function main(): Promise<void> {
           });
           if (!res.ok) return [];
           const body = (await res.json()) as {
-            projects?: Array<{ id: string; name: string; lastActivityAt: number | null; archivedAt: number | null }>;
+            projects?: Array<{ id: string; name: string; lastActivityAt: number | null; archivedAt: string | null }>;
           };
           return (body.projects ?? []).map((p) => ({
             id: p.id,
             name: p.name,
             lastActivityAt: p.lastActivityAt,
             archived: p.archivedAt !== null,
+            // 本地登记条目（打开/删除要用的 workspace 引用；他端创建未打开时缺省）
+            referenceId: registryEntries.find((e) => e.cloudProjectId === p.id)?.workspaceId,
           }));
         } catch {
           return [];
@@ -1529,6 +1432,54 @@ async function main(): Promise<void> {
         if (existing !== undefined) return { referenceId: existing.workspaceId, label: existing.label };
         return registerCloudEntry(projectId, name);
       },
+      /** 删除云项目（纯云端化 FR6）：server 软删（权威）→ 本地缓存与注册表清理。
+       *  在用（当前项目或他实例持锁）拒绝；未登记（他端创建未打开）只删 server 侧。 */
+      remove: async (projectId: string): Promise<void> => {
+        const url = (await configStore.get()).server?.url;
+        const token = await serverAuthSession.ensureAccessToken();
+        if (url === undefined || token === undefined) throw new Error("未登录 server（删除云端项目需登录）");
+        const entry = registryEntries.find((e) => e.cloudProjectId === projectId);
+        if (entry !== undefined && entry.workspaceRoot === currentWorkspaceRoot) {
+          throw new Error("该项目正在使用中，请先关闭后再删除");
+        }
+        if (entry !== undefined) {
+          // 跨实例占用检查（他窗口开着该云项目的缓存目录）
+          const location = await locator.resolve(entry.workspaceRoot);
+          const lockStatus = WorkspaceDirLock.inspect(location.storeDir);
+          if (lockStatus !== undefined && lockStatus.alive) {
+            throw new Error("该项目已在另一窗口打开，请先关闭该窗口后再删除");
+          }
+        }
+        const res = await fetch(`${url.replace(/\/+$/, "")}/v1/projects/${encodeURIComponent(projectId)}`, {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (!res.ok && res.status !== 404) {
+          const body = (await res.json().catch(() => ({}))) as { message?: string };
+          throw new Error(body.message ?? `删除失败（HTTP ${res.status}）`);
+        }
+        if (entry !== undefined) {
+          const location = await locator.resolve(entry.workspaceRoot);
+          if (location.storeDir.startsWith(storageRoot + sep)) {
+            try {
+              await rm(location.storeDir, { recursive: true, force: true });
+            } catch (e) {
+              console.warn("[main] cloud cache storeDir removal failed (leftover tolerated):", e);
+            }
+          }
+          // 缓存目录（workspace 兜底面：设计稿/域快照缓存等）；盘根守卫同本地删除
+          if (parsePath(entry.workspaceRoot).root !== entry.workspaceRoot) {
+            try {
+              await rm(entry.workspaceRoot, { recursive: true, force: true });
+            } catch (e) {
+              console.warn("[main] cloud cache folder removal failed (leftover tolerated):", e);
+            }
+          }
+          removeRegistryEntry(entry.workspaceId);
+          allowedWorkspaceReferences.delete(entry.workspaceRoot);
+        }
+        infoLog(`[main] cloud project removed: ${projectId}`);
+      },
     },
     open: async (reference: { referenceId: string; label: string }) => {
       // referenceId 两种来源：最近列表传 workspaceId（哈希，注册表反查 root）；
@@ -1541,7 +1492,9 @@ async function main(): Promise<void> {
       const workspaceRoot = root ?? reference.referenceId;
       const label = reference.label.trim() !== "" ? reference.label : basename(workspaceRoot);
       const location = await locator.resolve(workspaceRoot);
-      adoptLegacyData(location.storeDir);
+      // 云项目标识（项目域上云 FR4）：当前项目绑 cloudProjectId → rebind 装 RemoteNovelStore +
+      //  子进程注入 NOVA_PROJECT_ID（RemoteNovelStore/RemoteProjectFiles/journal HTTP 全套激活）
+      const cloudEntry = registryEntries.find((e) => e.workspaceId === location.workspaceId);
       // 同项目双开互斥：先取新锁（失败时当前工作区原样保留），成功后才切换——
       // 释放旧守卫 → rebind → 绑新焦点通道（供他实例双开时回切本窗口）
       let lockResult = WorkspaceDirLock.acquire(location.storeDir, {
@@ -1576,7 +1529,12 @@ async function main(): Promise<void> {
       }
       releaseWorkspaceGuards();
       try {
-        await rebindWorkspace(location.storeDir);
+        await rebindWorkspace(
+          location.storeDir,
+          cloudEntry?.cloudProjectId !== undefined
+            ? { projectId: cloudEntry.cloudProjectId, workspaceRoot: location.workspaceRoot }
+            : undefined,
+        );
         focusChannel = await bindFocusChannel(workspaceFocusAddr(location.workspaceId), () => {
           const win = mainWindow;
           if (win === undefined || win.isDestroyed()) return;
@@ -1590,9 +1548,6 @@ async function main(): Promise<void> {
       }
       workspaceLock = lockResult.lock;
       currentWorkspaceRoot = location.workspaceRoot;
-      // 云项目标识（项目域上云 FR4）：当前项目绑 cloudProjectId → 子进程注入 NOVA_PROJECT_ID
-      //（RemoteNovelStore/RemoteProjectFiles/journal HTTP 全套激活）；本地项目清除
-      const cloudEntry = registryEntries.find((e) => e.workspaceId === location.workspaceId);
       if (cloudEntry?.cloudProjectId !== undefined) {
         process.env.NOVA_PROJECT_ID = cloudEntry.cloudProjectId;
         infoLog(`[main] cloud project active: ${cloudEntry.cloudProjectId}`);
@@ -1631,7 +1586,8 @@ async function main(): Promise<void> {
         }
         return;
       }
-      spawnNewGuiInstance(workspaceRoot);
+      // 派发值优先 workspaceId（registry 反查形态）；目录选择器残留形态传 root（白名单）
+      spawnNewGuiInstance(registryHit !== undefined ? registryHit.workspaceId : workspaceRoot);
     },
     // 启动项目上下文取出即清（renderer 启动取一次；StrictMode 双挂载/重复调用拿到 undefined）
     takeStartupWorkspace: async () => {
@@ -1707,7 +1663,7 @@ async function main(): Promise<void> {
   // 带启动上下文的派生实例（"在新窗口打开"spawn 而来）：级联偏移定位——默认位置与
   // 原窗口完全重叠，且 detached 子进程在 Windows 前台锁下可能拿不到前台而被压在
   // 原窗口后面，看起来像"没弹出来"
-  const spawnedWithWorkspace = startupWorkspaceRoot !== undefined;
+  const spawnedWithWorkspace = startupWorkspaceRef !== undefined;
   const cascadePosition = spawnedWithWorkspace
     ? (() => {
         const area = screen.getPrimaryDisplay().workArea;

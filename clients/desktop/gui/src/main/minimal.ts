@@ -7,7 +7,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, screen } from "
 import type { OpenDialogOptions, SaveDialogOptions } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { basename, dirname, join, parse as parsePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -386,15 +386,30 @@ function createManager(
 }
 
 // 崩溃兜底：main 进程任何未捕获异常/未处理 rejection 先留完整痕迹再退出
-// （此前无此 handler 时崩溃只剩 exit 1 + 一行裸 undefined，无法定位）
+// （此前无此 handler 时崩溃只剩 exit 1 + 一行裸 undefined，无法定位）。
+// 追加同步文件日志（userData/crash.log）：stdout 走 pnpm 管道有缓冲，进程
+// fail-fast（如 zeromq addon 0xC0000409）时运行期日志会整段丢失（2026-09-04 实测）
 process.on("uncaughtException", (e) => {
+  appendCrashLog(`uncaughtException ${String(e?.stack ?? e)}`);
   console.error("[main] uncaught exception:", e);
   process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
+  appendCrashLog(`unhandledRejection ${String(reason)}`);
   console.error("[main] unhandled rejection:", reason);
   process.exit(1);
 });
+
+/** 崩溃/异常痕迹同步落盘（绕过 stdout 管道缓冲；每次追加，勿写敏感内容） */
+function appendCrashLog(line: string): void {
+  try {
+    const { app: electronApp } = require("electron") as typeof import("electron");
+    const path = join(electronApp.getPath("userData"), "crash.log");
+    writeFileSync(path, `[${new Date().toISOString()}] ${line}\n`, { flag: "a" });
+  } catch {
+    // app 未就绪等极端场景：尽力而为
+  }
+}
 
 /** 启动一个新的 GUI 实例（独立进程——多实例并行创作入口）。
  *  openWorkspaceRoot 提供时新实例启动即自动打开该项目（"在新窗口打开"），
@@ -1193,6 +1208,11 @@ async function main(): Promise<void> {
     }
     const focusClose = focusChannel?.close();
     focusChannel = undefined;
+    // 会话级 ZMQ SUB 全量拆除：退出时若残留（会话进程尚未退出/刚注册），
+    // addon.node 在进程退出阶段 fail-fast（0xC0000409，WER 实锤 2026-09-04）——
+    // 曾是「关窗闪退」根因（will-quit 等待清单此前只含 novel/manager 四件）
+    const subscriberCloses = [...conversationSubscribers.values()].map((s) => s.close().catch(() => {}));
+    conversationSubscribers.clear();
     void Promise.race([
       Promise.allSettled([
         novelPublisher.close(),
@@ -1200,6 +1220,7 @@ async function main(): Promise<void> {
         novelWs.close(),
         managerWs.close(),
         ...(focusClose !== undefined ? [focusClose] : []),
+        ...subscriberCloses,
       ]),
       new Promise((resolve) => setTimeout(resolve, 2000)),
     ]).finally(() => app.quit());
@@ -1781,6 +1802,14 @@ async function main(): Promise<void> {
     authorizeSender: (senderId) => senderId === win.webContents.id,
   });
   designController.register(ipcMain as unknown as DesignIpcMain);
+  // 崩溃观测（WER 只给 addon 帧不给上下文；此处同步落盘留现场）：
+  // 渲染进程崩溃/被杀、GPU 进程异常——「窗口消失但 main 残留」类闪退的直接证据源
+  win.webContents.on("render-process-gone", (_e, details) => {
+    appendCrashLog(`render-process-gone reason=${details.reason} exitCode=${details.exitCode}`);
+  });
+  app.on("child-process-gone", (_e, details) => {
+    appendCrashLog(`child-process-gone type=${details.type} reason=${details.reason} exitCode=${String(details.exitCode)}`);
+  });
   win.on("closed", () => {
     void designController.dispose();
   });

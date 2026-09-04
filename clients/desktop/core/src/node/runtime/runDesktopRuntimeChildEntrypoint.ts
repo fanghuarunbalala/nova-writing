@@ -160,11 +160,14 @@ const RUNTIME_SETTINGS_ENV = "NOVEL_RUNTIME_SETTINGS" as const;
  * 绑定会话事件 PUB（每会话一个 ipc:// 命名管道地址；main 侧 register 后 SUB 接入）。
  * bind 失败（地址占用等）→ 告警并返回 undefined（内存 hub 照常分发）。
  */
+let conversationEventPublisher: import("../../event/EventPublisher.js").EventPublisher | undefined;
+
 async function bindConversationEventPublisher(
 	conversationId: string,
 	logger?: Logger,
 ): Promise<ConversationEventPublisher | undefined> {
 	const publisher = new EventPublisher(conversationEventsAddr(conversationId));
+	conversationEventPublisher = publisher;
 	try {
 		await publisher.bind();
 		return publisher;
@@ -258,6 +261,7 @@ function describeCrash(reason: unknown): string {
 	return `unknown crash reason: ${String(reason)}`;
 }
 
+/** 会话事件 PUB（SIGTERM 清理引用；bind 失败保持 undefined） */
 /** 注册崩溃自曝（在任何其他逻辑之前）：未捕获异常/拒绝写盘后 exit(1)。 */
 function registerCrashHandlers(): void {
 	process.on("uncaughtException", (error) => {
@@ -268,6 +272,16 @@ function registerCrashHandlers(): void {
 		writeCrashTrace(`CRASH unhandledRejection\n${describeCrash(reason)}`);
 		process.exit(1);
 	});
+	// zeromq addon 退出 fail-fast 防护（0xC0000409，WER 实锤）：会话 PUB socket
+	// 随进程自然退出而析构时会触发 native fail-fast——SIGTERM/SIGINT 先同步 close
+	// 再退（main spawner kill 走 SIGTERM；close 异步故给 exit 让步 100ms）
+	for (const signal of ["SIGTERM", "SIGINT"] as const) {
+		process.on(signal, () => {
+			writeCrashTrace(`EXIT ${signal}`);
+			void conversationEventPublisher?.close().catch(() => {});
+			setTimeout(() => process.exit(0), 100).unref?.();
+		});
+	}
 }
 
 /**

@@ -1,7 +1,9 @@
 # 云项目 API 契约（项目域上云 · 冻结供双端复用）
 
-> 状态：v1（feat/cloud-projects）。Android M4 的 RemoteProjectFiles / RemoteNovelStore 直接消费本契约；
+> 状态：v1.1（feat/cloud-projects · 纯云端化）。Android M4 的 RemoteProjectFiles / RemoteNovelStore 直接消费本契约；
 > 变更须双向同步本文件与两端实现，破坏性变更 bump 版本。
+> v1.1（纯云端化）：journal replay 增量参数、history 分页语义（latest/before）、main 侧 UI 域通道、
+> 本地性能缓存（journal 镜像 + 域快照缓存）与 env 注入表更新。
 
 ## 1. 认证与通用约定
 
@@ -73,20 +75,54 @@ interface ProjectFiles {
 
 ```ts
 new RemoteNovelStore({ url, projectId, sessionTag, getAccessToken,
-                       getLeaseToken, getConversationId, onReplaySkip? })
+                       getLeaseToken, getConversationId, onReplaySkip?, cachePath? })
 // implements NovelStore（query/mutate/mutateBatch）
 ```
 
 - 复用各端本地域引擎做投影；每个成功 mutation 以 `{kind:"novel_mutation", id:"m_<uuid>", data:{sessionTag, mutation}}` 追加 oplog（§4 mutate）。
 - 收敛：init=snapshot 全量重放；query 前 delta 增量；`sessionTag` 等于自身的条目跳过（已应用）；重放失败 `onReplaySkip` 跳过（前向兼容）。
 - 上推失败抛错（server 权威不缺记；本地发散不传播——下次会话从 server 重放）。
+- **sessionTag 必须进程内唯一**（如 `<conversationId>-<pid>`）：固定值会让重启后的空投影跳过自身旧操作（丢数据）。
+- **域快照缓存（cachePath，可选）**：`{version:1, cursor, entities}` 持久化——命中时 init 载入投影+cursor 后仅 delta 补齐；
+  tmp+rename 原子写（多进程共写安全，(cursor,entities) 成对一致，落后版本由 delta 自愈；损坏按未命中回退全量）。
 - Android Kotlin 版对齐此语义（`:core:net`，M4）。
+
+### journal 本地镜像 + main 预播种（纯云端化 ④）
+
+- 行协议与各端本地 journal.jsonl 同构（snapshot 行带 run / append 行带 messages），行内嵌
+  `gs` = server 账本全局行号（读侧忽略；做增量游标与并发写者去重键）。
+- 写侧原语（`journalMirror` 模块）：`appendMirrorRows`（**追加前重扫尾序，gs ≤ 尾的行丢弃**——多写者竞态安全）、
+  `rewriteMirrorRows`（收缩/rewrite 全量重建）、`seedJournalMirrorFromServer`（main 在会话 spawn 前预播种：
+  尾扫 → `GET replay?since=tail` → 收缩（lastSeq<尾）全量重建 → 去重追加）。
+- 镜像位置：`<storeDir>/conversations/<cid>/journal.jsonl`——各端一次性历史读取（UI 回显/恢复上下文）
+  不等子进程对账。
 
 ## 6. 会话子进程环境变量（gui main → child）
 
 | env | 云项目含义 |
 |---|---|
 | `NOVA_PROJECT_ID` | 云项目 id：child 激活 RemoteNovelStore + RemoteProjectFiles（本地项目不设） |
-| `NOVA_SERVER_URL` / `NOVA_SERVER_ACCESS_FILE` | server 基址与 access token 文件（M3 既有） |
+| `NOVA_SERVER_URL` / `NOVA_SERVER_ACCESS_FILE` | server 基址与 access token 文件（main `applyServerEnv` 与 `NOVEL_*` 前缀双注入——M3 旧名，云分支读 `NOVA_*`） |
 | `NOVA_LEASE_TOKEN` | 会话租约（M3 既有；域写/账本写共用） |
-| `NOVA_CONVERSATION_WORKSPACE` | 云项目 = 本地缓存目录（journal sidecar/设计稿缓存兜底；非权威数据） |
+| `NOVA_CONVERSATION_WORKSPACE` | 云项目 = 本地缓存目录（journal 镜像/设计稿/域快照缓存兜底；非权威数据） |
+
+## 7. journal 账本读取（纯云端化 ①/v1.1）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/journal/:conversationId/replay?since=N` | 增量（seq>N，按 seq 升序）；缺省 since=0 全量（向后兼容）。响应 `{events, lastSeq}`——`lastSeq` 为该会话当前最大 seq（客户端据此判定「账本被 rewrite 收缩」→ 镜像全量重建）。owner 判定用未过滤存在性查询（since 滤空不放行非 owner 探测） |
+
+**history 分页语义（各端读侧契约，run 粒度）**：
+
+- `fromSeq + limit`：前向头部页（resume/断档补拉，语义不变）。
+- `latest: true + limit`：最近 limit 个 run（首开首屏）。
+- `before: N + limit`：seq < N 的最近 limit 个 run（向上翻页游标 = 当前已载最早 run seq）。
+- 调用方以 `limit+1` 探测是否还有更早（多出的最早 run 丢弃即 hasMore=true）。
+
+## 8. main 侧 UI 域通道（纯云端化，桌面特有）
+
+- 云项目打开时桌面 main 进程内构造 `RemoteNovelStore`（renderer 的 novel RPC 不再落本地 novel.db）：
+  - `sessionTag = ui-<projectId>-<pid>`（进程唯一，见 §5 约束）；租约 conversationId = `ui-<projectId>`（稳定）。
+  - UI 手动域写（建角色/卷章等）经 server oplog；写前懒申请 `ui-` 租约（LeaseClient 心跳维持，项目关闭释放）。
+  - `ui-` 租约与会话租约 conversation id 不同、不互斥；域级并发由 entity_version 乐观锁兜底。
+- 打开云项目后 main 后台预播种最近 K=5 个会话的镜像 + 预热读侧折叠缓存（fire-and-forget）。

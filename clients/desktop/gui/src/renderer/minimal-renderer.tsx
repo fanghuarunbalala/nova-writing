@@ -95,24 +95,20 @@ const configurationClient = {
 interface WorkspaceSessionDto {
   id: string;
   label: string;
-  /** registry 透传：最后打开时间（ISO）与工作区根目录（旧数据缺省） */
+  /** registry 透传：最后打开时间（ISO）与工作区根目录（云项目 = 本地缓存目录；旧数据缺省） */
   lastOpenedAt?: string;
   rootPath?: string;
-  /** 云项目条目（项目域上云）：设置页/欢迎页云端分区标识 */
-  cloud?: boolean;
 }
-/** 云项目视图（server /v1/projects） */
+/** 云项目视图（server /v1/projects；纯云端化 ⑥：项目列表唯一来源） */
 interface CloudProjectDto {
   id: string;
   name: string;
   lastActivityAt: number | null;
   archived: boolean;
+  /** 本地登记条目（打开/删除/切换过滤用；他端创建未打开时缺省） */
+  referenceId?: string;
 }
 interface WorkspaceApi {
-  pickWorkspace(): Promise<{ referenceId: string; label: string } | undefined>;
-  /** 新建项目：save 型对话框命名 → 主进程建目录 → 返回引用 */
-  createWorkspace(): Promise<{ referenceId: string; label: string } | undefined>;
-  listRecent(): Promise<readonly WorkspaceSessionDto[]>;
   open(reference: { referenceId: string; label: string }): Promise<WorkspaceSessionDto>;
   close(): Promise<void>;
   /** 在新 GUI 实例中打开（当前实例不动；已打开时主进程弹窗告知并置前持有窗口） */
@@ -122,13 +118,12 @@ interface WorkspaceApi {
   /** 新手引导完成标记（主进程文件，跨实例一致可见） */
   getOnboardingDone(): Promise<boolean>;
   markOnboardingDone(): Promise<void>;
-  /** 删除项目（仅非当前项目；主进程彻底删除应用侧 storeDir 并移出注册表） */
-  delete(workspaceId: string): Promise<void>;
-  /** 云项目（项目域上云 FR4；旧 main 未暴露时 undefined → 欢迎页隐藏云端分区） */
+  /** 云项目（纯云端化 ⑥；旧 main 未暴露时 undefined → 欢迎页显示升级提示） */
   cloudProjects?: {
     list(): Promise<CloudProjectDto[]>;
     create(name: string): Promise<{ referenceId: string; label: string } | undefined>;
     openProject(projectId: string, name: string): Promise<{ referenceId: string; label: string }>;
+    remove(projectId: string): Promise<void>;
   };
 }
 const workspaceTransport = electronIpcTransport({ endpoint: bridge as never, channel: "workspace-rpc" });
@@ -170,20 +165,14 @@ const platform: FrontendPlatform = {
     : {}),
 };
 
-// workspace 控制器：桥 main 侧目录选择器 + 定位器（经 workspace-rpc）。
-// openInNewWindow/takeStartupWorkspace：切换对话框"新窗口打开"两件套（派发 + 启动自动打开）。
+// workspace 控制器：云项目引用 → 打开/关闭/新窗口（经 workspace-rpc；纯云端化 ⑥——
+// 本地目录选择器/最近列表通道退役，项目列表由 NovelApp 经 cloudProjects 自行拉取）。
 const workspaceController = new WorkspaceController({
   sessions: {
-    listRecent: () => workspaceApi.listRecent(),
     open: (reference) => workspaceApi.open(reference),
     close: () => workspaceApi.close(),
     openInNewWindow: (reference) => workspaceApi.openInNewWindow(reference),
     takeStartupWorkspace: () => workspaceApi.takeStartupWorkspace(),
-    deleteWorkspace: (workspaceId) => workspaceApi.delete(workspaceId),
-  },
-  picker: {
-    pickWorkspace: () => workspaceApi.pickWorkspace(),
-    createWorkspace: () => workspaceApi.createWorkspace(),
   },
 });
 

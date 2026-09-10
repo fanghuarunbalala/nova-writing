@@ -1,5 +1,6 @@
 /**
- * NovelApp 启动路由：无 Workspace 时渲染选择页；打开后切到工作台壳。
+ * NovelApp 启动路由（纯云端化 ⑥ 云-only）：无 Workspace 时渲染欢迎页（云端项目列表）；
+ * 打开后切到工作台壳；登录门强制（未登录必拦，无本地模式跳过）。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -126,55 +127,118 @@ function buildApi() {
 }
 
 function buildController() {
-  const picker = {
-    pickWorkspace: vi.fn(async () => ({
-      referenceId: "ref-1",
-      label: "白昼计划",
-    })),
-  };
   const sessions = {
-    listRecent: vi.fn(async () => [{ id: "ws-1", label: "白昼计划" }]),
-    open: vi.fn(async () => ({ id: "ws-1", label: "白昼计划" })),
+    open: vi.fn(async () => ({ id: "ws-1", label: "云端测试书" })),
     close: vi.fn(async () => undefined),
   };
-  const controller = new WorkspaceController({ picker, sessions });
-  return { controller, picker, sessions };
+  const controller = new WorkspaceController({ sessions });
+  return { controller, sessions };
 }
 
-describe("NovelApp launch routing", () => {
-  it("renders the welcome page when no workspace is open", async () => {
-    const { controller, sessions } = buildController();
-    render(<NovelApp api={buildApi()} platform={platform} workspaceController={controller} />);
-    // 欢迎页（demo 启动·项目选择页）：品牌区 + 最近项目 + 双入口
+function buildCloudProjects(projects: ReadonlyArray<{ id: string; name: string }> = []) {
+  const live = [...projects];
+  return {
+    list: vi.fn(async () =>
+      live.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        lastActivityAt: i,
+        archived: false,
+        referenceId: `ws-${p.id}`,
+      })),
+    ),
+    create: vi.fn(async (name: string) => ({ referenceId: `ws-${name}`, label: name })),
+    openProject: vi.fn(async (id: string, name: string) => ({ referenceId: `ws-${id}`, label: name })),
+    remove: vi.fn(async (id: string) => {
+      const index = live.findIndex((p) => p.id === id);
+      if (index !== -1) live.splice(index, 1);
+    }),
+  };
+}
+
+/** 已登录的配置客户端（欢迎页云分区可见） */
+function buildOnlineClient() {
+  return {
+    load: vi.fn(async () => ({ profiles: [], credentials: {}, defaults: {} })),
+    mutate: vi.fn(async () => undefined),
+    serverAuth: vi.fn(async () => ({
+      status: "online",
+      url: "http://127.0.0.1:8787",
+      username: "alice",
+      deviceId: "d1",
+    })),
+  } as never;
+}
+
+describe("NovelApp launch routing（云端项目）", () => {
+  it("欢迎页只呈现云端项目分区：无本地新建/打开/导入按钮", async () => {
+    const { controller } = buildController();
+    render(
+      <NovelApp
+        api={buildApi()}
+        platform={platform}
+        workspaceController={controller}
+        configurationClient={buildOnlineClient()}
+        onboardingPort={{ isCompleted: async () => true, markCompleted: async () => undefined }}
+        cloudProjects={buildCloudProjects([{ id: "prj_1", name: "云端测试书" }])}
+      />,
+    );
     expect(await screen.findByText("把一桩旧事，写成一本新书。")).toBeInTheDocument();
-    expect(screen.getByText("最近的项目")).toBeInTheDocument();
-    expect(screen.getByText("白昼计划")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新建项目" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "打开其他项目…" })).toBeInTheDocument();
-    expect(sessions.listRecent).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("云端项目")).toBeInTheDocument();
+    // 云列表在 serverAuth 解析后异步拉取（登录态 → refreshCloudProjects）
+    expect(await screen.findByText("云端测试书")).toBeInTheDocument();
+    // 本地入口已退役
+    expect(screen.queryByRole("button", { name: "新建项目" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开其他项目…" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "从文件导入…" })).not.toBeInTheDocument();
+    expect(screen.queryByText("最近的项目")).not.toBeInTheDocument();
+    expect(screen.queryByText("本地项目")).not.toBeInTheDocument();
   });
 
-  it("opens a recent workspace through the launch overlay and lands on the shell", async () => {
+  it("点开云项目 → openProject + open 编排 → 落到工作台", async () => {
     const user = userEvent.setup();
     const { controller, sessions } = buildController();
-    render(<NovelApp api={buildApi()} platform={platform} workspaceController={controller} />);
-    // 卡片主体按钮名以书名开头（右上角删除钮 aria-label 为「删除项目 白昼计划」，^ 区分）
-    await user.click(await screen.findByRole("button", { name: /^白昼计划/ }));
-    expect(sessions.open).toHaveBeenCalledWith({
-      referenceId: "ws-1",
-      label: "白昼计划",
-    });
-    // 启动编排：分步加载遮罩出现（标题 + 步骤清单），完成后撤下并落在工作台
-    expect(await screen.findByLabelText(/正在打开/)).toBeInTheDocument();
-    expect(screen.getByText("载入大纲树")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "新建项目" }),
-    ).not.toBeInTheDocument();
+    const cloud = buildCloudProjects([{ id: "prj_1", name: "云端测试书" }]);
+    render(
+      <NovelApp
+        api={buildApi()}
+        platform={platform}
+        workspaceController={controller}
+        configurationClient={buildOnlineClient()}
+        onboardingPort={{ isCompleted: async () => true, markCompleted: async () => undefined }}
+        cloudProjects={cloud}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: /^云端测试书/ }));
+    expect(cloud.openProject).toHaveBeenCalledWith("prj_1", "云端测试书");
+    expect(sessions.open).toHaveBeenCalledWith({ referenceId: "ws-prj_1", label: "云端测试书" });
     await waitFor(
       () => expect(screen.queryByLabelText(/正在打开/)).not.toBeInTheDocument(),
       { timeout: 8000 },
     );
     expect(screen.getByText("Novel")).toBeInTheDocument();
+  });
+
+  it("删除云项目：确认 → cloudProjects.remove + 列表刷新", async () => {
+    const user = userEvent.setup();
+    const { controller } = buildController();
+    const cloud = buildCloudProjects([{ id: "prj_1", name: "云端测试书" }]);
+    render(
+      <NovelApp
+        api={buildApi()}
+        platform={platform}
+        workspaceController={controller}
+        configurationClient={buildOnlineClient()}
+        onboardingPort={{ isCompleted: async () => true, markCompleted: async () => undefined }}
+        cloudProjects={cloud}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "删除云端项目 云端测试书" }));
+    expect(screen.getByText(/确定删除云端项目「云端测试书」/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "删除", exact: true }));
+    await waitFor(() => expect(cloud.remove).toHaveBeenCalledWith("prj_1"));
+    // 列表刷新后为空态（toast 归属工作台壳，欢迎页态不渲染——只断言列表行为）
+    expect(await screen.findByText(/还没有云端项目/)).toBeInTheDocument();
   });
 });
 
@@ -231,9 +295,8 @@ describe("NovelApp 首启引导门控（跨实例标记端口）", () => {
   });
 });
 
-describe("NovelApp 登录门（启动引导 · opt-in）", () => {
+describe("NovelApp 登录门（纯云端化 ⑥：强制登录）", () => {
   const LOGIN_TITLE = "登录同步服务";
-  const SKIP_KEY = "novel.login.skip.v1";
   const WELCOME_TAG = "把一桩旧事，写成一本新书。";
 
   function buildAuthClient(state: unknown) {
@@ -259,25 +322,14 @@ describe("NovelApp 登录门（启动引导 · opt-in）", () => {
   }
 
   afterEach(() => {
-    localStorage.removeItem(SKIP_KEY);
+    cleanup();
   });
 
-  it("未登录且未跳过 → 先见登录门（盖欢迎页）", async () => {
+  it("未登录 → 先见登录门（盖欢迎页），且无本地模式跳过入口", async () => {
     renderApp(buildAuthClient({ status: "unconfigured" }));
     expect(await screen.findByRole("heading", { name: LOGIN_TITLE })).toBeInTheDocument();
     expect(screen.getByText("推荐 · 本机默认")).toBeInTheDocument();
-  });
-
-  it("跳过 → 记住标记 + 回到欢迎页；二次启动不再弹", async () => {
-    renderApp(buildAuthClient({ status: "unconfigured" }));
-    fireEvent.click(await screen.findByRole("button", { name: "暂不登录，本地模式使用" }));
-    expect(await screen.findByText(WELCOME_TAG)).toBeInTheDocument();
-    expect(localStorage.getItem(SKIP_KEY)).toBe("skipped");
-    // 二次「启动」：已记住跳过 → 直接欢迎页
-    cleanup();
-    renderApp(buildAuthClient({ status: "unconfigured" }));
-    expect(await screen.findByText(WELCOME_TAG)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: LOGIN_TITLE })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "暂不登录，本地模式使用" })).not.toBeInTheDocument();
   });
 
   it("已登录（online + username）→ 不弹门，欢迎页入口卡显示在线态", async () => {
@@ -287,20 +339,8 @@ describe("NovelApp 登录门（启动引导 · opt-in）", () => {
     expect(screen.getByText("已连接同步 · alice")).toBeInTheDocument();
   });
 
-  it("曾配置过 server.url（登出态）→ 不拦（用户已知该功能）", async () => {
+  it("曾配置过 server.url 但未登录（登出/凭据失效）→ 强制登录（纯云端化语义反转）", async () => {
     renderApp(buildAuthClient({ status: "online", url: "http://127.0.0.1:8787" }));
-    expect(await screen.findByText(WELCOME_TAG)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: LOGIN_TITLE })).not.toBeInTheDocument();
-    // 未登录入口卡仍在（点击可重开登录门）
-    expect(screen.getByRole("button", { name: /登录同步服务/ })).toBeInTheDocument();
-  });
-
-  it("欢迎页入口卡点击 → 重开登录门", async () => {
-    localStorage.setItem(SKIP_KEY, "skipped");
-    renderApp(buildAuthClient({ status: "unconfigured" }));
-    expect(await screen.findByText(WELCOME_TAG)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /登录同步服务/ }));
     expect(await screen.findByRole("heading", { name: LOGIN_TITLE })).toBeInTheDocument();
-    expect(localStorage.getItem(SKIP_KEY)).toBeNull();
   });
 });

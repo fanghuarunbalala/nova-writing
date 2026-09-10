@@ -2,12 +2,13 @@
  * LoginPage（独立登录页 · docs/design-demos/login-page-demo.html 定稿形态）
  *
  * 启动登录门 / 欢迎页入口共用：服务器地址（预填推荐默认）+ 用户名 + 密码的单一主表单；
- * 底部次级入口「暂不登录，本地模式使用 · 注册账号」——注册模式同卡切换（← 返回登录），
- * 注册成功即自动登录跳成功态；成功态展示 用户名@server + 「进入工作台」。
- * 老 main 进程（无 serverLogin/serverRegister 方法）降级：注册入口隐藏、登录给出提示。
+ * 底部次级入口「注册账号」——注册模式同卡切换（← 返回登录），注册成功即自动登录跳
+ * 成功态；成功态展示 用户名@server + 「进入工作台」。纯云端化 ⑥：强制登录——项目
+ * 数据都在 server 上，无本地模式跳过入口。老 main 进程（无 serverLogin/serverRegister
+ * 方法）降级：注册入口隐藏、登录给出提示。
  */
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, RefreshCw, ShieldCheck, Smartphone } from "lucide-react";
+import { ArrowLeft, ArrowRight, Cloud, RefreshCw, Smartphone } from "lucide-react";
 import type { ServerAuthState } from "@novel/core";
 import type { ApplicationConfigurationClient } from "../settings/ApplicationConfigurationClient.js";
 import { Button } from "../shared/primitives/Button.js";
@@ -21,8 +22,6 @@ const URL_PATTERN = /^https?:\/\/[^\s/.][^\s]*$/;
 
 export interface LoginPageProps {
   readonly configuration: ApplicationConfigurationClient;
-  /** 「暂不登录，本地模式使用」——由宿主记住跳过并关闭登录门 */
-  readonly onSkip: () => void;
   /** 成功态「进入工作台」 */
   readonly onEnterWorkspace: () => void;
 }
@@ -44,7 +43,7 @@ const MODE_COPY: Record<Mode, { title: string; lede: string; submit: string; pas
   },
 };
 
-export function LoginPage({ configuration, onSkip, onEnterWorkspace }: LoginPageProps) {
+export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
   const [mode, setMode] = useState<Mode>("login");
   const [url, setUrl] = useState(DEFAULT_SERVER_URL);
   const [username, setUsername] = useState("");
@@ -166,8 +165,8 @@ export function LoginPage({ configuration, onSkip, onEnterWorkspace }: LoginPage
             <span>多端接续——手机查看进度、任意设备续写</span>
           </li>
           <li>
-            <Icon icon={ShieldCheck} size="sm" />
-            <span>本地优先——不登录也完整可用，数据不出你的电脑</span>
+            <Icon icon={Cloud} size="sm" />
+            <span>云端项目——数据都在你自己的 server 上，每一端看到同一本书</span>
           </li>
         </ul>
       </aside>
@@ -265,16 +264,10 @@ export function LoginPage({ configuration, onSkip, onEnterWorkspace }: LoginPage
 
         {mode === "login" ? (
           <div className={styles.auxRow}>
-            <button type="button" className={styles.skipLink} onClick={onSkip}>
-              暂不登录，本地模式使用
-            </button>
             {canRegister ? (
-              <>
-                <span className={styles.auxDivider} aria-hidden="true">·</span>
-                <button type="button" className={styles.registerLink} onClick={() => setMode("register")}>
-                  注册账号
-                </button>
-              </>
+              <button type="button" className={styles.registerLink} onClick={() => setMode("register")}>
+                注册账号
+              </button>
             ) : null}
           </div>
         ) : (
@@ -295,7 +288,7 @@ export function LoginPage({ configuration, onSkip, onEnterWorkspace }: LoginPage
         <p className={styles.footnote}>
           令牌经系统安全存储（safeStorage）加密 · 模型 API Key 不上传（BYOK）
           <br />
-          未登录也可完整使用本地写作功能；随时可在 设置 → Server 登录
+          项目数据保存在你自己的 server 上，任何设备登录同一账号即可接续写作
         </p>
       </div>
       </div>

@@ -3,7 +3,7 @@
  * - server 地址 + 登录（双令牌入 safeStorage 加密文件，面板不接触令牌本体）；
  * - 连接状态指示（未配置 / 在线 / 离线 / 需重登）；
  * - 设备会话管理（列表 / 踢出）。
- * 未配置 server 时其余功能不受影响——本地模式是缺省。
+ * 纯云端化 ⑥：项目数据都在 server 上——未配置/离线时无法打开云端项目（重新登录即可恢复）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { LogIn, LogOut, RefreshCw, ShieldOff } from "lucide-react";
@@ -15,9 +15,9 @@ export interface ServerSettingsPanelProps {
 }
 
 const STATUS_LABEL: Record<ServerAuthState["status"], string> = {
-  unconfigured: "未配置（本地模式）",
+  unconfigured: "未配置（登录后使用云端项目）",
   online: "在线",
-  offline: "离线（server 不可达，写作不受影响）",
+  offline: "离线（server 不可达，恢复后即可继续）",
 };
 
 export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps) {
@@ -84,7 +84,7 @@ export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps)
     try {
       await configuration.serverLogout();
       setDevices([]);
-      setStatus("已登出（server 配置保留，数据通道回本地模式）");
+      setStatus("已登出——重新登录即可打开你的云端项目");
       await refreshAuth();
     } catch (error) {
       setStatus(`登出失败：${error instanceof Error ? error.message : String(error)}`);

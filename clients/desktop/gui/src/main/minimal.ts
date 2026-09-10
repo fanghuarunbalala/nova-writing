@@ -4,7 +4,7 @@
  * - conversation：spawnConversation 走子进程（desktop-child.mjs，真实 provider）；createOrResume 回退内存回显 loop
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, screen } from "electron";
-import type { OpenDialogOptions, SaveDialogOptions } from "electron";
+import type { OpenDialogOptions } from "electron";
 import { expose, proxy, wrap, type RPCMessage } from "kkrpc/remote-refs";
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -975,18 +975,6 @@ async function main(): Promise<void> {
       },
     );
   };
-  const saveDialogModal = (options: SaveDialogOptions) => {
-    const win = mainWindow !== undefined && !mainWindow.isDestroyed() ? mainWindow : undefined;
-    infoLog(`[dialog] show kind=save modal=${win !== undefined} title=${String(options.title ?? "")}`);
-    return (win !== undefined ? dialog.showSaveDialog(win, options) : dialog.showSaveDialog(options)).then(
-      (result) => {
-        infoLog(
-          `[dialog] done kind=save canceled=${result.canceled} picked=${result.filePath ?? "-"}`,
-        );
-        return result;
-      },
-    );
-  };
 
   // kkrpc/electron 传输端点（main 侧：webContents.send / ipcMain.on）。
   // 安全：入站消息仅接受主窗口 sender（防注入 frame/webview 冒名调用）；
@@ -1386,55 +1374,7 @@ async function main(): Promise<void> {
   };
 
   const workspaceApi = {
-    pickWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
-      const result = await openDialogModal({
-        title: "打开小说项目",
-        properties: ["openDirectory", "createDirectory"],
-      });
-      if (result.canceled || result.filePaths.length === 0) return undefined;
-      const root = result.filePaths[0]!;
-      allowedWorkspaceReferences.add(root);
-      return { referenceId: root, label: basename(root) };
-    },
-    // 新建项目直达「输入名字建目录」：save 型对话框选位置+命名 → 建目录 → 打开。
-    // 已存在同名目录时 mkdir recursive 幂等（等价直接打开该项目）；同名文件会抛错。
-    createWorkspace: async (): Promise<{ referenceId: string; label: string } | undefined> => {
-      const lastRoot = [...registryEntries].sort((a, b) =>
-        b.lastOpenedAt.localeCompare(a.lastOpenedAt),
-      )[0]?.workspaceRoot;
-      const result = await saveDialogModal({
-        title: "新建项目文件夹",
-        buttonLabel: "新建",
-        defaultPath: lastRoot !== undefined ? join(dirname(lastRoot), "新建项目") : undefined,
-        properties: ["createDirectory", "showHiddenFiles"],
-      });
-      if (result.canceled || result.filePath === undefined || result.filePath === "") {
-        return undefined;
-      }
-      const root = result.filePath;
-      try {
-        mkdirSync(root, { recursive: true });
-      } catch (e) {
-        console.warn("[main] create workspace directory failed:", root, e);
-        throw new Error(`无法在所选位置创建文件夹：${root}`);
-      }
-      allowedWorkspaceReferences.add(root);
-      return { referenceId: root, label: basename(root) };
-    },
-    listRecent: async () =>
-      Object.freeze(
-        [...registryEntries]
-          .sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt))
-          .slice(0, 8)
-          .map((e) => ({
-            id: e.workspaceId,
-            label: e.label,
-            lastOpenedAt: e.lastOpenedAt,
-            rootPath: e.workspaceRoot,
-            ...(e.cloudProjectId !== undefined ? { cloud: true } : {}),
-          })),
-      ),
-    // ---- 云项目（项目域上云 FR4）：server 为权威，本地仅缓存目录 + 注册表登记 ----
+    // ---- 云项目（项目域上云 FR4；纯云端化 ⑥：本地目录选择器/最近列表/本地删除通道退役） ----
     cloudProjects: {
       list: async (): Promise<
         Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean; referenceId?: string }>
@@ -1665,51 +1605,7 @@ async function main(): Promise<void> {
         console.warn("[main] onboarding marker persist failed:", e);
       }
     },
-    // 删除项目（PRD workspace-删除项目）：仅非当前项目可删——彻底删除应用侧 storeDir
-    // （novel.db + conversations/）与整个项目文件夹（含其中的用户文件），并移出注册表/
-    // 白名单。多实例下"正在运行"= 本实例当前项目（root 比对）或任一其他实例持有该项目
-    // 双开锁（inspect 探活）——均拒绝删除。文件系统根（极端场景：把盘根选作工作区）
-    // 绝不触碰。rm 走 fs.promises（libuv 线程池）：整棵数据树的同步遍历会冻结主进程事件
-    // 循环；失败容忍（杀毒/索引/资源管理器句柄占用），残留无副作用。先删数据后改注册表
-    // ——中途崩溃时条目仍在列表可重试，不会留下「列表已无但数据半删」的暗残留
-    delete: async (workspaceId: string): Promise<void> => {
-      const index = registryEntries.findIndex((e) => e.workspaceId === workspaceId);
-      if (index === -1) {
-        throw new Error(`项目不存在或已被删除: ${workspaceId}`);
-      }
-      const entry = registryEntries[index]!;
-      if (entry.workspaceRoot === currentWorkspaceRoot) {
-        throw new Error("该项目正在使用中，请先关闭后再删除");
-      }
-      const location = await locator.resolve(entry.workspaceRoot);
-      if (!location.storeDir.startsWith(storageRoot + sep)) {
-        throw new Error(`storeDir 越界，拒绝删除: ${location.storeDir}`);
-      }
-      // 跨实例占用检查：另一窗口正开着该项目（活进程持锁）→ 拒绝，防误删运行中项目
-      const lockStatus = WorkspaceDirLock.inspect(location.storeDir);
-      if (lockStatus !== undefined && lockStatus.alive) {
-        throw new Error(
-          lockStatus.holderPid === process.pid
-            ? "该项目正在当前窗口使用中，请先关闭后再删除"
-            : "该项目已在另一窗口打开，请先关闭该窗口后再删除",
-        );
-      }
-      try {
-        await rm(location.storeDir, { recursive: true, force: true });
-      } catch (e) {
-        console.warn("[main] workspace storeDir removal failed (leftover tolerated):", e);
-      }
-      // 整个项目文件夹（含用户文件）一并删除；文件系统根守卫——盘根绝不做 recursive rm
-      if (parsePath(entry.workspaceRoot).root !== entry.workspaceRoot) {
-        try {
-          await rm(entry.workspaceRoot, { recursive: true, force: true });
-        } catch (e) {
-          console.warn("[main] workspace folder removal failed (leftover tolerated):", e);
-        }
-      }
-      removeRegistryEntry(entry.workspaceId);
-      allowedWorkspaceReferences.delete(entry.workspaceRoot);
-    },
+    //（纯云端化 ⑥：本地 delete 通道退役——云端项目删除走 cloudProjects.remove）
   };
   expose(workspaceApi, electronIpcTransport({ endpoint, channel: WORKSPACE_CHANNEL }));
 

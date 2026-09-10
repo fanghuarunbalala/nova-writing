@@ -307,7 +307,7 @@ describe("ConversationProjection（liveState）", () => {
 });
 
 	it("resume 重放增量（fromSeq = lastAppliedSequence）", async () => {
-		const historyCalls: Array<{ fromSeq?: number }> = [];
+		const historyCalls: Array<{ fromSeq?: number; latest?: boolean; limit?: number }> = [];
 		let listener: ((e: ProjectedEvent) => void) | undefined;
 		const handle: ConversationHandle = {
 			...fakeHandle([]),
@@ -317,11 +317,13 @@ describe("ConversationProjection（liveState）", () => {
 		};
 		const projection = new ConversationProjection(handle, "c1", async (opts) => {
 			historyCalls.push(opts);
+			// 首开为尾部页语义（分段加载 ⑤）；resume 走 fromSeq 前向增量
 			if (opts.fromSeq === 1) return [];
+			if (opts.latest === true) return [];
 			return [evt({ type: "user.message", persist: true, seq: 2, text: "增量" })];
 		});
 		await projection.start();
-		expect(historyCalls[0]).toMatchObject({ fromSeq: 1 });
+		expect(historyCalls[0]).toMatchObject({ latest: true, limit: 51 }); // 首开拉最近一页
 		listener?.(evt({ type: "user.message", persist: true, seq: 1, text: "首条" }));
 		await projection.resume();
 		expect(historyCalls[1]).toMatchObject({ fromSeq: 2 }); // lastAppliedSequence=1 → from 2

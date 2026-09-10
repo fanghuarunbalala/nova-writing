@@ -113,6 +113,11 @@ export class ConversationProjectionBinding {
     return this.projection?.resume() ?? Promise.resolve();
   }
 
+  /** 加载更早的历史页（分段加载 ⑤：UI 滚动到顶部触发；非 active 时 no-op） */
+  loadOlder(): Promise<boolean> {
+    return this.projection?.loadOlder() ?? Promise.resolve(false);
+  }
+
   stop(): Promise<void> {
     this.stopPromise ??= this.stopOnce();
     return this.stopPromise;
@@ -229,6 +234,8 @@ function emptyProjection(conversationId: string): ConversationProjectionSnapshot
     state: "idle",
     timeline: Object.freeze([]),
     cards: Object.freeze([]),
+    canLoadOlder: false,
+    loadingOlder: false,
   });
 }
 

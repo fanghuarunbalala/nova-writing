@@ -38,6 +38,8 @@ export interface ActiveConversationSession {
   readonly resolveApproval: (requestId: string, decision: ConversationApprovalDecision) => void;
   /** 恢复（失败后重试：重放 journal 增量 + 重建订阅） */
   readonly resume: () => Promise<void>;
+  /** 加载更早的历史页（分段加载 ⑤：滚动到顶部触发；返回是否前插了新内容） */
+  readonly loadOlder: () => Promise<boolean>;
 }
 
 /**
@@ -121,6 +123,7 @@ export function useActiveConversationSession(
     [binding],
   );
   const resume = useCallback(() => binding?.resume() ?? Promise.resolve(), [binding]);
+  const loadOlder = useCallback(() => binding?.loadOlder() ?? Promise.resolve(false), [binding]);
   return useMemo(
     () =>
       Object.freeze({
@@ -130,8 +133,9 @@ export function useActiveConversationSession(
         getConversationMode,
         resolveApproval,
         resume,
+        loadOlder,
       }),
-    [getConversationMode, resolveApproval, resume, sendSystemControl, sendUserMessage, snapshot],
+    [getConversationMode, loadOlder, resolveApproval, resume, sendSystemControl, sendUserMessage, snapshot],
   );
 }
 

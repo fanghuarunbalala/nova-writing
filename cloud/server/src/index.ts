@@ -6,7 +6,8 @@ import { registerLeaseRoutes } from "./lease.js";
 import { registerLedgerRoutes } from "./ledger.js";
 import { registerDomainRoutes } from "./domain.js";
 import { registerApprovalRoutes } from "./approvals.js";
-import { registerMemoryRoutes, newProjectId } from "./memory.js";
+import { registerFileRoutes, newProjectId } from "./files.js";
+import { registerProjectRoutes } from "./projects.js";
 import { registerDefinitionRoutes } from "./definitions.js";
 import type { FastifyInstance } from "fastify";
 
@@ -26,19 +27,23 @@ export async function buildServer(opts: BuildOptions = {}): Promise<{ app: Fasti
   registerLedgerRoutes(app, db, hub, secret);
   registerDomainRoutes(app, db, hub, secret);
   registerApprovalRoutes(app, db, hub, secret);
-  registerMemoryRoutes(app, db, hub, secret);
+  registerFileRoutes(app, db, hub, secret);
+  registerProjectRoutes(app, db, secret);
   registerDefinitionRoutes(app, db, secret);
 
-  // 项目路由（M1 owner-only）
+  // 建项目（M1 owner-only；云项目 = 权威实体，无本地目录——项目域上云 PRD）
   const guard = authGuard(secret);
   app.post("/v1/projects", { preHandler: guard }, async (request, reply) => {
     const user = (request as unknown as AuthedRequest).user;
     const body = request.body as { name?: string };
+    const name = body?.name?.trim() || "未命名项目";
+    if (name.length > 64) return reply.code(400).send({ code: "bad_name", message: "项目名需 1 – 64 字符" });
     const id = newProjectId();
-    db.prepare("INSERT INTO projects (id, owner_id, name, created_at) VALUES (?, ?, ?, ?)").run(
-      id, user.userId, body?.name ?? "未命名项目", Date.now()
-    );
-    return reply.code(201).send({ id, name: body?.name ?? "未命名项目" });
+    const now = Date.now();
+    db.prepare(
+      "INSERT INTO projects (id, owner_id, name, created_at, last_activity_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, user.userId, name, now, now);
+    return reply.code(201).send({ id, name });
   });
 
   app.get("/health", async () => ({ ok: true }));

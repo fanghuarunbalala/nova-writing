@@ -2,6 +2,12 @@
 import type { Logger } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 
+/**
+ * 纯云端化（⑥）：项目打开/新建一律走云端项目列表（CloudProjectsPort），本地目录
+ * 选择器/本地最近列表通道退役——本控制器只剩「引用 → 打开/关闭/新窗口/启动上下文」
+ * 的编排面。recent 快照字段随 listRecent 一并移除（云端列表由 NovelApp 自行拉取）。
+ */
+
 export type WorkspaceControllerPhase =
   | "idle"
   | "loading"
@@ -21,7 +27,7 @@ export interface WorkspaceSessionView {
   readonly label: string;
   /** 最后打开时间（ISO 字符串，registry 透传；旧数据缺省） */
   readonly lastOpenedAt?: string;
-  /** 工作区根目录路径（registry 透传；旧数据缺省） */
+  /** 工作区根目录路径（云项目 = 本地缓存目录；registry 透传） */
   readonly rootPath?: string;
 }
 
@@ -35,30 +41,19 @@ export interface WorkspaceControllerSnapshot {
   readonly revision: number;
   readonly phase: WorkspaceControllerPhase;
   readonly current?: WorkspaceSessionView;
-  readonly recent: readonly WorkspaceSessionView[];
   readonly error?: WorkspaceControllerErrorSnapshot;
 }
 
-export interface WorkspacePickerPort {
-  pickWorkspace(): Promise<WorkspaceReferenceView | undefined>;
-  /** 新建项目（save 型对话框命名 + 建目录）；宿主未提供时新建入口报不可用 */
-  createWorkspace?(): Promise<WorkspaceReferenceView | undefined>;
-}
-
 export interface WorkspaceSessionPort {
-  listRecent(): Promise<readonly WorkspaceSessionView[]>;
   open(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView>;
   close(): Promise<void>;
   /** 在新 GUI 实例（独立进程/窗口）中打开工作区，当前窗口保持不动；宿主未提供时报不可用 */
   openInNewWindow?(reference: WorkspaceReferenceView): Promise<void>;
   /** 取出宿主派发的启动项目（他实例"新窗口打开"spawn 本实例时注入）；取出即清，仅一次 */
   takeStartupWorkspace?(): Promise<WorkspaceReferenceView | undefined>;
-  /** 删除项目（仅非当前项目；彻底删除应用侧数据并移出最近列表）。宿主未提供时删除入口报不可用 */
-  deleteWorkspace?(workspaceId: string): Promise<void>;
 }
 
 export interface WorkspaceControllerOptions {
-  readonly picker?: WorkspacePickerPort;
   readonly sessions?: WorkspaceSessionPort;
   readonly logger?: Logger;
 }
@@ -66,7 +61,6 @@ export interface WorkspaceControllerOptions {
 export type WorkspaceControllerListener = () => void;
 
 export class WorkspaceController {
-  private readonly picker: WorkspacePickerPort;
   private readonly sessions: WorkspaceSessionPort;
   private readonly logger: Logger;
   private readonly listeners = new Set<WorkspaceControllerListener>();
@@ -74,12 +68,10 @@ export class WorkspaceController {
   private snapshot: WorkspaceControllerSnapshot = freezeSnapshot({
     revision: 0,
     phase: "idle",
-    recent: [],
   });
   private operationTail: Promise<void> = Promise.resolve();
 
   constructor(options: WorkspaceControllerOptions = {}) {
-    this.picker = options.picker ?? unavailableWorkspacePicker;
     this.sessions = options.sessions ?? unavailableWorkspaceSessions;
     this.logger = (options.logger ?? noopLogger).child({
       component: "workspace_controller",
@@ -95,22 +87,6 @@ export class WorkspaceController {
     return () => this.listeners.delete(listener);
   }
 
-  refresh(): Promise<void> {
-    return this.runExclusive(async () => {
-      this.publish({ phase: "loading" });
-      this.logger.debug("workspace_controller.refresh_started");
-      try {
-        const recent = captureWorkspaceSessions(await this.sessions.listRecent());
-        this.publish({ phase: this.snapshot.current === undefined ? "idle" : "ready", recent });
-        this.logger.debug("workspace_controller.refresh_completed", {
-          recentCount: recent.length,
-        });
-      } catch {
-        this.reject("WORKSPACE_LIST_FAILED", true, "无法读取最近打开的项目");
-      }
-    });
-  }
-
   /**
    * 应用主进程推送的已打开会话：renderer 错过 open 响应（重启/自动打开）时
    * 同步 current 与 ready 状态。Applies a workspace-opened push from the main
@@ -122,115 +98,7 @@ export class WorkspaceController {
     this.publish({ phase: "ready", current: captured });
   }
 
-  chooseAndOpen(): Promise<WorkspaceSessionView | undefined> {
-    return this.runExclusive(async () => {
-      this.publish({ phase: "selecting" });
-      this.logger.info("workspace_controller.selection_started");
-      let reference: WorkspaceReferenceView | undefined;
-      try {
-        reference = captureOptionalWorkspaceReference(await this.picker.pickWorkspace());
-      } catch {
-        this.reject(
-          "WORKSPACE_SELECTION_UNAVAILABLE",
-          false,
-          "当前客户端尚未连接 Workspace 选择服务",
-        );
-        return undefined;
-      }
-      if (reference === undefined) {
-        this.publish({
-          phase: this.snapshot.current === undefined ? "idle" : "ready",
-        });
-        this.logger.debug("workspace_controller.selection_cancelled");
-        return undefined;
-      }
-      return this.openReference(reference);
-    });
-  }
-
-  /**
-   * 新建项目：save 型对话框命名 → 主进程建目录 → 作为工作区打开。
-   * 取消与失败语义同 chooseAndOpen（取消静默回原状态，失败置 error）。
-   */
-  createAndOpen(): Promise<WorkspaceSessionView | undefined> {
-    return this.runExclusive(async () => {
-      if (this.picker.createWorkspace === undefined) {
-        this.reject(
-          "WORKSPACE_CREATE_UNAVAILABLE",
-          false,
-          "当前客户端尚未连接 Workspace 新建服务",
-        );
-        return undefined;
-      }
-      this.publish({ phase: "selecting" });
-      this.logger.info("workspace_controller.create_started");
-      let reference: WorkspaceReferenceView | undefined;
-      try {
-        reference = captureOptionalWorkspaceReference(await this.picker.createWorkspace());
-      } catch (error) {
-        this.reject(
-          "WORKSPACE_CREATE_FAILED",
-          false,
-          error instanceof Error ? error.message : "新建项目文件夹失败",
-        );
-        return undefined;
-      }
-      if (reference === undefined) {
-        this.publish({
-          phase: this.snapshot.current === undefined ? "idle" : "ready",
-        });
-        this.logger.debug("workspace_controller.create_cancelled");
-        return undefined;
-      }
-      return this.openReference(reference);
-    });
-  }
-
-  openRecent(workspaceId: string): Promise<WorkspaceSessionView | undefined> {
-    return this.runExclusive(async () => {
-      const recent = this.snapshot.recent.find((workspace) => workspace.id === workspaceId);
-      if (recent === undefined) {
-        this.reject("WORKSPACE_RECENT_NOT_FOUND", false, "最近打开的项目不存在");
-        return undefined;
-      }
-      return this.openReference({ referenceId: recent.id, label: recent.label });
-    });
-  }
-
-  /**
-   * 打开指定引用（「从文件导入创建项目」等流程拿到引用后进入常规打开编排；
-   * 语义同 open，保留独立命名入口）。
-   */
-  openDirect(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView | undefined> {
-    return this.open(reference);
-  }
-
-  /** 仅选择目录（不打开）：切换对话框"先选定项目、再选打开位置"的第一步 */
-  pickWorkspaceReference(): Promise<WorkspaceReferenceView | undefined> {
-    return this.runExclusive(async () => {
-      this.publish({ phase: "selecting" });
-      this.logger.info("workspace_controller.pick_started");
-      let reference: WorkspaceReferenceView | undefined;
-      try {
-        reference = captureOptionalWorkspaceReference(await this.picker.pickWorkspace());
-      } catch {
-        this.reject(
-          "WORKSPACE_SELECTION_UNAVAILABLE",
-          false,
-          "当前客户端尚未连接 Workspace 选择服务",
-        );
-        return undefined;
-      }
-      // 选定与取消都回落相位（选定时打开位置面板可交互；取消静默回原状态）
-      this.publish({ phase: this.snapshot.current === undefined ? "idle" : "ready" });
-      if (reference === undefined) {
-        this.logger.debug("workspace_controller.pick_cancelled");
-      }
-      return reference;
-    });
-  }
-
-  /** 当前窗口打开（对话框选定"当前窗口"后调用；切换会结束当前项目运行中的对话） */
+  /** 当前窗口打开（云端项目列表选定后调用；切换会结束当前项目运行中的对话） */
   open(reference: WorkspaceReferenceView): Promise<WorkspaceSessionView | undefined> {
     return this.runExclusive(() => this.openReference(reference));
   }
@@ -307,41 +175,6 @@ export class WorkspaceController {
     });
   }
 
-  /**
-   * 删除最近列表中的项目（PRD workspace-删除项目）：仅非当前项目可删；
-   * 成功后即时移出 recent（主进程已彻底删除应用侧 storeDir），失败置 error 列表不变。
-   */
-  deleteRecent(workspaceId: string): Promise<boolean> {
-    return this.runExclusive(async () => {
-      if (this.snapshot.current?.id === workspaceId) {
-        this.reject("WORKSPACE_DELETE_CURRENT_FORBIDDEN", false, "无法删除正在使用的项目");
-        return false;
-      }
-      if (this.snapshot.recent.every((workspace) => workspace.id !== workspaceId)) {
-        this.reject("WORKSPACE_RECENT_NOT_FOUND", false, "最近打开的项目不存在");
-        return false;
-      }
-      if (this.sessions.deleteWorkspace === undefined) {
-        this.reject("WORKSPACE_DELETE_UNAVAILABLE", false, "当前客户端尚未连接 Workspace 删除服务");
-        return false;
-      }
-      this.logger.info("workspace_controller.delete_started");
-      try {
-        await this.sessions.deleteWorkspace(workspaceId);
-        this.publish({
-          phase: this.snapshot.current === undefined ? "idle" : "ready",
-          recent: this.snapshot.recent.filter((workspace) => workspace.id !== workspaceId),
-          error: undefined,
-        });
-        this.logger.info("workspace_controller.delete_completed");
-        return true;
-      } catch {
-        this.reject("WORKSPACE_DELETE_FAILED", true, "删除项目失败");
-        return false;
-      }
-    });
-  }
-
   clearError(): void {
     if (this.snapshot.error === undefined) return;
     this.publish({
@@ -357,11 +190,8 @@ export class WorkspaceController {
     this.logger.info("workspace_controller.open_started");
     try {
       const current = captureWorkspaceSession(await this.sessions.open(reference));
-      const recent = mergeRecent(current, this.snapshot.recent);
-      this.publish({ phase: "ready", current, recent });
-      this.logger.info("workspace_controller.open_completed", {
-        recentCount: recent.length,
-      });
+      this.publish({ phase: "ready", current });
+      this.logger.info("workspace_controller.open_completed");
       return current;
     } catch (error) {
       // 主进程错误文案直达 UI（如同项目双开的"已为你切换到该窗口"）；空文案回退通用提示
@@ -392,7 +222,7 @@ export class WorkspaceController {
 
   private publish(
     update: Partial<
-      Pick<WorkspaceControllerSnapshot, "phase" | "current" | "recent" | "error">
+      Pick<WorkspaceControllerSnapshot, "phase" | "current" | "error">
     >,
   ): void {
     this.revision += 1;
@@ -406,10 +236,6 @@ export class WorkspaceController {
           : this.snapshot.current !== undefined
             ? { current: this.snapshot.current }
             : {}),
-      recent:
-        update.recent !== undefined
-          ? captureWorkspaceSessions(update.recent)
-          : this.snapshot.recent,
       ...(update.error !== undefined
         ? { error: Object.freeze({ ...update.error }) }
         : "error" in update
@@ -422,29 +248,12 @@ export class WorkspaceController {
   }
 }
 
-const unavailableWorkspacePicker: WorkspacePickerPort = Object.freeze({
-  pickWorkspace: async () => {
-    throw new Error("Workspace picker is unavailable");
-  },
-});
-
 const unavailableWorkspaceSessions: WorkspaceSessionPort = Object.freeze({
-  listRecent: async () => Object.freeze([]),
   open: async () => {
     throw new Error("Workspace sessions are unavailable");
   },
   close: async () => undefined,
 });
-
-function mergeRecent(
-  current: WorkspaceSessionView,
-  recent: readonly WorkspaceSessionView[],
-): readonly WorkspaceSessionView[] {
-  return Object.freeze([
-    current,
-    ...recent.filter((workspace) => workspace.id !== current.id),
-  ]);
-}
 
 function captureOptionalWorkspaceReference(
   reference: WorkspaceReferenceView | undefined,
@@ -479,18 +288,6 @@ function captureOptionalField(value: string | undefined): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
-function captureWorkspaceSessions(
-  sessions: readonly WorkspaceSessionView[],
-): readonly WorkspaceSessionView[] {
-  const captured = sessions.map(captureWorkspaceSession);
-  const ids = new Set<string>();
-  for (const session of captured) {
-    if (ids.has(session.id)) throw new TypeError("Workspace ids must be unique");
-    ids.add(session.id);
-  }
-  return Object.freeze(captured);
-}
-
 function freezeSnapshot(
   snapshot: WorkspaceControllerSnapshot,
 ): WorkspaceControllerSnapshot {
@@ -499,7 +296,6 @@ function freezeSnapshot(
     ...(snapshot.current !== undefined
       ? { current: Object.freeze({ ...snapshot.current }) }
       : {}),
-    recent: Object.freeze(snapshot.recent.map((workspace) => Object.freeze({ ...workspace }))),
     ...(snapshot.error !== undefined
       ? { error: Object.freeze({ ...snapshot.error }) }
       : {}),

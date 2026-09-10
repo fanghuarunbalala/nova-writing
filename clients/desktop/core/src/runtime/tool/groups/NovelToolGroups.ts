@@ -13,7 +13,7 @@ import type { ToolDef } from "../ToolDef.js";
 import type { NovelHandle } from "../../../novel/client/NovelHandle.js";
 import type { ConversationTodoStore } from "../../todo/TodoProtocol.js";
 import type { ComposeModeService } from "../../../conversation/compose/index.js";
-import { createFileTools } from "../definitions/files.js";
+import { createFileTools, type ProjectFiles } from "../definitions/files.js";
 import { createTodoWriteTool } from "../definitions/todo.js";
 import { createSkillTool } from "../definitions/skill.js";
 import { createComposeTools } from "../definitions/compose.js";
@@ -143,8 +143,13 @@ export const NOVEL_TOOL_GROUP_CATALOG: ReadonlyMap<string, ToolGroupManifest> = 
 
 /** 工具组工厂选项（workspace / novel handle / todo 闭包 / compose 闭包） */
 export interface NovelToolGroupResolverOptions {
-  /** 工作区路径（文件工具） */
+  /** 工作区路径（本地项目文件工具根；云项目传本地缓存目录并配套 filesBackend 注入） */
   workspace: string;
+  /**
+   * 文件后端（云项目注入 RemoteProjectFiles——项目域上云 FR5；缺省 LocalProjectFiles(workspace)）。
+   * workspace 仍必填：analyst.files 与书库根等本地语义兜底。
+   */
+  filesBackend?: ProjectFiles;
   /** novel 客户端（novel 域工具 query/mutate 对接） */
   handle: NovelHandle;
   /** Todo 存储（runtime.todo 组 TodoWrite；由 buildNovelAgent 注入缺省实例） */
@@ -194,7 +199,7 @@ export function createNovelToolGroupResolver(
       "runtime.todo",
       () => [createTodoWriteTool(options.todoStore, options.todoConversationId)],
     ],
-    ["runtime.files", () => createFileTools(options.workspace)],
+    ["runtime.files", () => createFileTools(options.filesBackend ?? options.workspace)],
     [
       "analyst.files",
       // 文件写本就免审批（沙盒内可逆）；该组差异在沙盒=书库根（runtime.files 同工厂）

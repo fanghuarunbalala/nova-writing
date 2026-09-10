@@ -9,6 +9,7 @@ import type { Provider } from "../provider/Provider.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import type { ToolDef } from "../tool/ToolDef.js";
+import type { ProjectFiles } from "../tool/definitions/files.js";
 import type { NovelConstraintsProvider, CaseGuideProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AutoCompactPolicy } from "../compact/definitions/auto-compact.js";
@@ -65,6 +66,11 @@ export interface NovelAgentOptions {
    * 能力校验失败自动回退 legacy（见 buildNovelAgent 内 bundleCompatible）。
    */
   bundle?: DefinitionBundle;
+  /**
+   * 文件后端（云项目注入 RemoteProjectFiles——项目域上云 FR5；
+   * 缺省 LocalProjectFiles(workspace)，本地项目零变化）。
+   */
+  filesBackend?: ProjectFiles;
   /** 工作区路径（工具文件操作环境） */
   workspace: string;
   /** Provider 实例 */
@@ -205,6 +211,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     toolGroupCatalog: NOVEL_TOOL_GROUP_CATALOG,
     resolveToolGroup: createNovelToolGroupResolver({
       workspace: opts.workspace,
+      ...(opts.filesBackend !== undefined ? { filesBackend: opts.filesBackend } : {}),
       handle: opts.handle,
       todoStore,
       todoConversationId: opts.conversationId ?? "",

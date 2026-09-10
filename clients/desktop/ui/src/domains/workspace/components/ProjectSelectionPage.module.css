@@ -157,6 +157,50 @@
   cursor: default;
 }
 
+/* 云项目分区（项目域上云 FR4）：标题行 + 命名新建 + 云端卡（☁ 图标位替代书封） */
+.cloudHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-9px);
+}
+
+.cloudHead .secTitle {
+  margin: 0;
+  animation: none;
+}
+
+.cloudCover {
+  width: 46px;
+  height: 60px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--color-accent-ink);
+  background: var(--color-accent-8-transparent);
+}
+
+.cloudForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.cloudFormLabel {
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+}
+
+.cloudFormHint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  color: var(--color-faint);
+}
+
 /* 同步入口卡（登录页的欢迎页常驻入口）：比项目卡更低调（surface-2 底、无边框卡感），
    未登录点击开登录门；已在线展示 用户名 并转设置管理 */
 .syncCard {

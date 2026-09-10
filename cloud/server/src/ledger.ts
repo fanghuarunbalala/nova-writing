@@ -119,13 +119,20 @@ export function registerLedgerRoutes(app: FastifyInstance, db: Db, hub: SseHub, 
     return reply.send({ lastSeq: result.lastSeq });
   });
 
+  /**
+   * 账本重放（纯云端化 FR1）：`?since=` 增量（只回 seq > since，本地镜像回放省流量；
+   * 缺省 0 = 全量，向后兼容）。响应附 `lastSeq`（该会话当前最大 seq）——客户端据此判定
+   * 「账本被 rewrite 收缩」（lastSeq < 本地尾序 → 需全量重建本地镜像）。
+   */
   app.get("/v1/journal/:conversationId/replay", { preHandler: guard }, async (request, reply) => {
     const user = (request as unknown as AuthedRequest).user;
     const conversationId = (request.params as { conversationId: string }).conversationId;
+    const since = Number((request.query as { since?: string }).since ?? "0") || 0;
     const events = db
-      .prepare("SELECT * FROM journal_events WHERE conversation_id = ? ORDER BY seq")
-      .all(conversationId) as JournalRow[];
+      .prepare("SELECT * FROM journal_events WHERE conversation_id = ? AND seq > ? ORDER BY seq")
+      .all(conversationId, since) as JournalRow[];
     // owner-only（M1 简化）：会话归属由租约历史隐式约束——曾持有过该会话租约的用户可见
+    //（存在性用未过滤查询判定——since 增量把行滤空时不能放行非 owner 探测）
     const ownerIds = new Set(
       (
         db
@@ -133,10 +140,16 @@ export function registerLedgerRoutes(app: FastifyInstance, db: Db, hub: SseHub, 
           .all(conversationId) as Array<{ uid: string }>
       ).map((r) => r.uid)
     );
-    if (events.length > 0 && ownerIds.size > 0 && !ownerIds.has(user.userId)) {
+    const hasAny = db
+      .prepare("SELECT 1 AS one FROM journal_events WHERE conversation_id = ? LIMIT 1")
+      .get(conversationId);
+    if (hasAny !== undefined && ownerIds.size > 0 && !ownerIds.has(user.userId)) {
       return reply.code(403).send({ code: "forbidden", message: "会话属于其他用户" });
     }
-    return reply.send({ events });
+    const lastSeqRow = db
+      .prepare("SELECT MAX(seq) AS maxSeq FROM journal_events WHERE conversation_id = ?")
+      .get(conversationId) as { maxSeq: number | null };
+    return reply.send({ events, lastSeq: lastSeqRow.maxSeq ?? 0 });
   });
 
   /** SSE：先积压后实时（since 游标幂等补拉），15s 心跳注释行防中间件断连。 */

@@ -11,7 +11,7 @@
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile as readFileAsync } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { RPCChannel } from "kkrpc";
 import { webSocketClientTransport } from "kkrpc/ws";
 import { Conversation, type ConversationEventPublisher, type ManagerWaitChannel } from "../../conversation/server/Conversation.js";
@@ -19,6 +19,8 @@ import { EventPublisher } from "../../event/EventPublisher.js";
 import { conversationEventsAddr } from "../../event/topics.js";
 import { FileConversationJournalService } from "../../conversation/persistence/FileConversationJournalService.js";
 import { HttpConversationJournalService } from "../../conversation/persistence/HttpConversationJournalService.js";
+import { RemoteNovelStore } from "../../cloud/RemoteNovelStore.js";
+import { RemoteProjectFiles } from "../../cloud/RemoteProjectFiles.js";
 import { FileConversationJournalReadOnlyService } from "../../conversation/persistence/FileConversationJournalReadOnlyService.js";
 import { FileConversationStateJournalService } from "../../conversation/persistence/FileConversationStateJournalService.js";
 import { journalListener } from "../../conversation/JournalBridge.js";
@@ -158,11 +160,14 @@ const RUNTIME_SETTINGS_ENV = "NOVEL_RUNTIME_SETTINGS" as const;
  * 绑定会话事件 PUB（每会话一个 ipc:// 命名管道地址；main 侧 register 后 SUB 接入）。
  * bind 失败（地址占用等）→ 告警并返回 undefined（内存 hub 照常分发）。
  */
+let conversationEventPublisher: import("../../event/EventPublisher.js").EventPublisher | undefined;
+
 async function bindConversationEventPublisher(
 	conversationId: string,
 	logger?: Logger,
 ): Promise<ConversationEventPublisher | undefined> {
 	const publisher = new EventPublisher(conversationEventsAddr(conversationId));
+	conversationEventPublisher = publisher;
 	try {
 		await publisher.bind();
 		return publisher;
@@ -256,6 +261,7 @@ function describeCrash(reason: unknown): string {
 	return `unknown crash reason: ${String(reason)}`;
 }
 
+/** 会话事件 PUB（SIGTERM 清理引用；bind 失败保持 undefined） */
 /** 注册崩溃自曝（在任何其他逻辑之前）：未捕获异常/拒绝写盘后 exit(1)。 */
 function registerCrashHandlers(): void {
 	process.on("uncaughtException", (error) => {
@@ -266,6 +272,16 @@ function registerCrashHandlers(): void {
 		writeCrashTrace(`CRASH unhandledRejection\n${describeCrash(reason)}`);
 		process.exit(1);
 	});
+	// zeromq addon 退出 fail-fast 防护（0xC0000409，WER 实锤）：会话 PUB socket
+	// 随进程自然退出而析构时会触发 native fail-fast——SIGTERM/SIGINT 先同步 close
+	// 再退（main spawner kill 走 SIGTERM；close 异步故给 exit 让步 100ms）
+	for (const signal of ["SIGTERM", "SIGINT"] as const) {
+		process.on(signal, () => {
+			writeCrashTrace(`EXIT ${signal}`);
+			void conversationEventPublisher?.close().catch(() => {});
+			setTimeout(() => process.exit(0), 100).unref?.();
+		});
+	}
 }
 
 /**
@@ -343,9 +359,22 @@ await skillRegistry.load();
 	// novel-db：经 kkrpc/ws 连接 main 的 NovelDbWsServer（协议定稿 transport；token 走 subprotocol）。
 	// 无 NOVEL_DB_WS_URL（独立脚本/开发）回退进程内内存 store。
 	// BookAnalyst 分支：不经 WS，进程内直开该书 book.db（唯一写者，PRD library F5）。
+	// 云项目分支（项目域上云 FR6）：进程内 RemoteNovelStore（投影+oplog）替代本地 novel.db。
 	let novelHandle: NovelHandle;
 	let analystStore: SqliteNovelStore | undefined;
 	const novelWsUrl = process.env.NOVEL_DB_WS_URL;
+	const cloudProjectId = process.env.NOVA_PROJECT_ID?.trim();
+	const cloudServerUrl = process.env.NOVA_SERVER_URL?.trim();
+	const cloudAccessToken = async (): Promise<string | undefined> => {
+		const file = process.env.NOVA_SERVER_ACCESS_FILE;
+		if (file === undefined || file === "") return undefined;
+		try {
+			const raw = await readFileAsync(file, "utf8");
+			return (JSON.parse(raw) as { accessToken?: string }).accessToken;
+		} catch {
+			return undefined;
+		}
+	};
 	if (isAnalyst && analystTask !== undefined) {
 		analystStore = new SqliteNovelStore(bookDbPath(workspace, analystTask.bookId));
 		const store = analystStore;
@@ -353,6 +382,22 @@ await skillRegistry.load();
 			query: (q: NovelQuery) => store.query(q),
 			mutate: (m: NovelMutation) => store.mutate(m),
 			mutateBatch: (ms: readonly NovelMutation[]) => store.mutateBatch(ms),
+		} as unknown as NovelHandle;
+	} else if (cloudProjectId !== undefined && cloudProjectId !== "" && cloudServerUrl !== undefined && cloudServerUrl !== "") {
+		const cloudStore = new RemoteNovelStore({
+			url: cloudServerUrl,
+			projectId: cloudProjectId,
+			sessionTag: `${conversationId}-${process.pid}`,
+			getAccessToken: cloudAccessToken,
+			getLeaseToken: () => currentLeaseToken,
+			getConversationId: () => conversationId,
+			// 域快照缓存（纯云端化 FR3）：workspace 即 main 的云项目缓存目录
+			cachePath: join(workspace, ".novel", "cache", "domain-snapshot.json"),
+		});
+		novelHandle = {
+			query: (q: NovelQuery) => cloudStore.query(q),
+			mutate: (m: NovelMutation) => cloudStore.mutate(m),
+			mutateBatch: (ms: readonly NovelMutation[]) => cloudStore.mutateBatch(ms),
 		} as unknown as NovelHandle;
 	} else if (novelWsUrl !== undefined && novelWsUrl.trim() !== "") {
 		const wsToken = process.env.NOVEL_DB_WS_TOKEN;
@@ -405,6 +450,9 @@ await skillRegistry.load();
 				conversationId,
 				url: serverUrl,
 				pendingPath: join(storedir, "pending-push.jsonl"),
+				// 本地镜像（纯云端化 FR2）：与 File 版同位的 journal.jsonl——server 权威的
+				// 只读性能副本，写通 + open() 增量对账；main 的 history 代读读同一文件
+				mirrorPath: join(storedir, "journal.jsonl"),
 				// main 进程持有会话并周期刷新落 access 文件（15min TTL；子进程现读现用）
 				getAccessToken: async () => {
 					try {
@@ -436,13 +484,18 @@ await skillRegistry.load();
 	let resumeSeq: number | undefined;
 	if (journal !== undefined && storedir !== undefined) {
 		if (serverUrl !== undefined && serverUrl !== "") {
-			// server 模式恢复：重放账本按 run_seq 折叠（snapshot 重置基线 + append 追加）
-			const runs = await readRunsFromServer(serverUrl, conversationId);
+			// server 模式恢复：open() 已对账过的本地镜像折叠（同 File 版读侧行协议）；
+			// journal 非 Http 实例（理论不可达）或无镜像时降级 server 全量重放
+			const runs =
+				journal instanceof HttpConversationJournalService
+					? await new FileConversationJournalReadOnlyService({ journalDir: dirname(storedir) }).readRuns(conversationId)
+					: await readRunsFromServer(serverUrl, conversationId);
 			runMessages = runs.flatMap((r) => r.messages);
 			resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));
 			resumeSeq = journal.lastSeq;
 		} else {
-			const readOnly = new FileConversationJournalReadOnlyService({ journalDir: storedir });
+			// journalDir = conversations 根（storedir 是 <root>/<cid>，读侧再拼 <cid>）
+			const readOnly = new FileConversationJournalReadOnlyService({ journalDir: dirname(storedir) });
 			const runs = await readOnly.readRuns(conversationId);
 			runMessages = runs.flatMap((r) => r.messages);
 			resumeRuns = runs.map((r) => ({ seq: r.seq, messages: r.messages, ts: r.ts }));
@@ -771,6 +824,16 @@ await skillRegistry.load();
 			workspace,
 			provider: loopProvider,
 			handle: novelHandle,
+			// 云项目（项目域上云 FR5）：文件四件套走 server（沙箱 server 权威判定）
+			...(cloudProjectId !== undefined && cloudProjectId !== "" && cloudServerUrl !== undefined && cloudServerUrl !== ""
+				? {
+						filesBackend: new RemoteProjectFiles({
+							url: cloudServerUrl,
+							projectId: cloudProjectId,
+							getAccessToken: cloudAccessToken,
+						}),
+					}
+				: {}),
 			// bundle 模式（FR6，NOVA_AGENT_MODE=bundle）：定义包驱动装配（包经
 			// NOVA_DEFINITION_BUNDLE 文件注入——server resolve 拉取后由宿主落盘/缓存）
 			...(agentBundle !== undefined ? { bundle: agentBundle } : {}),

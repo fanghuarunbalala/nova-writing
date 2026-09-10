@@ -20,7 +20,8 @@ class FakeController implements WorkspaceControllerPort {
 
   getSnapshot = (): WorkspaceControllerSnapshot => this.snapshot;
 
-  async refresh(): Promise<void> {
+  /** 模拟控制器发布新快照（revision 递增 + 通知订阅者） */
+  async publishNext(): Promise<void> {
     this.snapshot = { ...this.snapshot, revision: this.snapshot.revision + 1 };
     for (const listener of [...this.listeners]) listener();
   }
@@ -30,22 +31,21 @@ function snapshot(overrides: Partial<WorkspaceControllerSnapshot> = {}): Workspa
   return {
     revision: 1,
     phase: "ready",
-    recent: [],
     ...overrides,
   };
 }
 
 describe("WorkspaceControllerAdapter", () => {
   it("mirrors the controller snapshot", () => {
-    const controller = new FakeController(snapshot({ current: { id: "w1", label: "白昼计划" } }));
+    const controller = new FakeController(snapshot({ current: { id: "w1", label: "云端测试书" } }));
     const adapter = new WorkspaceControllerAdapter(controller);
-    expect(adapter.getSnapshot().current?.label).toBe("白昼计划");
+    expect(adapter.getSnapshot().current?.label).toBe("云端测试书");
   });
 
   it("updates when the controller notifies", async () => {
     const controller = new FakeController(snapshot());
     const adapter = new WorkspaceControllerAdapter(controller);
-    await adapter.refresh();
+    await controller.publishNext();
     expect(adapter.getSnapshot().revision).toBe(2);
   });
 
@@ -53,7 +53,7 @@ describe("WorkspaceControllerAdapter", () => {
     const controller = new FakeController(snapshot());
     const adapter = new WorkspaceControllerAdapter(controller);
     adapter.dispose();
-    await adapter.refresh();
+    await controller.publishNext();
     expect(adapter.getSnapshot().revision).toBe(1);
   });
 });

@@ -12,12 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { Logger, NovelApiClient, ServerAuthState } from "@novel/core";
 import { noopLogger } from "@novel/core/client";
 import type { ApplicationCommandSource } from "../command/index.js";
-import {
-  clearLoginGateSkip,
-  hasSkippedLoginGate,
-  LoginPage,
-  markLoginGateSkipped,
-} from "../auth/index.js";
+import { LoginPage } from "../auth/index.js";
 import {
   completeOnboarding,
   hasCompletedOnboarding,
@@ -39,9 +34,6 @@ import {
   NovelOverviewStore,
   NotificationStore,
   ProjectSelectionPage,
-  ProjectImportDialog,
-  ImportAnalysisIndicator,
-  ProjectImportStatusStore,
   LaunchOverlay,
   LaunchProgressStore,
   ScheduleStore,
@@ -90,6 +82,22 @@ export interface NovelAppProps {
   readonly overlays?: ReactNode;
   /** 窗口控制（PRD WC；桌面宿主经 preload 桥注入，透传到 TopBar） */
   readonly windowChrome?: WindowChromeProps;
+  /**
+   * 云项目通道（项目域上云 FR4；gui 宿主注入，缺省隐藏云端分区）：
+   * list 拉 server 项目；create/openProject 返回打开引用（经 workspaceController.open）。
+   */
+  readonly cloudProjects?: CloudProjectsPort;
+}
+
+/** 云项目通道（renderer → main workspace-rpc；纯云端化 ⑥：项目列表唯一来源） */
+export interface CloudProjectsPort {
+  list(): Promise<
+    Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean; referenceId?: string }>
+  >;
+  create(name: string): Promise<{ referenceId: string; label: string } | undefined>;
+  openProject(projectId: string, name: string): Promise<{ referenceId: string; label: string }>;
+  /** 删除云端项目（server 软删 + 本地缓存/注册表清理；在用时 main 侧拒绝） */
+  remove(projectId: string): Promise<void>;
 }
 
 export function NovelApp(props: NovelAppProps) {
@@ -122,6 +130,7 @@ function NovelAppReady({
   extensions,
   overlays,
   windowChrome,
+  cloudProjects,
 }: NovelAppReadyProps) {
   const toastStore = useMemo(() => new ToastStore(), []);
   const domainStores = useMemo(
@@ -162,10 +171,79 @@ function NovelAppReady({
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  // 登录门（本地模式缺省 · opt-in 引导）：undecided 期用不透明底遮欢迎页防闪；
-  // 未登录且未曾跳过 → open；跳过记住（localStorage），欢迎页/设置入口可重开
+  // 登录门（纯云端化 ⑥：强制登录——server 为唯一数据源，未登录只能停在登录页）：
+  // undecided 期用不透明底遮欢迎页防闪
   const [loginGate, setLoginGate] = useState<"undecided" | "open" | "closed">("undecided");
   const [serverAuthState, setServerAuthState] = useState<ServerAuthState | undefined>(undefined);
+  // 云项目分区（登录后拉取；登录门关闭/状态变化时刷新）
+  const [cloudList, setCloudList] = useState<Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean }>>([]);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudError, setCloudError] = useState<string | undefined>(undefined);
+  const refreshCloudProjects = useCallback(async () => {
+    if (cloudProjects === undefined || serverAuthState?.username === undefined) {
+      setCloudList([]);
+      return;
+    }
+    try {
+      setCloudList(await cloudProjects.list());
+    } catch {
+      setCloudList([]);
+    }
+  }, [cloudProjects, serverAuthState?.username]);
+  useEffect(() => {
+    void refreshCloudProjects();
+  }, [refreshCloudProjects]);
+  const createCloudProject = useCallback(async (name: string) => {
+    if (cloudProjects === undefined || cloudBusy) return;
+    setCloudBusy(true);
+    setCloudError(undefined);
+    try {
+      const ref = await cloudProjects.create(name);
+      if (ref !== undefined) await workspaceController.open(ref);
+    } catch (cause) {
+      setCloudError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [cloudProjects, cloudBusy, workspaceController]);
+  const openCloudProject = useCallback(async (project: { id: string; name: string }) => {
+    if (cloudProjects === undefined) return;
+    try {
+      const ref = await cloudProjects.openProject(project.id, project.name);
+      await workspaceController.open(ref);
+    } catch (cause) {
+      setCloudError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [cloudProjects, workspaceController]);
+  /** 删除云端项目（server 软删 + 本地缓存清理）：成功/失败 toast + 刷新列表 */
+  const removeCloudProject = useCallback(async (projectId: string): Promise<boolean> => {
+    if (cloudProjects === undefined) return false;
+    try {
+      await cloudProjects.remove(projectId);
+      toastStore.push({ kind: "success", text: "云端项目已删除" });
+      await refreshCloudProjects();
+      return true;
+    } catch (cause) {
+      toastStore.push({
+        kind: "danger",
+        text: cause instanceof Error ? cause.message : String(cause),
+      });
+      return false;
+    }
+  }, [cloudProjects, refreshCloudProjects, toastStore]);
+  /** 切换对话框「新窗口打开」：先确保本地登记（他端创建未打开的项目），再派发新实例 */
+  const openCloudProjectInNewWindow = useCallback(async (project: { id: string; name: string }) => {
+    if (cloudProjects === undefined) return;
+    try {
+      const ref = await cloudProjects.openProject(project.id, project.name);
+      await workspaceController.openInNewWindow(ref);
+    } catch (cause) {
+      toastStore.push({
+        kind: "danger",
+        text: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  }, [cloudProjects, workspaceController, toastStore]);
   const refreshServerAuth = useCallback(async () => {
     const pending = configurationClient?.serverAuth?.();
     if (pending === undefined) return;
@@ -188,18 +266,14 @@ function NovelAppReady({
       setLoginGate("closed");
       return;
     }
-    if (hasSkippedLoginGate()) {
-      setLoginGate("closed");
-      return;
-    }
     let cancelled = false;
     const pending = fetchState();
     if (pending !== undefined) {
       void pending
         .then((state) => {
           if (cancelled) return;
-          // 已登录（username）或曾配置过 server.url → 不拦；纯 unconfigured → 弹登录门
-          if (state === undefined || state.username !== undefined || state.url !== undefined) {
+          // 强制登录：已登录（username）→ 不拦；否则（含曾配置过 url 的离线/凭据失效）弹登录门
+          if (state !== undefined && state.username !== undefined) {
             setLoginGate("closed");
           } else {
             setLoginGate("open");
@@ -221,54 +295,15 @@ function NovelAppReady({
     void refreshServerAuth();
   }, [refreshServerAuth]);
   const openLoginGate = useCallback(() => {
-    clearLoginGateSkip();
     setLoginGate("open");
   }, []);
-  // 从文件导入创建项目（欢迎页入口；对话框自管流程，成功后交回常规打开编排）
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  // 导入解构进度（当前项目 analyzing 期间 3s 轮询；右下角浮标 + 完成/失败 toast）
-  const projectImportStatus = useMemo(
-    () => new ProjectImportStatusStore({ api, logger }),
-    [api, logger],
-  );
-  const currentWorkspaceId = workspaceSnapshot.current?.id;
-  useEffect(() => {
-    if (currentWorkspaceId === undefined) {
-      projectImportStatus.detach();
-      return;
-    }
-    projectImportStatus.attach();
-    return () => projectImportStatus.detach();
-  }, [currentWorkspaceId, projectImportStatus]);
-  const importStatusSnapshot = useExternalStore(projectImportStatus);
-  const prevImportStatusRef = useRef(importStatusSnapshot.progress?.status);
-  useEffect(() => {
-    const prev = prevImportStatusRef.current;
-    prevImportStatusRef.current = importStatusSnapshot.progress?.status;
-    if (importStatusSnapshot.progress?.status === undefined) return;
-    if (prev !== "analyzing") return;
-    if (importStatusSnapshot.progress.status === "analyzed") {
-      toastStore.push({
-        kind: "success",
-        text: "导入解构完成——大纲 / 人物 / 地点已就绪，可以继续写作了",
-      });
-    } else if (importStatusSnapshot.progress.status === "failed") {
-      toastStore.push({
-        kind: "danger",
-        text: "导入解构未完成——正文与章卷不受影响，可在右下角重试",
-      });
-    }
-  }, [importStatusSnapshot, toastStore]);
+  // 从文件导入的编排已随本地模式退役（纯云端化 ⑥；云端导入后续单独立项）
   // 模型配置状态（回声模式判定）：无 configurationClient 的宿主恒视为已配置
   const [modelConfigured, setModelConfigured] = useState(true);
   // 书库视图（试验功能，NOVEL_LIBRARY=1 才开启）：向导按此决定是否介绍
   const libraryEnabled = platform.capabilities.library === true;
-  // 启动时刷新最近项目（持久化来源），供选择页展示；不自动打开任何 Workspace。
-  useEffect(() => {
-    void workspaceController.refresh();
-  }, [workspaceController]);
-  // "新窗口打开"派生的启动上下文（他实例 spawn 本实例时注入）：refresh 后自动打开该项目
-  // （runExclusive 串行，先刷新最近列表再开；无上下文静默跳过，取出即清防 StrictMode 双跑）
+  // "新窗口打开"派生的启动上下文（他实例 spawn 本实例时注入）：自动打开该项目
+  //（runExclusive 串行；无上下文静默跳过，取出即清防 StrictMode 双跑）
   useEffect(() => {
     void workspaceController.openStartupWorkspace();
   }, [workspaceController]);
@@ -347,36 +382,19 @@ function NovelAppReady({
               serverAuthState={serverAuthState}
               onOpenLogin={openLoginGate}
               onOpenSettings={openSettings}
-              onChoose={() => {
-                void workspaceController.chooseAndOpen();
-              }}
-              onCreate={() => {
-                void workspaceController.createAndOpen();
-              }}
-              onImport={() => setImportDialogOpen(true)}
-              onOpenRecent={(workspaceId) => {
-                void workspaceController.openRecent(workspaceId);
-              }}
-              onDeleteRecent={(workspaceId) => workspaceController.deleteRecent(workspaceId)}
               onOpenGuide={openGuide}
-            />
-            <ProjectImportDialog
-              open={importDialogOpen}
-              api={api}
-              onDismiss={() => setImportDialogOpen(false)}
-              onNotify={(kind, text) => toastStore.push({ kind, text })}
-              onImported={(reference, stats, spawnSkipped) => {
-                setImportDialogOpen(false);
-                const head = `已导入 ${stats.chapters} 章 · ${stats.paragraphs} 段 · ${stats.chars.toLocaleString()} 字`;
-                toastStore.push({
-                  kind: "success",
-                  text:
-                    spawnSkipped !== undefined
-                      ? `${head} · ${spawnSkipped}`
-                      : `${head} · 解构已在后台启动，进度见右下角`,
-                });
-                void workspaceController.openDirect(reference);
-              }}
+              cloudSection={
+                cloudProjects !== undefined
+                  ? {
+                      projects: cloudList,
+                      busy: cloudBusy,
+                      error: cloudError,
+                      onCreate: (name: string) => void createCloudProject(name),
+                      onOpen: (project: { id: string; name: string }) => void openCloudProject(project),
+                      onDelete: (projectId: string) => removeCloudProject(projectId),
+                    }
+                  : undefined
+              }
             />
             <OnboardingWizard
               open={guideOpen}
@@ -389,15 +407,9 @@ function NovelAppReady({
             {loginGate === "open" ? (
               <LoginPage
                 configuration={configurationClient!}
-                onSkip={() => {
-                  markLoginGateSkipped();
-                  closeLoginGate();
-                }}
                 onEnterWorkspace={closeLoginGate}
               />
-            ) : loginGate === "undecided" &&
-                configurationClient?.serverAuth !== undefined &&
-                !hasSkippedLoginGate() ? (
+            ) : loginGate === "undecided" && configurationClient?.serverAuth !== undefined ? (
               <div
                 aria-hidden="true"
                 style={
@@ -435,26 +447,20 @@ function NovelAppReady({
                 <WorkspaceSelectionDialog
                   open={workspaceOpen}
                   snapshot={workspaceSnapshot}
-                  onPick={() => workspaceController.pickWorkspaceReference()}
-                  onOpen={(reference) => {
-                    // 成功（含"已在当前窗口打开"幂等成功）才收起对话框；
-                    // 失败保持打开，错误区显示主进程透传文案（如双开提示）
-                    void workspaceController.open(reference).then((session) => {
-                      if (session !== undefined) setWorkspaceOpen(false);
-                    });
-                  }}
-                  onOpenInNewWindow={(reference) => {
-                    // 已派发或"已打开"短路（主进程已弹窗告知并置前持有窗口）才收起；
-                    // 校验失败保持打开显示错误
-                    void workspaceController.openInNewWindow(reference).then((dispatched) => {
-                      if (dispatched) setWorkspaceOpen(false);
-                    });
-                  }}
+                  cloudProjects={
+                    cloudProjects !== undefined
+                      ? {
+                          projects: cloudList,
+                          onOpen: (project) => void openCloudProject(project),
+                          onOpenInNewWindow: (project) => void openCloudProjectInNewWindow(project),
+                          onDelete: (projectId) => removeCloudProject(projectId),
+                        }
+                      : undefined
+                  }
                   onCloseWorkspace={() => {
                     void workspaceController.closeCurrent();
                     setWorkspaceOpen(false);
                   }}
-                  onDeleteRecent={(workspaceId) => workspaceController.deleteRecent(workspaceId)}
                   onDismiss={() => setWorkspaceOpen(false)}
                 />
                 <SettingsDialog
@@ -475,9 +481,6 @@ function NovelAppReady({
             }
           />
         )}
-        {workspaceSnapshot.current !== undefined ? (
-          <ImportAnalysisIndicator store={projectImportStatus} />
-        ) : null}
         {launchSnapshot.phase !== "idle" ? (
           <LaunchOverlay snapshot={launchSnapshot} />
         ) : null}

@@ -57,9 +57,9 @@ afterEach(() => {
 });
 
 describe("设置「Server」面板", () => {
-	it("未配置：显示本地模式状态 + 登录表单", async () => {
+	it("未配置：显示未配置状态 + 登录表单", async () => {
 		openPanel(makeClient());
-		expect(await screen.findByText(/未配置（本地模式）/)).toBeTruthy();
+		expect(await screen.findByText(/未配置（登录后使用云端项目）/)).toBeTruthy();
 		expect(screen.getByLabelText(/server 地址/)).toBeTruthy();
 		expect(screen.getByRole("button", { name: /登录/ })).toBeTruthy();
 	});

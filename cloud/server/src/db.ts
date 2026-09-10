@@ -102,6 +102,19 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (project_id, path)
     );
 
+    CREATE TABLE IF NOT EXISTS domain_entities (
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      entity_version INTEGER NOT NULL DEFAULT 1,
+      data TEXT NOT NULL,
+      seq INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER,
+      PRIMARY KEY (project_id, kind, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_domain_project ON domain_entities(project_id, seq);
+
     CREATE TABLE IF NOT EXISTS definitions (
       definition_version TEXT PRIMARY KEY,
       agent_type TEXT NOT NULL,
@@ -111,6 +124,17 @@ function migrate(db: Database.Database): void {
       created_at INTEGER NOT NULL
     );
   `);
+  // 列级增量迁移（CREATE IF NOT EXISTS 不加列）：projects 活跃度/归档/软删、
+  // project_files 回收语义（项目域上云 PRD FR1/FR2）
+  ensureColumn(db, "projects", "last_activity_at", "ALTER TABLE projects ADD COLUMN last_activity_at INTEGER");
+  ensureColumn(db, "projects", "archived_at", "ALTER TABLE projects ADD COLUMN archived_at INTEGER");
+  ensureColumn(db, "projects", "deleted_at", "ALTER TABLE projects ADD COLUMN deleted_at INTEGER");
+  ensureColumn(db, "project_files", "deleted_at", "ALTER TABLE project_files ADD COLUMN deleted_at INTEGER");
+}
+
+function ensureColumn(db: Database.Database, table: string, column: string, ddl: string): void {
+  const exists = db.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column);
+  if (!exists) db.exec(ddl);
 }
 
 export type Db = Database.Database;

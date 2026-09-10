@@ -107,4 +107,57 @@ describe("事件账本", () => {
     });
     expect([400, 423, 410]).toContain(noLease.statusCode);
   });
+
+  it("replay ?since= 增量与 lastSeq（纯云端化 FR1）", async () => {
+    const { app } = await makeApp();
+    const s = await registerUser(app, "ledger-since");
+    const lease = await acquireLease(app, s, "conv-since");
+    const push = (messages: unknown[]) =>
+      app.inject({
+        method: "POST", url: "/v1/runs/conv-since/events", headers: auth(s),
+        payload: { runSeq: 1, kind: "append", messages, leaseToken: lease },
+      });
+    const r1 = await (await push([{ type: "user", content: "一" }])).json();
+    const r2 = await (await push([{ type: "user", content: "二" }])).json();
+    const r3 = await (await push([{ type: "user", content: "三" }])).json();
+
+    // since 只回 seq > since 的行；lastSeq 恒为该会话当前最大 seq
+    const delta = (await app.inject({
+      method: "GET", url: `/v1/journal/conv-since/replay?since=${r1.seq}`, headers: auth(s),
+    })).json() as any;
+    expect(delta.events.map((e: any) => e.seq)).toEqual([r2.seq, r3.seq]);
+    expect(delta.lastSeq).toBe(r3.seq);
+
+    // 缺省 since = 全量（向后兼容），lastSeq 一致
+    const full = (await app.inject({
+      method: "GET", url: "/v1/journal/conv-since/replay", headers: auth(s),
+    })).json() as any;
+    expect(full.events).toHaveLength(3);
+    expect(full.lastSeq).toBe(r3.seq);
+
+    // since 超前 → 空集但 lastSeq 仍回真值（客户端收缩判定依据）
+    const ahead = (await app.inject({
+      method: "GET", url: `/v1/journal/conv-since/replay?since=${r3.seq + 100}`, headers: auth(s),
+    })).json() as any;
+    expect(ahead.events).toHaveLength(0);
+    expect(ahead.lastSeq).toBe(r3.seq);
+
+    // 跨用户 owner 判定不因 since 滤空而放行（账本仍有行时，非 owner 用高 since 探测须 403）
+    const stranger = await registerUser(app, "ledger-since-stranger", "S");
+    const probe = await app.inject({
+      method: "GET", url: `/v1/journal/conv-since/replay?since=${r3.seq + 100}`, headers: auth(stranger),
+    });
+    expect(probe.statusCode).toBe(403);
+
+    // rewrite 清空（runs=[]）→ lastSeq 归 0（客户端「lastSeq < 本地尾序」触发镜像全量重建）
+    await app.inject({
+      method: "PUT", url: "/v1/journal/conv-since/rewrite", headers: auth(s),
+      payload: { expectedLastSeq: r3.seq, leaseToken: lease, runs: [] },
+    });
+    const emptied = (await app.inject({
+      method: "GET", url: "/v1/journal/conv-since/replay", headers: auth(s),
+    })).json() as any;
+    expect(emptied.events).toHaveLength(0);
+    expect(emptied.lastSeq).toBe(0);
+  });
 });

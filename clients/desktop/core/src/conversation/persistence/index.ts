@@ -4,3 +4,4 @@ export * from "./FileConversationJournalService.js";
 export * from "./HttpConversationJournalService.js";
 export * from "./FileConversationJournalReadOnlyService.js";
 export * from "./FileConversationStateJournalService.js";
+export * from "./journalMirror.js";

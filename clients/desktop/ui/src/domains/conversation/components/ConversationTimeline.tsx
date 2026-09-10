@@ -30,6 +30,12 @@ export interface ConversationTimelineProps {
   /** 底部预留（px，悬浮 composer 实际高度 + 间距）；缺省回落 CSS 132px。
    *  composer 状态行展开/输入增高时由 shell 实测回填，末条消息才能完整滚到输入框上方。 */
   readonly bottomReserve?: number;
+  /** 分段加载（⑤）：journal 还有更早 run 未载入（顶部触发加载的先决条件） */
+  readonly canLoadOlder?: boolean;
+  /** 分段加载（⑤）：更早一页拉取在途（顶部指示条） */
+  readonly loadingOlder?: boolean;
+  /** 分段加载（⑤）：请求加载更早一页（滚动到顶部触发；在途/翻尽时组件自身不再调用） */
+  readonly onRequestOlder?: () => void;
   readonly onMessageReferenceClick?: (reference: MessageReference) => void;
   readonly resolveReference?: ReferenceResolver;
   readonly onProposalAction?: (changeSetId: string, action: "approve" | "reject" | "view-diff") => void;
@@ -47,6 +53,9 @@ export function ConversationTimeline({
   items,
   streamingSequence,
   bottomReserve,
+  canLoadOlder = false,
+  loadingOlder = false,
+  onRequestOlder,
   onMessageReferenceClick,
   resolveReference,
   onProposalAction,
@@ -57,6 +66,10 @@ export function ConversationTimeline({
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  // 分段加载（⑤）：前插更早一页前的滚动锚点（scrollHeight - scrollTop）——
+  // items 更新 effect 里恢复，视口停在用户阅读位置不被「弹回底部/跳顶」
+  const prependAnchor = useRef<number | null>(null);
+  const olderRequestedRef = useRef(false);
   // 初始项（组件挂载时该会话已在列的 sequence）：视图切换重挂后整列重播
   // conv-in 级联是突兀源——初始项不入场（容器 .surface view-in 已承担整体淡入），
   // 仅后续追加项逐条入场。无类切换/定时器，不存在「摘抑制类→动画重播」问题。
@@ -131,6 +144,18 @@ export function ConversationTimeline({
     return () => cancelAnimationFrame(raf);
   }, [items.length, streamingSequence, lastItemTextLength, bottomReserve]);
 
+  // 分段加载（⑤）前插锚点恢复：更早一页插入后，视口保持原阅读位置
+  //（锚点 = 前插前 scrollHeight - scrollTop；恢复后底部余量不变。仅在确有
+  // 待恢复锚点时介入——不与贴底 effect 冲突：能设置锚点时用户必在顶部，stickToBottom=false）
+  useEffect(() => {
+    if (prependAnchor.current === null) return;
+    const node = scrollRef.current;
+    if (node === null) return;
+    const target = prependAnchor.current;
+    prependAnchor.current = null;
+    node.scrollTop = Math.max(0, node.scrollHeight - target);
+  }, [items.length, loadingOlder]);
+
   return (
     <div
       className={styles.timeline}
@@ -146,8 +171,24 @@ export function ConversationTimeline({
         // 仅 ref 记忆贴底状态（零 setState：滚动路径不产生重渲染）
         const node = event.currentTarget;
         stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
+        // 分段加载（⑤）：接近顶部（<96px）触发加载更早一页——记录锚点供前插后恢复；
+        // 在途去重（loadingOlder 期间不重入；loading 结束才允许下一次）
+        if (
+          canLoadOlder &&
+          !loadingOlder &&
+          !olderRequestedRef.current &&
+          node.scrollTop < 96 &&
+          onRequestOlder !== undefined
+        ) {
+          olderRequestedRef.current = true;
+          prependAnchor.current = node.scrollHeight - node.scrollTop;
+          void Promise.resolve(onRequestOlder()).finally(() => {
+            olderRequestedRef.current = false;
+          });
+        }
       }}
     >
+      {loadingOlder ? <div className={styles.loadingOlder}>正在加载更早的消息…</div> : null}
       <div className={styles.inner} key={conversationId}>
         {items.map((item, index) => {
           const isInitial = initialSequences.has(item.sequence);

@@ -1,107 +1,80 @@
 /**
- * ProjectSelectionPage（欢迎页）
+ * ProjectSelectionPage（欢迎页 · 纯云端化 ⑥ 云-only）
  *
- * 启动时（未打开任何项目）的全屏欢迎页，对齐 docs/design/app-redesign-demo.html
- * 「启动 · 项目选择页」：品牌区（渐变圆点 + Novel + 标语）→ 「最近的项目」书封
- * 卡片列表 → 「新建项目 / 打开其他项目…」双按钮（新建走 save 型对话框命名建目录，
- * 打开走目录选择器选已有文件夹）。卡片右上角提供删除入口（PRD workspace-删除项目：
- * 欢迎页无「当前项目」，全部可删；danger 二次确认明示不可恢复）。
+ * 启动时（未打开任何项目）的全屏欢迎页：品牌区 → 同步状态卡 → 云端项目列表
+ * （server 权威列表 + 新建只命名 + 打开 + 删除二次确认）。未登录时列表区呈现
+ * 登录引导。本地项目入口（目录选择器/本地新建/文件导入）已随本地模式退役。
  * 元素级联浮入（view-in 0.5s，0.05/0.12/0.18/0.24s 依次）；进入 opening 阶段时
- * 整页缩放模糊退场（welcome-leave），后续由 NovelApp 的启动编排接管（分步加载遮罩
- * → 工作台 boot-in）。
+ * 整页缩放模糊退场（welcome-leave），后续由 NovelApp 的启动编排接管。
  */
-import { ArrowRight, Cloud, FileUp, FolderOpen, Plus, Trash2 } from "lucide-react";
-import { useState, type CSSProperties } from "react";
+import { ArrowRight, Cloud, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import type { ServerAuthState } from "@novel/core";
-import type {
-  WorkspaceControllerSnapshot,
-  WorkspaceSessionView,
-} from "../controller/WorkspaceController.js";
+import type { WorkspaceControllerSnapshot } from "../controller/WorkspaceController.js";
 import { Button } from "../../../shared/primitives/Button.js";
 import { ConfirmDialog } from "../../../shared/primitives/ConfirmDialog.js";
+import { Dialog } from "../../../shared/primitives/Dialog.js";
+import { Input } from "../../../shared/primitives/Input.js";
 import { Icon } from "../../../shared/primitives/Icon.js";
 import { formatRelativeTime } from "../../../shared/format/relativeTime.js";
 import styles from "./ProjectSelectionPage.module.css";
 
-/** 书封双色板（demo WS_COVERS 起始三色扩充至八；label 哈希稳定取色） */
-const COVER_PALETTE: readonly (readonly [string, string])[] = [
-  ["#a0522d", "#d9a066"],
-  ["#41708f", "#9fc0cf"],
-  ["#6d675e", "#3a342e"],
-  ["#54622f", "#a3b378"],
-  ["#7a3b5e", "#c98ba9"],
-  ["#2f6d5a", "#8fc0ae"],
-  ["#8a5a2b", "#d9b48a"],
-  ["#454560", "#9d9db8"],
-];
-
-function coverStyle(label: string): CSSProperties {
-  let hash = 0;
-  for (const ch of label) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
-  const [cover1, cover2] = COVER_PALETTE[hash % COVER_PALETTE.length]!;
-  return { "--cover-1": cover1, "--cover-2": cover2 } as CSSProperties;
-}
-
-/** 卡片副标题：相对时间 · 工作区路径（旧 registry 数据可能两者皆缺） */
-function formatSessionSub(session: WorkspaceSessionView): string {
-  const time =
-    session.lastOpenedAt !== undefined
-      ? formatRelativeTime(Date.parse(session.lastOpenedAt))
-      : "";
-  const parts = [time, session.rootPath].filter(
-    (part): part is string => part !== undefined && part.trim() !== "",
-  );
-  return parts.join(" · ");
+/** 云端项目视图（server /v1/projects；referenceId = 本地登记条目，缺省 = 他端创建未打开） */
+export interface CloudProjectView {
+  readonly id: string;
+  readonly name: string;
+  readonly lastActivityAt: number | null;
+  readonly archived: boolean;
+  readonly referenceId?: string;
 }
 
 export interface ProjectSelectionPageProps {
   readonly snapshot: WorkspaceControllerSnapshot;
-  /** 打开其他项目（原生目录选择器，选已有文件夹） */
-  readonly onChoose: () => void;
-  /** 新建项目（save 型对话框命名 → 建目录 → 打开）；与 onChoose 分开接线 */
-  readonly onCreate: () => void;
-  /** 从文件导入创建项目（txt / zip → 预览确认 → 建目录导入 → 打开） */
-  readonly onImport?: () => void;
-  readonly onOpenRecent: (workspaceId: string) => void;
-  /** 删除项目（仅应用侧数据，经 controller danger 确认后调用）；返回是否成功 */
-  readonly onDeleteRecent: (workspaceId: string) => Promise<boolean>;
   /** 重开新手引导向导（缺省隐藏入口） */
   readonly onOpenGuide?: () => void;
-  /** server 登录状态（缺省 undefined = 宿主未接线，隐藏同步入口卡） */
+  /** server 登录状态（未登录 → 列表区登录引导） */
   readonly serverAuthState?: ServerAuthState;
-  /** 打开登录页（未登录入口卡点击；清跳过记忆重开登录门） */
+  /** 打开登录页（未登录入口卡点击） */
   readonly onOpenLogin?: () => void;
   /** 已登录态点击入口卡 → 设置 → Server（设备管理/登出） */
   readonly onOpenSettings?: () => void;
+  /** 云端项目分区（宿主接线 cloudProjects 时提供；老 main 缺省 → 升级提示） */
+  readonly cloudSection?: {
+    readonly projects: ReadonlyArray<CloudProjectView>;
+    readonly busy?: boolean;
+    readonly error?: string;
+    readonly onCreate: (name: string) => void;
+    readonly onOpen: (project: { id: string; name: string }) => void;
+    /** 删除云端项目（server 软删 + 本地缓存清理）；返回是否成功 */
+    readonly onDelete: (projectId: string) => Promise<boolean>;
+  };
 }
 
 export function ProjectSelectionPage({
   snapshot,
-  onChoose,
-  onCreate,
-  onImport,
-  onOpenRecent,
-  onDeleteRecent,
   onOpenGuide,
   serverAuthState,
   onOpenLogin,
   onOpenSettings,
+  cloudSection,
 }: ProjectSelectionPageProps) {
   const busy =
     snapshot.phase === "loading" ||
     snapshot.phase === "selecting" ||
     snapshot.phase === "opening" ||
     snapshot.phase === "closing";
-  const opening = snapshot.phase === "selecting" || snapshot.phase === "opening";
-  // 删除确认弹窗（参照 ConversationDialogs 的 target/busy 模式）：busy 锁重复提交，
-  // 结束（无论成败）即关闭——失败详情经 controller error 通道展示在页面错误区
-  const [deleteTarget, setDeleteTarget] = useState<WorkspaceSessionView | undefined>(undefined);
+  const loggedIn = serverAuthState?.username !== undefined;
+  // 云项目删除确认（danger 二次确认：server 端删除后所有设备不可见）
+  const [deleteTarget, setDeleteTarget] = useState<CloudProjectView | undefined>(undefined);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  // 云项目新建：仅命名，无目录对话框
+  const [cloudCreateOpen, setCloudCreateOpen] = useState(false);
+  const [cloudName, setCloudName] = useState("");
   const confirmDelete = async (): Promise<void> => {
-    if (deleteTarget === undefined || deleteBusy) return;
+    if (deleteTarget === undefined || deleteBusy || cloudSection === undefined) return;
     setDeleteBusy(true);
     try {
-      await onDeleteRecent(deleteTarget.id);
+      await cloudSection.onDelete(deleteTarget.id);
     } finally {
       setDeleteBusy(false);
       setDeleteTarget(undefined);
@@ -122,14 +95,14 @@ export function ProjectSelectionPage({
           <button
             type="button"
             className={styles.syncCard}
-            data-online={serverAuthState.username !== undefined ? "true" : undefined}
-            onClick={serverAuthState.username !== undefined ? onOpenSettings : onOpenLogin}
+            data-online={loggedIn ? "true" : undefined}
+            onClick={loggedIn ? onOpenSettings : onOpenLogin}
           >
             <span className={styles.syncIcon} aria-hidden="true">
               <Icon icon={Cloud} size="sm" />
             </span>
             <span className={styles.syncText}>
-              {serverAuthState.username !== undefined ? (
+              {loggedIn ? (
                 <>
                   <strong className={styles.syncTitle}>
                     已连接同步 · {serverAuthState.username}
@@ -139,7 +112,7 @@ export function ProjectSelectionPage({
               ) : (
                 <>
                   <strong className={styles.syncTitle}>登录同步服务</strong>
-                  <small className={styles.syncSub}>多端接续——手机查看进度、任意设备续写</small>
+                  <small className={styles.syncSub}>登录后打开你的云端项目，多端接续写作</small>
                 </>
               )}
             </span>
@@ -148,82 +121,76 @@ export function ProjectSelectionPage({
             </span>
           </button>
         ) : null}
-        <h2 className={styles.secTitle}>最近的项目</h2>
-        {snapshot.recent.length === 0 ? (
-          <p className={styles.empty}>还没有打开过项目——从下方「新建项目」开始</p>
-        ) : (
-          <ul className={styles.recentList}>
-            {snapshot.recent.map((workspace) => {
-              const sub = formatSessionSub(workspace);
-              return (
-                <li key={workspace.id} className={styles.projItem}>
-                  <button
-                    type="button"
-                    className={styles.projCard}
-                    disabled={busy}
-                    onClick={() => onOpenRecent(workspace.id)}
-                  >
-                    <span className={styles.projCover} style={coverStyle(workspace.label)} aria-hidden="true">
-                      {Array.from(workspace.label)[0] ?? "?"}
-                    </span>
-                    <span className={styles.projText}>
-                      <strong className={styles.projName}>{workspace.label}</strong>
-                      {sub !== "" ? <small className={styles.projSub}>{sub}</small> : null}
-                    </span>
-                    <span className={styles.projOpen}>
-                      打开 <Icon icon={ArrowRight} size="sm" />
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.projDelete}
-                    disabled={busy}
-                    title="删除项目"
-                    aria-label={`删除项目 ${workspace.label}`}
-                    onClick={() => setDeleteTarget(workspace)}
-                  >
-                    <Icon icon={Trash2} size="sm" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <div className={styles.actions}>
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
-            loading={opening}
-            disabled={busy}
-            leadingIcon={<Icon icon={Plus} size="sm" />}
-            onClick={onCreate}
-          >
-            新建项目
-          </Button>
-          {onImport !== undefined ? (
+        <div className={styles.cloudHead}>
+          <h2 className={styles.secTitle}>云端项目</h2>
+          {cloudSection !== undefined && loggedIn ? (
             <Button
               variant="secondary"
-              size="lg"
-              fullWidth
-              disabled={busy}
-              leadingIcon={<Icon icon={FileUp} size="sm" />}
-              onClick={onImport}
+              size="sm"
+              disabled={cloudSection.busy === true}
+              leadingIcon={<Icon icon={Plus} size="sm" />}
+              onClick={() => setCloudCreateOpen(true)}
             >
-              从文件导入…
+              新建云端项目
             </Button>
           ) : null}
-          <Button
-            variant="secondary"
-            size="lg"
-            fullWidth
-            disabled={busy}
-            leadingIcon={<Icon icon={FolderOpen} size="sm" />}
-            onClick={onChoose}
-          >
-            打开其他项目…
-          </Button>
         </div>
+        {cloudSection === undefined ? (
+          <p className={styles.empty}>当前应用版本不支持云端项目——请更新应用后登录使用。</p>
+        ) : !loggedIn ? (
+          <p className={styles.empty}>登录后即可查看并打开你的云端项目（上方卡片进入登录）。</p>
+        ) : (
+          <>
+            {cloudSection.error !== undefined ? (
+              <p className={styles.error} role="status">{cloudSection.error}</p>
+            ) : null}
+            {cloudSection.projects.filter((p) => !p.archived).length === 0 ? (
+              <p className={styles.empty}>还没有云端项目——起个名字就开一本新书（无需选文件夹，多端同步）</p>
+            ) : (
+              <ul className={styles.recentList}>
+                {cloudSection.projects
+                  .filter((p) => !p.archived)
+                  .map((p) => (
+                    <li key={p.id} className={styles.projItem}>
+                      <button
+                        type="button"
+                        className={styles.projCard}
+                        disabled={busy}
+                        onClick={() => cloudSection.onOpen({ id: p.id, name: p.name })}
+                      >
+                        <span className={styles.cloudCover} aria-hidden="true">
+                          <Icon icon={Cloud} size="sm" />
+                        </span>
+                        <span className={styles.projText}>
+                          <strong className={styles.projName}>{p.name}</strong>
+                          {p.lastActivityAt !== null ? (
+                            <small className={styles.projSub}>
+                              {formatRelativeTime(p.lastActivityAt)} · 云端 · 多端接续
+                            </small>
+                          ) : (
+                            <small className={styles.projSub}>云端 · 多端接续</small>
+                          )}
+                        </span>
+                        <span className={styles.projOpen}>
+                          打开 <Icon icon={ArrowRight} size="sm" />
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.projDelete}
+                        disabled={busy}
+                        title="删除云端项目"
+                        aria-label={`删除云端项目 ${p.name}`}
+                        onClick={() => setDeleteTarget(p)}
+                      >
+                        <Icon icon={Trash2} size="sm" />
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </>
+        )}
         {snapshot.error !== undefined ? (
           <p className={styles.error} role="status">
             {snapshot.error.message}
@@ -240,18 +207,66 @@ export function ProjectSelectionPage({
         onOpenChange={(next) => {
           if (!next) setDeleteTarget(undefined);
         }}
-        title="删除项目"
+        title="删除云端项目"
         description={
           deleteTarget !== undefined
-            ? `确定删除项目「${deleteTarget.label}」吗？将永久删除该项目的全部应用数据（小说内容、AI 会话记录等）和整个项目文件夹（含其中的全部文件），不可恢复。${
-                deleteTarget.rootPath !== undefined ? `项目文件夹：${deleteTarget.rootPath}` : ""
-              }`
+            ? `确定删除云端项目「${deleteTarget.name}」吗？项目将从你的 server 上删除（所有设备不再可见），本设备的缓存数据一并清理，不可恢复。`
             : undefined
         }
         confirmLabel="删除"
         busy={deleteBusy}
         onConfirm={() => void confirmDelete()}
       />
+      {cloudSection !== undefined ? (
+        <Dialog
+          open={cloudCreateOpen}
+          onOpenChange={(next) => {
+            if (!next) setCloudCreateOpen(false);
+          }}
+          title="新建云端项目"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                disabled={cloudSection.busy === true}
+                onClick={() => setCloudCreateOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                disabled={cloudSection.busy === true || cloudName.trim().length === 0}
+                loading={cloudSection.busy === true}
+                onClick={() => {
+                  const name = cloudName.trim();
+                  if (name === "") return;
+                  setCloudCreateOpen(false);
+                  setCloudName("");
+                  cloudSection.onCreate(name);
+                }}
+              >
+                创建并打开
+              </Button>
+            </>
+          }
+        >
+          <div className={styles.cloudForm}>
+            <label className={styles.cloudFormLabel} htmlFor="cloud-project-name">
+              项目名
+            </label>
+            <Input
+              id="cloud-project-name"
+              value={cloudName}
+              autoFocus
+              placeholder="如：雪落长街"
+              onChange={(event) => setCloudName(event.currentTarget.value)}
+            />
+            <p className={styles.cloudFormHint}>
+              只需一个名字——项目保存在你的 server 上，任何设备登录即可接续写作。
+            </p>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

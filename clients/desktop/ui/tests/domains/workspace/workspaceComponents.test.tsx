@@ -45,265 +45,192 @@ describe("WorkspaceRevisionMeta", () => {
   });
 });
 
-describe("ProjectSelectionPage", () => {
+describe("ProjectSelectionPage（纯云端化 ⑥ 云-only）", () => {
   const snapshot = (overrides = {}) => ({
     revision: 1,
     phase: "idle",
-    recent: [
-      {
-        id: "ws-1",
-        label: "白昼计划",
-        lastOpenedAt: new Date().toISOString(),
-        rootPath: "D:\\books\\白昼计划",
-      },
-    ],
     ...overrides,
   });
 
-  it("renders welcome brand, dual actions and recent cards, wiring callbacks", async () => {
+  const cloudSection = (overrides = {}) => ({
+    projects: [
+      { id: "prj_1", name: "云端测试书", lastActivityAt: Date.now(), archived: false, referenceId: "ws-1" },
+    ],
+    onCreate: vi.fn(),
+    onOpen: vi.fn(),
+    onDelete: vi.fn(async () => true),
+    ...overrides,
+  });
+
+  const onlineAuth = { status: "online", url: "http://127.0.0.1:8787", username: "alice", deviceId: "d1" } as never;
+
+  it("云端分区：品牌 + 云卡片 + 新建入口；本地入口不渲染；卡片打开回调", async () => {
     const user = userEvent.setup();
-    const onChoose = vi.fn();
-    const onCreate = vi.fn();
-    const onOpenRecent = vi.fn();
+    const section = cloudSection();
     render(
       <ProjectSelectionPage
         snapshot={snapshot()}
-        onChoose={onChoose}
-        onCreate={onCreate}
-        onOpenRecent={onOpenRecent}
-        onDeleteRecent={vi.fn(async () => true)}
+        serverAuthState={onlineAuth}
+        onOpenLogin={vi.fn()}
+        cloudSection={section}
       />,
     );
-    // 品牌区 + 节标题（demo 欢迎页结构）
-    expect(screen.getByText("Novel")).toBeInTheDocument();
     expect(screen.getByText("把一桩旧事，写成一本新书。")).toBeInTheDocument();
-    expect(screen.getByText("最近的项目")).toBeInTheDocument();
-    // 卡片：书名 + 副标题（相对时间 · 路径）
-    expect(screen.getByText("白昼计划")).toBeInTheDocument();
-    expect(screen.getByText(/D:\\books\\白昼计划/)).toBeInTheDocument();
-    // 新建（save 型命名建目录）与打开（目录选择器）分开接线
-    await user.click(screen.getByRole("button", { name: "新建项目" }));
-    expect(onCreate).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: "打开其他项目…" }));
-    expect(onChoose).toHaveBeenCalledTimes(1);
-    // 卡片主体按钮名以书名开头（右上角删除钮 aria-label 为「删除项目 白昼计划」，^ 区分）
-    await user.click(screen.getByRole("button", { name: /^白昼计划/ }));
-    expect(onOpenRecent).toHaveBeenCalledWith("ws-1");
-  });
-
-  it("shows the import action only when wired and fires onImport", async () => {
-    const user = userEvent.setup();
-    const onImport = vi.fn();
-    // 未接线：不渲染导入入口
-    const { rerender } = render(
-      <ProjectSelectionPage
-        snapshot={snapshot()}
-        onChoose={vi.fn()}
-        onCreate={vi.fn()}
-        onOpenRecent={vi.fn()}
-      />,
-    );
+    expect(screen.getByText("云端项目")).toBeInTheDocument();
+    expect(screen.getByText("云端测试书")).toBeInTheDocument();
+    // 本地入口退役
+    expect(screen.queryByRole("button", { name: "新建项目" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开其他项目…" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /从文件导入/ })).not.toBeInTheDocument();
-    // 接线：按钮出现并回调
-    rerender(
-      <ProjectSelectionPage
-        snapshot={snapshot()}
-        onChoose={vi.fn()}
-        onCreate={vi.fn()}
-        onImport={onImport}
-        onOpenRecent={vi.fn()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /从文件导入/ }));
-    expect(onImport).toHaveBeenCalledTimes(1);
+    // 卡片打开
+    await user.click(screen.getByRole("button", { name: /^云端测试书/ }));
+    expect(section.onOpen).toHaveBeenCalledWith({ id: "prj_1", name: "云端测试书" });
   });
 
-  it("shows empty hint, error banner and busy states", () => {
-    const { rerender } = render(
+  it("新建云端项目：命名弹窗 → onCreate", async () => {
+    const user = userEvent.setup();
+    const section = cloudSection();
+    render(
       <ProjectSelectionPage
-        snapshot={snapshot({ recent: [] })}
-        onChoose={vi.fn()}
-        onCreate={vi.fn()}
-        onOpenRecent={vi.fn()}
-        onDeleteRecent={vi.fn(async () => true)}
+        snapshot={snapshot()}
+        serverAuthState={onlineAuth}
+        onOpenLogin={vi.fn()}
+        cloudSection={section}
       />,
     );
-    expect(screen.getByText(/还没有打开过项目/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "新建云端项目" }));
+    await user.type(screen.getByLabelText("项目名"), "雪落长街");
+    await user.click(screen.getByRole("button", { name: "创建并打开" }));
+    expect(section.onCreate).toHaveBeenCalledWith("雪落长街");
+  });
 
-    rerender(
+  it("未登录：登录引导空态（不渲染云列表/新建）", () => {
+    render(
       <ProjectSelectionPage
-        snapshot={snapshot({
+        snapshot={snapshot()}
+        serverAuthState={{ status: "unconfigured" } as never}
+        onOpenLogin={vi.fn()}
+        cloudSection={cloudSection()}
+      />,
+    );
+    expect(screen.getByText(/登录后即可查看并打开你的云端项目/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "新建云端项目" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^云端测试书/ })).not.toBeInTheDocument();
+  });
+
+  it("老 main（cloudSection 缺省）：升级提示", () => {
+    render(<ProjectSelectionPage snapshot={snapshot()} />);
+    expect(screen.getByText(/当前应用版本不支持云端项目/)).toBeInTheDocument();
+  });
+
+  it("删除云项目：danger 确认（server 删除语义）后回调 onDelete", async () => {
+    const user = userEvent.setup();
+    const section = cloudSection();
+    render(
+      <ProjectSelectionPage
+        snapshot={snapshot()}
+        serverAuthState={onlineAuth}
+        onOpenLogin={vi.fn()}
+        cloudSection={section}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "删除云端项目 云端测试书" }));
+    expect(screen.getByText(/确定删除云端项目「云端测试书」/)).toBeInTheDocument();
+    expect(screen.getByText(/所有设备不再可见/)).toBeInTheDocument();
+    expect(section.onDelete).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "删除", exact: true }));
+    expect(section.onDelete).toHaveBeenCalledWith("prj_1");
+  });
+
+  it("错误横幅与 busy 态", () => {
+    render(
+      <ProjectSelectionPage
+        snapshot={{
+          revision: 1,
           phase: "opening",
           error: { code: "OPEN_FAILED", retryable: true, message: "打开失败" },
-        })}
-        onChoose={vi.fn()}
-        onCreate={vi.fn()}
-        onOpenRecent={vi.fn()}
-        onDeleteRecent={vi.fn(async () => true)}
+        }}
+        serverAuthState={onlineAuth}
+        onOpenLogin={vi.fn()}
+        cloudSection={cloudSection()}
       />,
     );
     expect(screen.getByText("打开失败")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "打开其他项目…" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /^白昼计划/ })).toBeDisabled();
-  });
-
-  it("confirms deletion via danger dialog before calling onDeleteRecent", async () => {
-    const user = userEvent.setup();
-    const onDeleteRecent = vi.fn(async () => true);
-    render(
-      <ProjectSelectionPage
-        snapshot={snapshot()}
-        onChoose={vi.fn()}
-        onCreate={vi.fn()}
-        onOpenRecent={vi.fn()}
-        onDeleteRecent={onDeleteRecent}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "删除项目 白昼计划" }));
-    // danger 确认弹窗：明示不可恢复 + 整个文件夹强删 + 完整路径核对
-    expect(screen.getByText(/不可恢复/)).toBeInTheDocument();
-    expect(screen.getByText(/整个项目文件夹（含其中的全部文件）/)).toBeInTheDocument();
-    expect(screen.getByText(/项目文件夹：D:\\books\\白昼计划/)).toBeInTheDocument();
-    expect(onDeleteRecent).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "删除" }));
-    expect(onDeleteRecent).toHaveBeenCalledWith("ws-1");
+    expect(screen.getByRole("button", { name: /^云端测试书/ })).toBeDisabled();
   });
 });
 
-describe("WorkspaceSelectionDialog（删除项目）", () => {
+describe("WorkspaceSelectionDialog（纯云端化 ⑥ 云列表）", () => {
   const snapshot = (overrides = {}) => ({
     revision: 1,
     phase: "ready",
     current: { id: "ws-cur", label: "当前书" },
-    recent: [
-      { id: "ws-cur", label: "当前书" },
-      { id: "ws-old", label: "旧书" },
-    ],
     ...overrides,
   });
 
-  function renderDialog(onDeleteRecent: (workspaceId: string) => Promise<boolean>) {
-    render(
+  function renderDialog(overrides: Partial<Parameters<typeof WorkspaceSelectionDialog>[0]> = {}) {
+    return render(
       <WorkspaceSelectionDialog
         open
         snapshot={snapshot()}
-        onPick={vi.fn(async () => undefined)}
-        onOpen={vi.fn()}
-        onOpenInNewWindow={vi.fn()}
-        onCloseWorkspace={vi.fn()}
-        onDeleteRecent={onDeleteRecent}
-        onDismiss={vi.fn()}
-      />,
-    );
-  }
-
-  it("filters the current workspace out (running protection) and offers deletion on the rest", () => {
-    renderDialog(vi.fn(async () => true));
-
-    // 当前项目不进切换列表（运行中保护从源头过滤），自然无其删除入口
-    expect(screen.queryByRole("button", { name: "删除项目 当前书" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "删除项目 旧书" })).toBeEnabled();
-  });
-
-  it("confirms deletion for a non-current workspace and wires onDeleteRecent", async () => {
-    const user = userEvent.setup();
-    const onDeleteRecent = vi.fn(async () => true);
-    renderDialog(onDeleteRecent);
-
-    await user.click(screen.getByRole("button", { name: "删除项目 旧书" }));
-    expect(screen.getByText(/确定删除项目「旧书」/)).toBeInTheDocument();
-    expect(screen.getByText(/整个项目文件夹（含其中的全部文件）/)).toBeInTheDocument();
-    expect(onDeleteRecent).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "删除" }));
-    expect(onDeleteRecent).toHaveBeenCalledWith("ws-old");
-  });
-});
-
-describe("WorkspaceSelectionDialog（打开位置选择）", () => {
-  const dialogSnapshot = (overrides = {}) => ({
-    revision: 1,
-    phase: "ready",
-    current: { id: "ws-1", label: "在写" },
-    recent: [
-      {
-        id: "ws-2",
-        label: "第二本",
-        lastOpenedAt: new Date().toISOString(),
-        rootPath: "D:\\books\\第二本",
-      },
-    ],
-    ...overrides,
-  });
-
-  const renderDialog = (overrides: Partial<Parameters<typeof WorkspaceSelectionDialog>[0]> = {}) =>
-    render(
-      <WorkspaceSelectionDialog
-        open
-        snapshot={dialogSnapshot()}
-        onPick={vi.fn(async () => undefined)}
-        onOpen={vi.fn()}
-        onOpenInNewWindow={vi.fn()}
+        cloudProjects={{
+          projects: [
+            { id: "prj_cur", name: "当前书", lastActivityAt: null, archived: false, referenceId: "ws-cur" },
+            { id: "prj_old", name: "旧书", lastActivityAt: null, archived: false, referenceId: "ws-old" },
+          ],
+          onOpen: vi.fn(),
+          onOpenInNewWindow: vi.fn(),
+          onDelete: vi.fn(async () => true),
+        }}
         onCloseWorkspace={vi.fn()}
         onDismiss={vi.fn()}
         {...overrides}
       />,
     );
+  }
 
-  it("选定目录后出现打开位置面板：新窗口派发、当前窗口不动、面板收起", async () => {
-    const user = userEvent.setup();
-    const onPick = vi.fn(async () => ({ referenceId: "D:\\books\\第三本", label: "第三本" }));
-    const onOpen = vi.fn();
-    const onOpenInNewWindow = vi.fn();
-    renderDialog({ onPick, onOpen, onOpenInNewWindow });
-
-    await user.click(screen.getByRole("button", { name: "打开项目文件夹…" }));
-    expect(onPick).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/打开《第三本》/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/当前窗口打开会结束本项目全部运行中的对话/),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "在新窗口打开" }));
-    expect(onOpenInNewWindow).toHaveBeenCalledWith({
-      referenceId: "D:\\books\\第三本",
-      label: "第三本",
-    });
-    expect(onOpen).not.toHaveBeenCalled();
-    expect(screen.queryByText(/打开《第三本》/)).not.toBeInTheDocument();
-  });
-
-  it("最近项点击进入面板；在当前窗口打开触发 onOpen；取消清面板不回调", async () => {
+  it("当前项目过滤（referenceId 匹配），其余云项目可进打开位置面板", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
-    const onOpenInNewWindow = vi.fn();
-    renderDialog({ onOpen, onOpenInNewWindow });
-
-    // 列表项按钮名以书名开头（删除钮 aria-label 为「删除项目 第二本」，^ 区分）
-    await user.click(screen.getByRole("button", { name: /^第二本/ }));
-    expect(screen.getByText(/打开《第二本》/)).toBeInTheDocument();
+    renderDialog({ cloudProjects: {
+      projects: [
+        { id: "prj_cur", name: "当前书", lastActivityAt: null, archived: false, referenceId: "ws-cur" },
+        { id: "prj_old", name: "旧书", lastActivityAt: null, archived: false, referenceId: "ws-old" },
+      ],
+      onOpen,
+      onOpenInNewWindow: vi.fn(),
+      onDelete: vi.fn(async () => true),
+    } });
+    // 当前项目不进列表（运行中保护）
+    expect(screen.queryByRole("button", { name: /^当前书/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^旧书/ }));
+    expect(screen.getByText(/打开《旧书》/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "在当前窗口打开" }));
-    expect(onOpen).toHaveBeenCalledWith({ referenceId: "ws-2", label: "第二本" });
-    expect(onOpenInNewWindow).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: /^第二本/ }));
-    await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(screen.queryByText(/打开《第二本》/)).not.toBeInTheDocument();
-    expect(onOpen).toHaveBeenCalledTimes(1);
-    expect(onOpenInNewWindow).not.toHaveBeenCalled();
+    expect(onOpen).toHaveBeenCalledWith({ id: "prj_old", name: "旧书" });
   });
 
-  it("最近列表默认过滤当前项目（id 与 rootPath 双匹配），过滤后空态提示其他文案", () => {
-    renderDialog({
-      snapshot: dialogSnapshot({
-        current: { id: "ws-2", label: "第二本", rootPath: "D:\\books\\第二本" },
-      }),
-    });
-    // recent 仅第二本（= 当前项目）→ 列表不显示，空态文案区分"无其他可切换"
-    expect(screen.queryByRole("button", { name: /第二本/ })).not.toBeInTheDocument();
-    expect(screen.getByText("没有其他可切换的项目")).toBeInTheDocument();
+  it("新窗口打开派发 onOpenInNewWindow；删除走 danger 确认", async () => {
+    const user = userEvent.setup();
+    const onOpenInNewWindow = vi.fn();
+    const onDelete = vi.fn(async () => true);
+    renderDialog({ cloudProjects: {
+      projects: [{ id: "prj_old", name: "旧书", lastActivityAt: null, archived: false, referenceId: "ws-old" }],
+      onOpen: vi.fn(),
+      onOpenInNewWindow,
+      onDelete,
+    } });
+    await user.click(screen.getByRole("button", { name: /^旧书/ }));
+    await user.click(screen.getByRole("button", { name: "在新窗口打开" }));
+    expect(onOpenInNewWindow).toHaveBeenCalledWith({ id: "prj_old", name: "旧书" });
+
+    await user.click(screen.getByRole("button", { name: "删除云端项目 旧书" }));
+    expect(screen.getByText(/确定删除云端项目「旧书」/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "删除", exact: true }));
+    expect(onDelete).toHaveBeenCalledWith("prj_old");
+  });
+
+  it("老 main（cloudProjects 缺省）：列表区升级提示；空列表空态", () => {
+    renderDialog({ cloudProjects: undefined });
+    expect(screen.getByText(/当前应用版本不支持云端项目/)).toBeInTheDocument();
   });
 });

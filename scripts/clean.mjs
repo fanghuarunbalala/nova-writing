@@ -9,7 +9,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const TARGETS = ["core/dist", "ui/dist", "gui/dist"];
+const TARGETS = [
+  "clients/desktop/core/dist",
+  "clients/desktop/ui/dist",
+  "clients/desktop/gui/dist",
+];
 
 for (const relative of TARGETS) {
   const target = join(repoRoot, relative);

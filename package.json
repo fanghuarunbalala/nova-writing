@@ -15,8 +15,8 @@
   },
   "scripts": {
     "clean": "node scripts/clean.mjs",
-    "build": "node scripts/clean.mjs && pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs",
-    "build:incremental": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node gui/scripts/build-minimal.mjs",
+    "build": "node scripts/clean.mjs && pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node clients/desktop/gui/scripts/build-minimal.mjs",
+    "build:incremental": "pnpm --filter @novel/core build && pnpm --filter @novel/ui build && node clients/desktop/gui/scripts/build-minimal.mjs",
     "gui:release": "pnpm --filter @novel/gui exec electron dist/minimal/main.cjs",
     "gui:debug": "set NOVEL_LOG_LEVEL=verbose&& set NOVEL_DEBUG=1&& pnpm gui:release"
   },

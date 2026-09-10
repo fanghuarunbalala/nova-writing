@@ -1,0 +1,108 @@
+/**
+ * ConversationTimeline 视觉（原型 .timeline + .chat-inner）。
+ *
+ * timeline 提供滚动容器；inner 居中并限制最大宽度 var(--max-w-composer)
+ * （clamp(880px, 62%, 1600px) 随容器自适应，与悬浮 composer 的 form 对齐）。
+ * padding-bottom 132px 为悬浮 composer 留出空间，最后一条
+ * 消息可滚到输入框上方。
+ */
+.timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* 底部预留（悬浮 composer 让位）：tokens 缺省 132px；shell 传 bottomReserve 时按
+     composer 实际高度（状态行展开/输入增高会变）内联覆盖——否则末条消息会被悬浮框盖住 */
+  padding: var(--space-2) var(--space-22px) var(--timeline-bottom-reserve);
+}
+
+.inner {
+  max-width: var(--max-w-composer);
+  margin: 0 auto;
+  /* demo chatInner 节奏：消息/分隔条目 16px 等距（各消息模块的垂直 padding 已移除） */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* 分段加载（⑤）：滚动到顶部触发 loadOlder 时的顶部指示条（与 .system 同款弱化形态） */
+.loadingOlder {
+  max-width: var(--max-w-composer);
+  margin: 0 auto var(--space-2);
+  padding: var(--space-1) 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+.system {
+  padding: var(--space-1) 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-faint);
+}
+
+/* 审批系统消息（demo .sysMsg）：居中 warn 胶囊，点击打开审批面板 */
+.systemAction {
+  display: block;
+  margin: var(--space-1) auto;
+  padding: var(--space-5px) var(--space-3);
+  border: 1px solid color-mix(in oklab, var(--color-warn) 32%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--color-warn-bg);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--color-warn);
+  cursor: pointer;
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.systemAction:hover {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-warn) 14%, transparent);
+}
+
+/* 轮次分隔（对齐 demo .runDivider，app-redesign-demo.html L650–651）：11px 常规无衬线
+   + 0.05em 字距，两侧平直 1px 细线（去 mono/fw-600/渐变）。标签内容仅 HH:mm（用户决议）。 */
+.runSep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-8px) 0 var(--space-2px);
+  color: var(--color-faint);
+  font-size: var(--fs-11);
+  letter-spacing: 0.05em;
+}
+
+.runSep::before,
+.runSep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* 首条轮次分隔上边距微调（demo 无此规则：首条时更贴合顶部，条目外层有 .enter 包裹） */
+.enter:first-child .runSep {
+  margin-top: var(--space-10px);
+}
+
+/* 消息入场：切换对话时按序错峰（原型 .msg.conv-in）。 */
+/* content-visibility（gui-performance-2 功能点六）：视口外行跳过 layout/paint，
+   contain-intrinsic-height 记忆实际渲染高度（auto 关键字）+ 240px 初始估高——
+   长会话滚动无固定行高失真、无窗口重挂载动画闪烁。
+   仅约束高度轴：contain-intrinsic-size 单值语法会同时作用于宽高，宽度轴的
+   记忆尺寸会在主区宽度变化（审批面板开合过渡）时让时间线行按过期宽度排版，
+   产生中文逐字断行。 */
+/* enterStatic：初始项（挂载时已在列）不重播入场——视图切换由容器 .surface
+   view-in 承担整体淡入，避免整列级联重播（见 ConversationTimeline initialRef）；
+   containment 声明与 .enter 共享 */
+.enter,
+.enterStatic {
+  content-visibility: auto;
+  contain-intrinsic-height: auto 240px;
+}
+
+.enter {
+  animation: var(--anim-conv-in) 0.28s ease both;
+}

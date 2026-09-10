@@ -1,9 +1,9 @@
 packages:
-  - "core"
-  - "ui"
-  - "gui"
+  - "clients/desktop/core"
+  - "clients/desktop/ui"
+  - "clients/desktop/gui"
   - "evals"
-  - "server"
+  - "cloud/server"
   - "mcp-servers/novel-fetch"
 
 allowBuilds:

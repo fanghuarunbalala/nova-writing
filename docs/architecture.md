@@ -5,6 +5,30 @@
 
 ---
 
+## 0. 顶层结构（✅ M3 目录重构）
+
+仓库按**端云分层**组织（原 core/ui/gui/android/server 平铺 → 归位）：
+
+```
+clients/desktop/   桌面端（core 内核 + ui 展示层 + gui Electron 壳，pnpm workspace 三包）
+clients/android/   Android 端（纯 JVM Kotlin Gradle 工程 :core:model/provider/runtime/data）
+cloud/server/      数据层 server（@novel/server：认证/账本/租约/审批/定义包）
+protocol/          双端共享契约单一来源（fixtures/：定义包 golden + parity 夹具；
+                   TS 测试相对路径直读；Android 由 Gradle Sync 任务复制进测试资源）
+evals/ mcp-servers/ docs/ scripts/   评估设施 / MCP 服务 / 文档 / 根脚本
+```
+
+**术语表**（消解两个 "core" 歧义）：
+
+| 术语 | 指代 |
+|---|---|
+| 桌面 core | `clients/desktop/core`（`@novel/core`，TS harness 内核） |
+| Android core | `clients/android/core/*`（Kotlin 运行时模块群） |
+| server | `cloud/server`（数据层 web server） |
+| protocol | 双端共享夹具与契约文档（单一来源，禁止手工复制副本入库） |
+
+---
+
 ## 1. 概念模型（✅）
 
 | 概念 | 定义 |

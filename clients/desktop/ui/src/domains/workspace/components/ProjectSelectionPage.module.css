@@ -1,0 +1,352 @@
+/**
+ * ProjectSelectionPage 视觉（demo「启动 · 项目选择页」对齐）：
+ * 全屏不透明底 + 居中单列（min(560px, 100%)）；品牌区 → 节标题 → 书封卡片
+ * 纵列 → 双按钮，view-in 0.5s 级联浮入（0.05/0.12/0.18/0.24s）。
+ * 进入 opening 阶段整页 welcome-leave（缩放 + 模糊淡出）。
+ */
+.page {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg);
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.leave {
+  animation: var(--anim-welcome-leave) 0.45s var(--ease-out) both;
+  pointer-events: none;
+}
+
+.inner {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-26px);
+  animation: var(--anim-view-in) 0.5s 0.05s var(--ease-out) both;
+}
+
+.brandDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--grad-accent);
+  background-size: 160% 160%;
+  animation: var(--anim-grad-flow) 6s var(--ease-in-out) infinite;
+}
+
+.brandName {
+  font-size: var(--fs-24);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  font-family: var(--font-kai);
+  color: var(--color-fg);
+}
+
+.brandTag {
+  font-family: var(--font-kai);
+  color: var(--color-muted);
+  font-size: var(--fs-13);
+}
+
+.secTitle {
+  margin: 0 var(--space-2) var(--space-9px);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  color: var(--color-faint);
+  animation: var(--anim-view-in) 0.5s 0.12s var(--ease-out) both;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-14px) var(--space-4);
+  text-align: center;
+  color: var(--color-faint);
+  font-size: var(--fs-12);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  animation: var(--anim-view-in) 0.5s 0.18s var(--ease-out) both;
+}
+
+.recentList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-9px);
+  animation: var(--anim-view-in) 0.5s 0.18s var(--ease-out) both;
+}
+
+.projItem {
+  position: relative;
+}
+
+/* 删除入口：绝对定位的兄弟元素（button 不可嵌套 button），默认半隐、悬停/聚焦显形 */
+.projDelete {
+  position: absolute;
+  top: var(--space-5px);
+  right: var(--space-5px);
+  display: grid;
+  place-items: center;
+  width: var(--space-26px);
+  height: var(--space-26px);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.projItem:hover .projDelete,
+.projDelete:focus-visible {
+  opacity: 1;
+}
+
+.projDelete:hover:not(:disabled) {
+  background: var(--color-danger-10);
+  color: var(--color-danger);
+}
+
+.projDelete:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.projCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-13px);
+  width: 100%;
+  padding: var(--space-13px) var(--space-15px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out);
+}
+
+.projCard:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+  border-color: color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
+}
+
+.projCard:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 云项目分区（项目域上云 FR4）：标题行 + 命名新建 + 云端卡（☁ 图标位替代书封） */
+.cloudHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-9px);
+}
+
+.cloudHead .secTitle {
+  margin: 0;
+  animation: none;
+}
+
+.cloudCover {
+  width: 46px;
+  height: 60px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--color-accent-ink);
+  background: var(--color-accent-8-transparent);
+}
+
+.cloudForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.cloudFormLabel {
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-medium);
+  color: var(--color-muted);
+}
+
+.cloudFormHint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  color: var(--color-faint);
+}
+
+/* 同步入口卡（登录页的欢迎页常驻入口）：比项目卡更低调（surface-2 底、无边框卡感），
+   未登录点击开登录门；已在线展示 用户名 并转设置管理 */
+.syncCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  margin-bottom: var(--space-26px);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+  animation: var(--anim-view-in) 0.5s 0.1s var(--ease-out) both;
+}
+
+.syncCard:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
+}
+
+.syncIcon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-ink);
+  background: var(--color-accent-8-transparent);
+}
+
+.syncCard[data-online="true"] .syncIcon {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.syncText {
+  flex: 1;
+  min-width: 0;
+}
+
+.syncTitle {
+  display: block;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  color: var(--color-fg);
+}
+
+.syncSub {
+  display: block;
+  margin-top: var(--space-2px);
+  font-size: var(--fs-11);
+  color: var(--color-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projCover {
+  width: 46px;
+  height: 60px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-kai);
+  font-size: var(--fs-21);
+  color: var(--color-cover-fg);
+  background: linear-gradient(150deg, var(--cover-1), var(--cover-2));
+  box-shadow: var(--shadow-xs), inset 0 0 0 1px var(--color-cover-hairline);
+}
+
+.projText {
+  flex: 1;
+  min-width: 0;
+}
+
+.projName {
+  display: block;
+  font-size: var(--fs-15);
+  font-weight: var(--fw-semibold);
+  color: var(--color-fg);
+}
+
+.projSub {
+  display: block;
+  margin-top: var(--space-3px);
+  font-size: var(--fs-12);
+  color: var(--color-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projOpen {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5px);
+  color: var(--color-faint);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  transition:
+    gap var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.projCard:hover:not(:disabled) .projOpen {
+  color: var(--color-accent-ink);
+  gap: var(--space-9px);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-9px);
+  margin-top: var(--space-18px);
+  animation: var(--anim-view-in) 0.5s 0.24s var(--ease-out) both;
+}
+
+.error {
+  margin: 0;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-10);
+  color: var(--color-danger);
+  font-size: var(--fs-meta);
+  animation: var(--anim-view-in) 0.3s var(--ease-out);
+}
+
+.guideLink {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--fs-meta);
+  color: var(--color-faint);
+  text-decoration: underline dotted;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.guideLink:hover {
+  color: var(--color-accent-ink);
+}

@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="paper">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novel · Android 总体框架对比 demo（A/B/C/D）</title>
+<!-- ============================================================
+  Nova Writing · Android 总体框架对比 demo
+  用途：敲定 M4 App 壳的导航架构（底部 Fragment 承载哪些域、
+        哪些划入侧边抽屉/顶栏）——定稿后回填 android-移动端MVP.md，
+        并据此重构 android-app-demo.html。
+  四方案（每台手机可点底部 tab 切换示意屏；B 的 ☰ 开抽屉）：
+  A 底部四格 + 设置入顶栏：会话/项目/审批中心/书库 · 设置=顶栏齿轮
+  B 底部三格 + 侧边抽屉　：会话/项目/审批中心 · 书库·设置·设备管理·项目切换入抽屉
+  C 底部四格含设置　　　：会话/项目/审批中心/设置 · 书库=项目页内入口
+  D 底部五格全塞（对照） ：会话/项目/审批中心/书库/设置 一级全放
+  token 与桌面端同源（宣纸白/墨夜/黛青/雪青）。
+============================================================ -->
+<style>
+  :root {
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "MiSans",
+      "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+      system-ui, sans-serif;
+    --font-body: "Iowan Old Style", "Palatino Linotype",
+      "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong",
+      "SimSun", Georgia, serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    --fs-10-5: 10.5px; --fs-11: 11px; --fs-11-5: 11.5px; --fs-12: 12px;
+    --fs-12-5: 12.5px; --fs-13: 13px; --fs-14: 14px; --fs-15-5: 15.5px;
+    --fw-regular: 400; --fw-medium: 550; --fw-semibold: 650; --fw-bold: 700;
+    --radius-sm: 6px; --radius-md: 9px; --radius-lg: 14px;
+    --radius-sheet: 20px; --radius-pill: 999px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --phone-w: 412px; --phone-h: 915px;
+    --statusbar-h: 38px; --topbar-h: 56px; --navbar-h: 76px; --touch: 48px;
+    --ps: .64; /* 手机缩放 */
+
+    --color-bg:            oklch(97.9% 0.003 85);
+    --color-surface:       oklch(99.8% 0.0015 85);
+    --color-surface-2:     oklch(96.2% 0.004 82);
+    --color-fg:            oklch(30% 0.009 46);
+    --color-muted:         oklch(52% 0.009 54);
+    --color-faint:         oklch(60% 0.009 58);
+    --color-border:        oklch(92.4% 0.003 82);
+    --color-border-strong: oklch(86.4% 0.006 72);
+    --color-orange:        oklch(73% 0.068 60);
+    --color-accent:        oklch(55% 0.072 42);
+    --color-red:           oklch(58% 0.075 32);
+    --color-accent-ink:    oklch(47% 0.062 41);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(97.2% 0.011 156);
+    --color-warn:          oklch(59% 0.07 80);
+    --color-warn-bg:       oklch(97.1% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-danger-bg:     oklch(97.1% 0.009 33);
+    --color-info:          oklch(54% 0.05 235);
+    --color-info-bg:       oklch(97.2% 0.007 236);
+    --color-on-accent:     #fff;
+    --color-accent-9:   color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+    --color-accent-8-t: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    --color-accent-11:  color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+    --grad-accent: linear-gradient(105deg,
+      var(--color-orange) 0%, var(--color-accent) 48%, var(--color-red) 100%);
+    --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
+    --shadow-2: 0 2px 4px rgba(40, 22, 10, 0.05), 0 16px 40px rgba(40, 22, 10, 0.11);
+    --shadow-xs: 0 1px 3px rgba(20, 12, 6, 0.08);
+  }
+  [data-theme="ink"] {
+    --color-bg: oklch(21% .005 80); --color-surface: oklch(25.5% .006 80);
+    --color-surface-2: oklch(28.5% .007 78); --color-fg: oklch(89% .006 85);
+    --color-muted: oklch(70% .008 80); --color-faint: oklch(59% .007 80);
+    --color-border: oklch(31% .007 80); --color-border-strong: oklch(40% .01 78);
+    --color-orange: oklch(77% .095 62); --color-accent: oklch(68% .115 42);
+    --color-red: oklch(66% .115 30); --color-accent-ink: oklch(78% .09 45);
+    --color-success: oklch(72% .095 156); --color-success-bg: oklch(29% .032 156);
+    --color-warn: oklch(75% .1 80); --color-warn-bg: oklch(29% .034 85);
+    --color-danger: oklch(67% .1 32); --color-danger-bg: oklch(28% .03 33);
+    --color-info: oklch(70% .075 235); --color-info-bg: oklch(28% .024 236);
+    --color-on-accent: oklch(24% .03 42);
+    --shadow-1: 0 1px 2px rgba(0,0,0,.28), 0 8px 24px rgba(0,0,0,.3);
+    --shadow-2: 0 2px 4px rgba(0,0,0,.32), 0 16px 40px rgba(0,0,0,.48);
+    --shadow-xs: 0 1px 3px rgba(0,0,0,.35);
+  }
+  [data-theme="celadon"] {
+    --color-bg: oklch(20% .013 235); --color-surface: oklch(24% .015 235);
+    --color-surface-2: oklch(27% .017 232); --color-fg: oklch(89% .009 225);
+    --color-muted: oklch(69% .013 230); --color-faint: oklch(58% .012 230);
+    --color-border: oklch(30% .015 235); --color-border-strong: oklch(38% .019 232);
+    --color-orange: oklch(78% .07 190); --color-accent: oklch(75% .1 195);
+    --color-red: oklch(68% .11 265); --color-accent-ink: oklch(84% .075 205);
+    --color-success: oklch(72% .095 158); --color-success-bg: oklch(28% .032 158);
+    --color-warn: oklch(76% .1 90); --color-warn-bg: oklch(28% .032 88);
+    --color-danger: oklch(68% .11 25); --color-danger-bg: oklch(28% .03 25);
+    --color-info: oklch(72% .08 240); --color-info-bg: oklch(28% .028 240);
+    --color-on-accent: oklch(20% .04 230);
+    --shadow-1: 0 1px 2px rgba(0,0,0,.28), 0 8px 24px rgba(0,0,0,.32);
+    --shadow-2: 0 2px 4px rgba(0,0,0,.32), 0 16px 40px rgba(0,0,0,.5);
+    --shadow-xs: 0 1px 3px rgba(0,0,0,.36);
+  }
+  [data-theme="frost"] {
+    --color-bg: oklch(97.4% .004 240); --color-surface: oklch(99.5% .002 240);
+    --color-surface-2: oklch(95.6% .005 234); --color-fg: oklch(29% .016 262);
+    --color-muted: oklch(50% .014 256); --color-faint: oklch(59% .012 254);
+    --color-border: oklch(91.6% .005 240); --color-border-strong: oklch(85.4% .009 240);
+    --color-orange: oklch(72% .075 230); --color-accent: oklch(52% .1 262);
+    --color-red: oklch(54% .1 285); --color-accent-ink: oklch(44% .09 262);
+    --color-success: oklch(52% .07 156); --color-success-bg: oklch(96.8% .011 156);
+    --color-warn: oklch(58% .07 80); --color-warn-bg: oklch(96.7% .011 86);
+    --color-danger: oklch(54% .068 32); --color-danger-bg: oklch(96.7% .009 33);
+    --color-info: oklch(54% .055 240); --color-info-bg: oklch(96.8% .008 240);
+    --color-on-accent: #fff;
+    --shadow-1: 0 1px 2px rgba(12,18,40,.05), 0 8px 24px rgba(12,18,40,.055);
+    --shadow-2: 0 2px 4px rgba(12,18,40,.06), 0 16px 40px rgba(12,18,40,.13);
+    --shadow-xs: 0 1px 3px rgba(12,18,40,.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font-ui); background: var(--color-surface-2); color: var(--color-fg);
+    min-height: 100vh; padding: 26px 30px 158px; overflow-x: auto;
+  }
+  button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; }
+  .ic { width: 16px; height: 16px; flex: none; display: inline-block; vertical-align: -3px; }
+  .ic-lg { width: 20px; height: 20px; }
+
+  .pageHead { max-width: 1720px; margin: 0 auto 22px; }
+  .pageHead h1 { font-size: 19px; display: flex; align-items: center; gap: 10px; }
+  .brandDot { width: 18px; height: 18px; border-radius: 50%; background: var(--grad-accent); position: relative; }
+  .brandDot::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--color-surface-2); }
+  .pageHead p { font-size: 12.5px; color: var(--color-muted); margin-top: 8px; line-height: 1.9; max-width: 860px; }
+  .pageHead b { color: var(--color-accent-ink); }
+
+  .frameRow {
+    display: flex; gap: 30px; align-items: flex-start; justify-content: center;
+    padding-bottom: 10px;
+  }
+  .variant { flex: none; width: calc(var(--phone-w) * var(--ps) + 4px); }
+  .pScale {
+    width: calc(var(--phone-w) * var(--ps)); height: calc(var(--phone-h) * var(--ps));
+    position: relative;
+  }
+  .pScale .phone {
+    position: absolute; top: 0; left: 0;
+    transform: scale(var(--ps)); transform-origin: top left;
+  }
+  .vTag {
+    margin-top: 14px; border-radius: var(--radius-lg); background: var(--color-surface);
+    border: 1px solid var(--color-border); box-shadow: var(--shadow-xs); padding: 12px 14px;
+  }
+  .vTag h2 { font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .vTag .ver { font-family: var(--font-mono); width: 22px; height: 22px; border-radius: 6px; background: var(--color-accent-11); color: var(--color-accent-ink); font-size: 12px; font-weight: var(--fw-bold); display: inline-flex; align-items: center; justify-content: center; }
+  .vTag .pos { font-size: 11px; color: var(--color-muted); line-height: 1.8; margin-top: 6px; }
+  .vTag .pos .good { color: var(--color-success); font-weight: var(--fw-semibold); }
+  .vTag .pos .bad { color: var(--color-warn); font-weight: var(--fw-semibold); }
+  .vTag .rec { font-size: 10px; border-radius: var(--radius-pill); padding: 2px 8px; margin-left: auto; }
+  .rec.yes { background: var(--color-success-bg); color: var(--color-success); }
+  .rec.no { background: var(--color-warn-bg); color: var(--color-warn); }
+
+  /* ---- 手机 ---- */
+  .phone {
+    width: var(--phone-w); height: var(--phone-h);
+    background: var(--color-bg); border-radius: 34px;
+    box-shadow: var(--shadow-2), 0 0 0 1px var(--color-border-strong), 0 0 0 10px oklch(20% .01 80 / .9);
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .statusbar {
+    height: var(--statusbar-h); flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; font-size: 12.5px; font-weight: var(--fw-medium); position: relative; z-index: 40;
+  }
+  .statusbar .cam { position: absolute; left: 50%; top: 9px; transform: translateX(-50%); width: 11px; height: 11px; border-radius: 50%; background: #000; }
+  .screen { flex: 1; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+  .gestureBar { height: 22px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .gestureBar::after { content: ""; width: 108px; height: 4px; border-radius: 2px; background: var(--color-fg); opacity: .35; }
+
+  .topbar {
+    height: var(--topbar-h); flex: none; display: flex; align-items: center; gap: 6px;
+    padding: 0 8px 0 12px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); z-index: 30;
+  }
+  .topbarTitle { flex: 1; min-width: 0; }
+  .topbarTitle .t1 { font-size: 14px; font-weight: var(--fw-semibold); }
+  .topbarTitle .t2 { font-size: 11px; color: var(--color-muted); margin-top: 1px; }
+  .iconBtn { width: var(--touch); height: var(--touch); border-radius: var(--radius-pill); display: inline-flex; align-items: center; justify-content: center; color: var(--color-muted); flex: none; }
+  .iconBtn:hover { background: var(--color-accent-9); color: var(--color-accent-ink); }
+  .connDot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-success); display: inline-block; }
+
+  .mock { position: absolute; inset: 0; padding-bottom: var(--navbar-h); display: none; flex-direction: column; overflow-y: auto; }
+  .mock.on { display: flex; }
+  .mTitle { font-size: 17px; font-weight: var(--fw-bold); padding: 16px 18px 2px; }
+  .mSub { font-size: 11.5px; color: var(--color-muted); padding: 0 18px 10px; }
+
+  /* chat mock */
+  .chatBody { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; gap: 11px; overflow: hidden; }
+  .roundDivider { display: flex; align-items: center; gap: 10px; color: var(--color-faint); font-size: 11px; }
+  .roundDivider::before, .roundDivider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+  .userMsg { align-self: flex-end; max-width: 82%; background: var(--color-accent-9); border: 1px solid color-mix(in oklab, var(--color-accent) 14%, transparent); border-radius: 14px 14px 4px 14px; padding: 9px 13px; font-size: 14px; line-height: 1.7; }
+  .aiProse { font-family: var(--font-body); font-size: 15.5px; line-height: 1.85; }
+  .draftPanel { border-radius: 9px; padding: 11px 13px; background: linear-gradient(var(--color-surface), var(--color-surface)) padding-box, var(--grad-accent) border-box; border: 1.5px solid transparent; }
+  .draftKicker { font-size: 11px; font-weight: var(--fw-bold); background: var(--grad-accent); background-clip: text; -webkit-background-clip: text; color: transparent; margin-bottom: 5px; }
+  .draftPanel .dt { font-family: var(--font-body); font-size: 15.5px; line-height: 1.95; }
+  .composerMock { flex: none; margin: 0 12px 10px; background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: 14px; padding: 10px 8px 10px 14px; font-size: 12.5px; color: var(--color-faint); display: flex; align-items: center; gap: 8px; }
+  .composerMock .sendM { margin-left: auto; width: 40px; height: 40px; border-radius: 50%; background: var(--grad-accent); color: var(--color-on-accent); display: flex; align-items: center; justify-content: center; }
+
+  /* project mock */
+  .projCard { margin: 4px 16px 12px; padding: 15px 16px; border-radius: 14px; background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-1); }
+  .projCard .pName { font-size: 16px; font-weight: var(--fw-bold); }
+  .projCard .pMeta { font-size: 11px; color: var(--color-muted); margin-top: 4px; font-family: var(--font-mono); }
+  .projCard .pBar { height: 6px; border-radius: 3px; background: var(--color-surface-2); margin-top: 11px; overflow: hidden; }
+  .projCard .pBar i { display: block; height: 100%; width: 46%; background: var(--grad-accent); }
+  .segRow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 16px 12px; background: var(--color-surface-2); padding: 4px; border-radius: 12px; }
+  .seg { border-radius: 9px; padding: 9px 0 7px; text-align: center; font-size: 11.5px; color: var(--color-muted); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .seg.on { background: var(--color-surface); color: var(--color-accent-ink); box-shadow: var(--shadow-xs); font-weight: var(--fw-semibold); }
+  .resRow { margin: 0 16px 8px; padding: 12px 14px; border-radius: 11px; background: var(--color-surface); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 12px; }
+  .resRow .rmain { flex: 1; }
+  .resRow .rl1 { font-size: 13px; font-weight: var(--fw-medium); }
+  .resRow .rl2 { font-size: 10.5px; color: var(--color-faint); margin-top: 2px; }
+  .libEntry { margin: 4px 16px; padding: 12px 14px; border-radius: 11px; border: 1.5px dashed var(--color-border-strong); color: var(--color-muted); font-size: 12.5px; display: flex; align-items: center; gap: 10px; }
+
+  /* center mock */
+  .pendItem { margin: 10px 16px 0; padding: 12px 14px; border-radius: 11px; background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-xs); }
+  .pendItem .ph { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .pendItem .pt { font-size: 13.5px; font-weight: var(--fw-semibold); margin-top: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: var(--radius-pill); font-size: 10.5px; font-weight: var(--fw-medium); border: 1px solid var(--color-border-strong); color: var(--color-muted); background: var(--color-surface); }
+  .chip.accent { border-color: color-mix(in oklab, var(--color-accent) 22%, transparent); background: var(--color-accent-8-t); color: var(--color-accent-ink); }
+  .chip.warn { border-color: color-mix(in oklab, var(--color-warn) 40%, transparent); background: var(--color-warn-bg); color: var(--color-warn); }
+  .chip.success { border-color: color-mix(in oklab, var(--color-success) 32%, transparent); background: var(--color-success-bg); color: var(--color-success); }
+  .chip.faint { border-style: dashed; color: var(--color-faint); }
+  .emptyHint { text-align: center; padding: 40px 40px; font-family: "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", serif; color: var(--color-muted); font-size: 13.5px; line-height: 2; }
+
+  /* settings mock */
+  .setGroup { margin: 12px 16px 0; }
+  .setGroupT { font-size: 10.5px; font-weight: var(--fw-bold); letter-spacing: .06em; color: var(--color-muted); margin: 0 4px 6px; }
+  .setList { border-radius: 13px; overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-border); }
+  .setRow { min-height: 50px; display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--color-border); font-size: 13px; }
+  .setRow:last-child { border-bottom: none; }
+  .setRow .sm { flex: 1; }
+  .setRow .sl2 { font-size: 10.5px; color: var(--color-faint); margin-top: 2px; }
+
+  /* library mock */
+  .bookRow { margin: 10px 16px 0; padding: 13px 15px; border-radius: 11px; background: var(--color-surface); border: 1px solid var(--color-border); display: flex; gap: 12px; align-items: center; }
+  .bookSpine { width: 34px; height: 46px; border-radius: 4px; background: var(--grad-accent); color: var(--color-on-accent); display: flex; align-items: center; justify-content: center; font-size: 15px; font-family: var(--font-body); flex: none; }
+
+  /* navbar */
+  .navbar { height: var(--navbar-h); flex: none; background: var(--color-surface); border-top: 1px solid var(--color-border); display: grid; position: relative; z-index: 35; }
+  .navItem { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--color-faint); font-size: 11px; font-weight: var(--fw-medium); position: relative; }
+  .navItem .pill { width: 52px; height: 30px; border-radius: var(--radius-pill); display: flex; align-items: center; justify-content: center; }
+  .navItem.on { color: var(--color-accent-ink); }
+  .navItem.on .pill { background: var(--color-accent-11); }
+  .navBadge { position: absolute; top: 7px; left: calc(50% + 9px); min-width: 17px; height: 17px; padding: 0 4px; border-radius: var(--radius-pill); background: var(--color-warn); color: #fff; font-size: 10.5px; font-weight: var(--fw-bold); display: inline-flex; align-items: center; justify-content: center; }
+
+  /* drawer (B) */
+  .drawerScrim { position: absolute; inset: 0; background: oklch(15% .01 80 / .45); z-index: 70; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .drawerScrim.show { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 304px; z-index: 71;
+    background: var(--color-surface); box-shadow: var(--shadow-2);
+    transform: translateX(-104%); transition: transform .28s var(--ease-out);
+    display: flex; flex-direction: column; padding-bottom: 12px;
+  }
+  .drawer.show { transform: none; }
+  .drHead { padding: 40px 18px 14px; border-bottom: 1px solid var(--color-border); }
+  .drHead .who { font-size: 14.5px; font-weight: var(--fw-bold); display: flex; align-items: center; gap: 7px; }
+  .drHead .srv { font-size: 11px; color: var(--color-muted); font-family: var(--font-mono); margin-top: 4px; }
+  .drSec { font-size: 10.5px; font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: .05em; padding: 14px 18px 5px; }
+  .drItem { min-height: 48px; display: flex; align-items: center; gap: 13px; padding: 0 18px; font-size: 13.5px; width: 100%; text-align: left; }
+  .drItem:hover { background: var(--color-accent-9); }
+  .drItem .ic { color: var(--color-accent-ink); }
+  .drItem .sub { font-size: 10.5px; color: var(--color-faint); margin-top: 1px; }
+  .drItem.cur { background: var(--color-accent-11); color: var(--color-accent-ink); font-weight: var(--fw-semibold); border-radius: 0 99px 99px 0; margin-right: 12px; }
+
+  /* 对照表 */
+  .cmpWrap { max-width: 1720px; margin: 30px auto 0; }
+  .cmpWrap h2 { font-size: 15px; margin-bottom: 10px; }
+  table.cmp { width: 100%; border-collapse: collapse; background: var(--color-surface); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-1); font-size: 12px; }
+  table.cmp th, table.cmp td { padding: 10px 14px; border-bottom: 1px solid var(--color-border); text-align: left; line-height: 1.7; }
+  table.cmp th { background: var(--color-surface-2); font-size: 11.5px; }
+  table.cmp tr:last-child td { border-bottom: none; }
+  table.cmp td:first-child { font-weight: var(--fw-semibold); white-space: nowrap; }
+  table.cmp .a { color: var(--color-accent-ink); font-weight: var(--fw-medium); }
+
+  /* demoBar */
+  .demoBar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 76px; z-index: 200;
+    background: var(--color-surface); border-top: 1px solid var(--color-border);
+    display: flex; align-items: center; gap: 6px; padding: 0 16px;
+  }
+  .demoBar .lab { font-size: 10px; color: var(--color-faint); width: 40px; font-weight: var(--fw-semibold); flex: none; }
+  .demoBtn { height: 26px; padding: 0 12px; border-radius: var(--radius-pill); border: 1px solid var(--color-border-strong); font-size: 11px; color: var(--color-muted); display: inline-flex; align-items: center; gap: 5px; }
+  .demoBtn:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .demoBtn.on { background: var(--color-accent-9); border-color: color-mix(in oklab, var(--color-accent) 30%, transparent); color: var(--color-accent-ink); font-weight: var(--fw-semibold); }
+  .demoBtn .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .demoBar .note { margin-left: auto; font-size: 10.5px; color: var(--color-faint); }
+</style>
+</head>
+<body>
+
+<div class="pageHead">
+  <h1><span class="brandDot"></span>Android 总体框架对比 · A / B / C / D</h1>
+  <p>要敲定的问题：<b>底部导航（Fragment 容器）承载哪几个域</b>，其余入口放哪（顶栏 / 侧边抽屉 / 页内）。
+  每台手机都可以<b>直接点底部 tab 切换示意屏</b>；B 方案的 ☰ 可展开抽屉。功能域候选：会话（创作对话）·
+  项目（工作区/设定资料/进度）· 审批中心（跨端待审）· 书库（完本解构）· 设置（server/BYOK/外观/设备管理）。
+  定稿后按所选方案重构 <b>android-app-demo.html</b> 并回填 PRD。</p>
+</div>
+
+<div class="frameRow" id="frameRow">
+
+  <!-- ================= A ================= -->
+  <div class="variant" data-v="A">
+    <div class="pScale"><div class="phone">
+      <div class="statusbar"><span>21:24</span><span class="cam"></span><span style="font-size:10px;color:var(--color-muted)">▲ ▮</span></div>
+      <div class="screen">
+        <div class="topbar">
+          <div class="topbarTitle"><div class="t1">长夜余烬</div><div class="t2">第 2 章 · 追逃段修订 · 第 3 轮</div></div>
+          <button class="iconBtn" title="连接状态"><span class="connDot"></span></button>
+          <button class="iconBtn gearBtn" title="设置">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+        <div class="mock on m-chat">CHAT</div>
+        <div class="mock m-project">PROJECT</div>
+        <div class="mock m-center">CENTER</div>
+        <div class="mock m-library">LIBRARY</div>
+        <div class="mock m-settings">SETTINGS</div>
+        <div class="navbar" style="grid-template-columns:repeat(4,1fr)">
+          <button class="navItem on" data-m="chat"><span class="pill">💬</span>会话</button>
+          <button class="navItem" data-m="project"><span class="pill">📖</span>项目</button>
+          <button class="navItem" data-m="center"><span class="pill">📥</span>审批中心<span class="navBadge">3</span></button>
+          <button class="navItem" data-m="library"><span class="pill">📚</span>书库</button>
+        </div>
+      </div>
+      <div class="gestureBar"></div>
+    </div></div>
+    <div class="vTag">
+      <h2><span class="ver">A</span>底部四格 · 设置入顶栏<span class="rec yes">推荐</span></h2>
+      <div class="pos">
+        <span class="good">优</span>：四域一步直达；设置低频走顶栏齿轮（Material 惯例），底部不挤。<br>
+        <span class="bad">虑</span>：书库占用一级位（移动端 MVP 是否需要书库待定）。
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= B ================= -->
+  <div class="variant" data-v="B">
+    <div class="pScale"><div class="phone">
+      <div class="statusbar"><span>21:24</span><span class="cam"></span><span style="font-size:10px;color:var(--color-muted)">▲ ▮</span></div>
+      <div class="screen">
+        <div class="topbar">
+          <button class="iconBtn menuBtn" title="打开抽屉">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+          </button>
+          <div class="topbarTitle"><div class="t1">长夜余烬</div><div class="t2">第 2 章 · 追逃段修订 · 第 3 轮</div></div>
+          <button class="iconBtn" title="连接状态"><span class="connDot"></span></button>
+        </div>
+        <div class="mock on m-chat">CHAT</div>
+        <div class="mock m-project">PROJECT</div>
+        <div class="mock m-center">CENTER</div>
+        <div class="mock m-library">LIBRARY</div>
+        <div class="mock m-settings">SETTINGS</div>
+        <div class="navbar" style="grid-template-columns:repeat(3,1fr)">
+          <button class="navItem on" data-m="chat"><span class="pill">💬</span>会话</button>
+          <button class="navItem" data-m="project"><span class="pill">📖</span>项目</button>
+          <button class="navItem" data-m="center"><span class="pill">📥</span>审批中心<span class="navBadge">3</span></button>
+        </div>
+        <!-- 抽屉 -->
+        <div class="drawerScrim"></div>
+        <div class="drawer">
+          <div class="drHead">
+            <div class="who"><span class="connDot"></span>fang</div>
+            <div class="srv">fang@192.168.1.8 · Pixel 9</div>
+          </div>
+          <div class="drSec">项目切换</div>
+          <button class="drItem cur"><span>📖</span><span>长夜余烬<span class="sub" style="display:block;">第 2 章 · 追逃段</span></span></button>
+          <button class="drItem"><span>📖</span><span>雾都异闻录<span class="sub" style="display:block;">第 8 章 · 停更 3 天</span></span></button>
+          <div class="drSec">功能</div>
+          <button class="drItem drNav" data-m="library"><span>📚</span>书库</button>
+          <button class="drItem drNav" data-m="settings"><span>⚙️</span>设置<span class="sub" style="display:block;margin-left:auto;">server · BYOK · 设备管理</span></button>
+          <div class="drSec">账号</div>
+          <button class="drItem"><span>🖥️</span>设备管理<span class="sub" style="display:block;margin-left:auto;">3 台在线</span></button>
+          <button class="drItem"><span>🚪</span>登出</button>
+        </div>
+      </div>
+      <div class="gestureBar"></div>
+    </div></div>
+    <div class="vTag">
+      <h2><span class="ver">B</span>底部三格 + 侧边抽屉<span class="rec yes">推荐</span></h2>
+      <div class="pos">
+        <span class="good">优</span>：底部只留高频三域；书库/设置/设备管理/项目切换全收抽屉——扩展性最强（M5+ 新功能进抽屉不动底栏），跨项目切换一步。<br>
+        <span class="bad">虑</span>：抽屉内功能被隐藏（两步操作）；「当前在哪个项目」依赖顶栏标题。
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= C ================= -->
+  <div class="variant" data-v="C">
+    <div class="pScale"><div class="phone">
+      <div class="statusbar"><span>21:24</span><span class="cam"></span><span style="font-size:10px;color:var(--color-muted)">▲ ▮</span></div>
+      <div class="screen">
+        <div class="topbar">
+          <div class="topbarTitle"><div class="t1">长夜余烬</div><div class="t2">第 2 章 · 追逃段修订 · 第 3 轮</div></div>
+          <button class="iconBtn" title="连接状态"><span class="connDot"></span></button>
+        </div>
+        <div class="mock on m-chat">CHAT</div>
+        <div class="mock m-project m-project-c">PROJECT</div>
+        <div class="mock m-center">CENTER</div>
+        <div class="mock m-settings">SETTINGS</div>
+        <div class="navbar" style="grid-template-columns:repeat(4,1fr)">
+          <button class="navItem on" data-m="chat"><span class="pill">💬</span>会话</button>
+          <button class="navItem" data-m="project"><span class="pill">📖</span>项目</button>
+          <button class="navItem" data-m="center"><span class="pill">📥</span>审批中心<span class="navBadge">3</span></button>
+          <button class="navItem" data-m="settings"><span class="pill">⚙️</span>设置</button>
+        </div>
+      </div>
+      <div class="gestureBar"></div>
+    </div></div>
+    <div class="vTag">
+      <h2><span class="ver">C</span>底部四格含设置 · 书库入项目<span class="rec"></span></h2>
+      <div class="pos">
+        <span class="good">优</span>：零隐藏功能、学习成本最低；书库挂在项目页（「这本书的参考书库」），MVP 不背书库一级位。<br>
+        <span class="bad">虑</span>：设置占一级位略奢侈；跨项目共用书库时入口不直观。
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= D ================= -->
+  <div class="variant" data-v="D">
+    <div class="pScale"><div class="phone">
+      <div class="statusbar"><span>21:24</span><span class="cam"></span><span style="font-size:10px;color:var(--color-muted)">▲ ▮</span></div>
+      <div class="screen">
+        <div class="topbar">
+          <div class="topbarTitle"><div class="t1">长夜余烬</div><div class="t2">第 2 章 · 追逃段修订 · 第 3 轮</div></div>
+          <button class="iconBtn" title="连接状态"><span class="connDot"></span></button>
+        </div>
+        <div class="mock on m-chat">CHAT</div>
+        <div class="mock m-project">PROJECT</div>
+        <div class="mock m-center">CENTER</div>
+        <div class="mock m-library">LIBRARY</div>
+        <div class="mock m-settings">SETTINGS</div>
+        <div class="navbar" style="grid-template-columns:repeat(5,1fr)">
+          <button class="navItem on" data-m="chat"><span class="pill">💬</span>会话</button>
+          <button class="navItem" data-m="project"><span class="pill">📖</span>项目</button>
+          <button class="navItem" data-m="center"><span class="pill">📥</span>审批<span class="navBadge">3</span></button>
+          <button class="navItem" data-m="library"><span class="pill">📚</span>书库</button>
+          <button class="navItem" data-m="settings"><span class="pill">⚙️</span>设置</button>
+        </div>
+      </div>
+      <div class="gestureBar"></div>
+    </div></div>
+    <div class="vTag">
+      <h2><span class="ver">D</span>底部五格全塞<span class="rec no">不推荐</span></h2>
+      <div class="pos">
+        <span class="good">优</span>：一切一级直达，无抽屉无隐藏。<br>
+        <span class="bad">虑</span>：412dp 五格挤压（标签被迫缩成「审批」）；Material 上限 5 但标签可读性差；后续再加功能只能改架构。
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 对照表 -->
+<div class="cmpWrap">
+  <h2>功能域 → 入口位置对照</h2>
+  <table class="cmp">
+    <tr><th>功能域</th><th>A 四格+顶栏设置</th><th>B 三格+抽屉</th><th>C 四格含设置</th><th>D 五格</th></tr>
+    <tr><td>会话（创作对话）</td><td class="a">底部 1</td><td class="a">底部 1</td><td class="a">底部 1</td><td class="a">底部 1</td></tr>
+    <tr><td>项目（工作区/资料/进度）</td><td class="a">底部 2</td><td class="a">底部 2</td><td class="a">底部 2</td><td class="a">底部 2</td></tr>
+    <tr><td>审批中心（跨端待审）</td><td class="a">底部 3（角标）</td><td class="a">底部 3（角标）</td><td class="a">底部 3（角标）</td><td class="a">底部 4（角标）</td></tr>
+    <tr><td>书库（完本解构）</td><td class="a">底部 4</td><td>抽屉</td><td>项目页内入口</td><td class="a">底部 5</td></tr>
+    <tr><td>设置（server/BYOK/外观）</td><td>顶栏齿轮</td><td>抽屉</td><td class="a">底部 4</td><td class="a">底部 5</td></tr>
+    <tr><td>设备管理 / 登出</td><td>设置页内</td><td>抽屉直达 + 设置页内</td><td>设置页内</td><td>设置页内</td></tr>
+    <tr><td>项目切换（多工作区）</td><td>项目页内</td><td class="a">抽屉直达</td><td>项目页内</td><td>项目页内</td></tr>
+    <tr><td>扩展性（M5+ 新域）</td><td>挤进顶栏/页内</td><td class="a">抽屉顺加</td><td>挤进设置/页内</td><td>已满，需改架构</td></tr>
+  </table>
+</div>
+
+<!-- demoBar -->
+<div class="demoBar">
+  <span class="lab">主题</span>
+  <button class="demoBtn on" data-t="paper"><span class="sw" style="background:linear-gradient(135deg,oklch(73% .068 60),oklch(55% .072 42))"></span>宣纸白</button>
+  <button class="demoBtn" data-t="ink"><span class="sw" style="background:linear-gradient(135deg,oklch(21% .005 80),oklch(89% .006 85))"></span>墨夜</button>
+  <button class="demoBtn" data-t="celadon"><span class="sw" style="background:linear-gradient(135deg,oklch(20% .013 235),oklch(75% .1 195))"></span>黛青</button>
+  <button class="demoBtn" data-t="frost"><span class="sw" style="background:linear-gradient(135deg,oklch(97.4% .004 240),oklch(52% .1 262))"></span>雪青</button>
+  <span class="lab" style="margin-left:12px;">缩放</span>
+  <button class="demoBtn on" data-ps=".64">100%</button>
+  <button class="demoBtn" data-ps=".54">85%</button>
+  <button class="demoBtn" data-ps=".44">70%</button>
+  <span class="note">每台手机可点底部 tab 切屏 · B 方案点 ☰ 开抽屉 · 顶部 tab 均可切换（含顶栏齿轮/抽屉内的 设置/书库）</span>
+</div>
+
+<script>
+/* ---- 图标体系（lucide 线条，与 android-app-demo 同源）----
+   HTML 中的 emoji 为书写占位，初始化时统一替换为 SVG。 */
+const ICON_PATHS = {
+  "💬": 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+  "📖": 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z|M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z',
+  "📥": 'polyline:22 12 16 12 14 15 10 15 8 12 2 12|path:M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
+  "📚": 'path:M4 19.5A2.5 2.5 0 0 1 6.5 17H20|M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
+  "⚙️": 'circle:12 12 3|path:M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+  "🗒": 'path:M8 6h13|M8 12h13|M8 18h13|M3 6h.01|M3 12h.01|M3 18h.01',
+  "📜": 'path:M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|path:M14 2v6h6|M16 13H8|M16 17H8',
+  "👤": 'circle:12 8 5|path:M20 21a8 8 0 0 0-16 0',
+  "📍": 'path:M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z|circle:12 10 3',
+  "🔗": 'path:M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|path:M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+  "🔑": 'circle:7.5 15.5 5.5|path:m21 2-9.6 9.6|path:m15.5 7.5 3 3L22 7l-3-3',
+  "🎨": 'circle:13.5 6.5 1.5|circle:17.5 10.5 1.5|circle:8.5 7.5 1.5|circle:6.5 12.5 1.5|path:M12 2a10 10 0 0 0-4.9 18.7c.6.4 1.4.1 1.4-.7 0-1.9 1.5-3.5 3.5-3.5h3.4c2.6 0 4.6-2.2 4.6-4.9C20 6.1 16.5 2 12 2z',
+  "📱": 'rect:5 2 14 20 2|path:M12 18h.01',
+  "🖥️": 'rect:2 4 20 13 2|path:M2 20h20',
+  "🚪": 'path:M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4|path:m16 17 5-5-5-5|path:M21 12H9',
+  "🛡️": 'path:M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z',
+  "➤": 'path:m22 2-7 20-4-9-9-4z|path:M22 2 11 13',
+};
+function iconSvg(emoji, cls) {
+  const spec = ICON_PATHS[emoji];
+  if (!spec) return emoji;
+  const parts = spec.split("|").map(seg => {
+    const [kind, ...rest] = seg.split(":");
+    if (kind === "circle") { const [cx, cy, r] = rest[0].split(" "); return `<circle cx="${cx}" cy="${cy}" r="${r}"/>`; }
+    if (kind === "rect") { const [x, y, w, h, rx] = rest[0].split(" "); return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/>`; }
+    if (kind === "polyline") return `<polyline points="${rest[0]}"/>`;
+    return `<path d="${rest[0]}"/>`;
+  }).join("");
+  return `<svg class="${cls || "ic"}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${parts}</svg>`;
+}
+function replaceEmojiIcons() {
+  for (const e of Object.keys(ICON_PATHS)) {
+    document.body.innerHTML = document.body.innerHTML.split(e).join(iconSvg(e));
+  }
+}
+
+/* mock 屏内容（按需注入到每台手机） */
+const MOCKS = {
+  chat: `
+    <div class="chatBody">
+      <div class="roundDivider">第 3 轮 · 追逃段修订</div>
+      <div class="userMsg">沈砚在雾夜里认出了那枚火漆印——把他袖口的轮廓写清楚一点，顺便推进到渡口对峙。</div>
+      <div class="aiProse" style="color:var(--color-muted);font-size:12.5px;">✓ Read · NOVEL.md &nbsp; ✓ MemorySearch · 袖口 火漆印</div>
+      <div class="draftPanel">
+        <div class="draftKicker">正文草稿 · 第 2 章 · 追逃段</div>
+        <div class="dt">雾更浓了。沈砚把橹往水里一压，船头无声地转向上游的旧矶。火漆印贴着他的腕骨，隔着旧棉布，竟还有一点温度……</div>
+      </div>
+      <div style="align-self:center;display:inline-flex;gap:7px;align-items:center;background:var(--color-warn-bg);border:1px solid color-mix(in oklab,var(--color-warn) 40%,transparent);color:var(--color-warn);border-radius:999px;padding:7px 14px;font-size:12.5px;">🛡️ 角色写入 · 沈砚 等 3 项待审批</div>
+    </div>
+    <div class="composerMock">输入创作指令…<span class="sendM">➤</span></div>`,
+  project: `
+    <div class="mTitle">项目</div>
+    <div class="mSub">工作区 · 设定资料 · 进度</div>
+    <div class="projCard">
+      <div class="pName">长夜余烬</div>
+      <div class="pMeta">卷一 · 12/26 章 · 18.4 万字 · 今天 21:02 更新</div>
+      <div class="pBar"><i></i></div>
+    </div>
+    <div class="segRow">
+      <span class="seg on">🗒<br>大纲</span><span class="seg">📜<br>正文</span><span class="seg">👤<br>人物</span><span class="seg">📍<br>地点</span>
+    </div>
+    <div class="resRow"><span>🗒</span><span class="rmain"><span class="rl1">第二卷 · 雾锁（构想）</span><br><span class="rl2">4 个单元 · 备写 2</span></span><span class="chip accent">备写</span></div>
+    <div class="resRow"><span>👤</span><span class="rmain"><span class="rl1">沈砚</span><br><span class="rl2">北桥渡口的老船工 · v2</span></span><span class="chip faint">档案</span></div>
+    <div class="resRow"><span>📍</span><span class="rmain"><span class="rl1">北桥渡口</span><br><span class="rl2">现状：雨夜亮灯</span></span><span class="chip faint">档案</span></div>`,
+  projectC: null, /* C 复用 project + 书库入口行（注入时追加） */
+  center: `
+    <div class="mTitle">审批中心</div>
+    <div class="mSub">跨端征询 · 任意端批准即生效</div>
+    <div class="pendItem">
+      <div class="ph"><span class="chip faint">桌面端 · dev_mb14</span><span class="chip warn">待批准</span><span class="chip" style="margin-left:auto;font-family:var(--font-mono);">118s</span></div>
+      <div class="pt">~ 沈砚 · 角色档案（v2 → v3）</div>
+    </div>
+    <div class="pendItem">
+      <div class="ph"><span class="chip faint">桌面端 · dev_mb14</span><span class="chip warn">待批准</span><span class="chip" style="margin-left:auto;font-family:var(--font-mono);">118s</span></div>
+      <div class="pt">+ 正文 · 第 2 章 · 追逃段（草稿 812 字）</div>
+    </div>
+    <div class="emptyHint">（点击任一审批进入 BottomSheet 逐项决策）</div>`,
+  library: `
+    <div class="mTitle">书库</div>
+    <div class="mSub">完本解构 · 跨工作区共享</div>
+    <div class="bookRow"><span class="bookSpine">夜</span><span><b style="font-size:14px;">长夜行</b><br><span style="font-size:10.5px;color:var(--color-faint);">142 章 · 310 万字 · 已完成解析</span></span><span class="chip success" style="margin-left:auto;">已完成</span></div>
+    <div class="bookRow"><span class="bookSpine">雾</span><span><b style="font-size:14px;">雾都十夜</b><br><span style="font-size:10.5px;color:var(--color-faint);">68 章 · 94 万字</span></span><span class="chip warn" style="margin-left:auto;">解析中</span></div>
+    <div class="emptyHint">幕级大纲 · 人物 · 地点 · 风格 · 摘录<br>解析产物可供会话引用（library.read）</div>`,
+  settings: `
+    <div class="mTitle">设置</div>
+    <div class="mSub">服务器 · 模型 · 外观 · 关于</div>
+    <div class="setGroup">
+      <div class="setGroupT">服务器</div>
+      <div class="setList">
+        <div class="setRow"><span>🟢</span><span class="sm">在线 · fang@192.168.1.8<span class="sl2" style="display:block;">https://192.168.1.8:8787 · 已连接 2h</span></span></div>
+        <div class="setRow"><span>📱</span><span class="sm">设备管理<span class="sl2" style="display:block;">3 台设备 · Pixel 9（当前）/ MacBook Pro / iPad</span></span></div>
+      </div>
+    </div>
+    <div class="setGroup">
+      <div class="setGroupT">模型（BYOK）</div>
+      <div class="setList">
+        <div class="setRow"><span>🔗</span><span class="sm">Base URL<span class="sl2" style="display:block;font-family:var(--font-mono);">https://api.deepseek.com/v1</span></span></div>
+        <div class="setRow"><span>🔑</span><span class="sm">API Key<span class="sl2" style="display:block;font-family:var(--font-mono);">sk-••••3a7f · Keystore 加密</span></span></div>
+      </div>
+    </div>
+    <div class="setGroup">
+      <div class="setGroupT">外观</div>
+      <div class="setList"><div class="setRow"><span>🎨</span><span class="sm">主题<span class="sl2" style="display:block;">宣纸白 / 墨夜 / 黛青 / 雪青</span></span></div></div>
+    </div>`,
+};
+
+/* 注入 mock 内容 */
+$$H(".variant").forEach(v => {
+  v.querySelectorAll(".mock").forEach(m => {
+    let key = m.classList.contains("m-chat") ? "chat"
+      : m.classList.contains("m-project") ? "project"
+      : m.classList.contains("m-center") ? "center"
+      : m.classList.contains("m-library") ? "library"
+      : m.classList.contains("m-settings") ? "settings" : null;
+    if (!key) return;
+    m.innerHTML = MOCKS[key] || MOCKS.project;
+    /* C 方案：项目页尾部加书库入口行 */
+    if (v.dataset.v === "C" && key === "project") {
+      m.insertAdjacentHTML("beforeend", `
+        <div class="libEntry">📚 <span><b>书库</b> · 2 本完本可引用<br><span style="font-size:10.5px;color:var(--color-faint);">《长夜行》已解析 · 供本项目参考</span></span><span style="margin-left:auto;">›</span></div>`);
+    }
+  });
+});
+
+function $$H(sel, r) { return Array.from((r || document).querySelectorAll(sel)); }
+
+/* mock 注入完成后统一替换 emoji 占位为 SVG 图标 */
+replaceEmojiIcons();
+
+/* 底部 tab 切屏（每台手机独立） */
+$$H(".variant").forEach(v => {
+  v.querySelectorAll(".navItem").forEach(t => t.addEventListener("click", () => {
+    v.querySelectorAll(".navItem").forEach(n => n.classList.remove("on"));
+    t.classList.add("on");
+    v.querySelectorAll(".mock").forEach(m => m.classList.remove("on"));
+    const target = v.querySelector(".m-" + t.dataset.m);
+    if (target) target.classList.add("on");
+  }));
+  /* 顶栏齿轮 → 设置 */
+  v.querySelectorAll(".gearBtn").forEach(g => g.addEventListener("click", () => {
+    v.querySelectorAll(".navItem").forEach(n => n.classList.toggle("on", n.dataset.m === "settings"));
+    v.querySelectorAll(".mock").forEach(m => m.classList.toggle("on", m.classList.contains("m-settings")));
+  }));
+  /* B 抽屉 */
+  const menu = v.querySelector(".menuBtn");
+  if (menu) {
+    const scrim = v.querySelector(".drawerScrim"), drawer = v.querySelector(".drawer");
+    menu.addEventListener("click", () => { scrim.classList.add("show"); drawer.classList.add("show"); });
+    scrim.addEventListener("click", () => { scrim.classList.remove("show"); drawer.classList.remove("show"); });
+    v.querySelectorAll(".drNav").forEach(d => d.addEventListener("click", () => {
+      scrim.classList.remove("show"); drawer.classList.remove("show");
+      v.querySelectorAll(".navItem").forEach(n => n.classList.remove("on"));
+      v.querySelectorAll(".mock").forEach(m => m.classList.remove("on"));
+      const target = v.querySelector(".m-" + d.dataset.m);
+      if (target) target.classList.add("on");
+    }));
+  }
+});
+
+/* 主题 / 缩放 */
+$$H("[data-t]").forEach(b => b.addEventListener("click", () => {
+  document.documentElement.setAttribute("data-theme", b.dataset.t);
+  $$H("[data-t]").forEach(x => x.classList.toggle("on", x === b));
+}));
+$$H("[data-ps]").forEach(b => b.addEventListener("click", () => {
+  document.documentElement.style.setProperty("--ps", b.dataset.ps);
+  $$H("[data-ps]").forEach(x => x.classList.toggle("on", x === b));
+}));
+</script>
+</body>
+</html>

@@ -1,0 +1,2878 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="paper">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novel · Android 端 demo（M4 视觉/交互基准）</title>
+<!-- Android 设备字体（webfont；CDN 不可达时自动回退系统字体，页面不受影响）：
+     UI = Roboto + Noto Sans SC（AOSP 系统组合）· 正文 = Noto Serif SC ·
+     楷体 = 霞鹜文楷 · mono = Roboto Mono。来源 jsdelivr/fontsource，
+     按 unicode-range 分片加载，仅取命中分片。 -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/roboto@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/noto-sans-sc@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/noto-serif-sc@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/roboto-mono@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css">
+<!-- ============================================================
+  Nova Writing · Android 端 demo（M4 前置·移动端唯一视觉/交互基准）
+
+  对应 PRD：
+  - docs/PRD/android-移动端MVP.md（ChatScreen 打字机 / 审批 BottomSheet +
+    通知 / 崩溃恢复向导 / BYOK 设置 / 120s 超时 / 整批决策）
+  - docs/PRD/Android接入-数据通道server化.md（server 模式 / 连接状态四态 /
+    审批中心 / 只读会话 + 接续 / 断线降级 / 409 冲突）
+  - docs/PRD/认证-登录与多端会话.md（登录/注册 + deviceName / 设备管理）
+
+  设计基调：品牌皮 + Material 骨——
+  · 色彩/字体/圆角 token 与桌面端同源（宣纸白/墨夜/黛青/雪青 四主题，
+    oklch 值逐字节对齐 app-redesign-demo.html，正文衬线沿用桌面字体栈）；
+  · 组件形态遵循 Material 3 惯例：TopAppBar / ModalBottomSheet（拖拽把手）/
+    ModalDrawer（侧边抽屉）/ Filled·Outlined·Text 按钮 / Switch / Snackbar；
+    触控目标 ≥48px；状态栏与底部手势条安全区为模拟绘制。
+
+  总体框架（2026-09-04 决议 v5）：
+  · 无底部导航——会话页为基座（Activity 直载，非 Fragment）；
+  · 内容 = 底部宿主 Fragment（persistent bottom sheet）：会话页底部常驻
+    peek 卡（书名+进度，即内容入口）→ 点开/上滑展开近全高 sheet；
+    返回键 / 下拉把手 / 点把手收起；
+  · 内容 sheet 内 = 桌面 GUI 同构：segTabs 四栏资料位（大纲/正文/人物/
+    地点）· 大纲 = treeRow 树（chev+引导线+双轴 chip+treeLegend）·
+    scene 叶与人物/地点行点击 → dirDetail 下钻页（LeafPlanCard /
+    profileHead + cardBlock）· chip 语义 = 规划（点子/已成纲/可开写）+
+    实现（未动笔/写作中/已完成/受阻/废弃）；
+  · 审批中心（角标）/ 书库 / 设置 / 设备管理 / 项目切换 / 登出全部经
+    侧边抽屉（☰）。
+
+  屏幕清单（6 屏 + 覆盖层）：
+  1 会话 ChatScreen（基座；消息流/工具行三态/打字机草稿面板/运行状态三态/
+    输入区 + 底部内容 peek 卡）
+  2 内容 sheet（底部 Fragment · GUI 同构四栏；scene 叶/档案下钻详情；
+    入口 = 底部 peek 卡、实体胶囊跳转、抽屉当前项目）
+  3 审批中心（抽屉进入；跨端 pending 列表 → 审批 Sheet）
+  4 书库（抽屉进入；书单 + 解析状态）
+  5 设置（服务器·连接四态+设备管理 / BYOK·Keystore / 外观四主题 / 关于）
+  6 登录/注册（单一表单 + deviceName + 成功态 用户名@server）
+  覆盖层：审批 BottomSheet（编辑·将被覆盖 / 新建·无既有数据 / 删除·将被删除；
+  批准/驳回附意见/整批决策/120s 倒计时）· 通知（FGS 常驻 + 审批请求；shade 与
+  锁屏）· 崩溃恢复向导（续跑 / 先停在这里）· 只读会话（他端持租约 + SSE 进度 +
+  接续 409）· 断线降级 / 409 冲突弹层。
+
+  demo 控制条（底部，非产品需求）：主题 / 屏幕 / 状态重放 / 尺寸 / 说明。
+  数据为示例数据（与桌面 demo 同书：《长夜余烬》· 沈砚 · 第 2 章追逃段）。
+
+  2026-09-10 对齐 main 纯云端化：强制登录门（登录屏无「先本地用」出口）·
+  云端项目（抽屉「云端项目」列表 · 打开/新建/删除软删）· 离线 = 只读缓存
+  （journal 镜像 + 域快照）+ 待发队列，无本地项目模式 · 书库 = 云端共享
+  只读引用（导入管线不在移动端）· 会话历史分段懒加载（loadOlder 前插）。
+  字体 = Android 设备组合（Roboto + Noto Sans/Serif SC + 霞鹜文楷 +
+  Roboto Mono，jsdelivr webfont，离线自动回退系统字体）。
+============================================================ -->
+<style>
+  :root {
+    /* --- L2 设计语言（移动端字体：Android 设备组合，可变字重 webfont·系统兜底） --- */
+    --font-ui: "Roboto Variable", Roboto, "Noto Sans SC Variable", "Noto Sans SC",
+      "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", system-ui, sans-serif;
+    --font-body: "Noto Serif SC Variable", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif;
+    --font-kai: "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+    --font-mono: "Roboto Mono Variable", "Roboto Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+    --fs-10-5: 10.5px; --fs-11: 11px; --fs-12: 12px; --fs-12-5: 12.5px;
+    --fs-13: 13px; --fs-14: 14px; --fs-15-5: 15.5px; --fs-16-5: 16.5px;
+    --fw-regular: 400; --fw-medium: 550; --fw-semibold: 650; --fw-bold: 700;
+
+    --radius-sm: 6px; --radius-md: 9px; --radius-lg: 14px;
+    --radius-sheet: 20px; --radius-pill: 999px;
+    --duration-fast: 0.15s; --duration-base: 0.22s;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+    /* --- 移动端布局尺寸（Material 骨） --- */
+    --phone-w: 412px; --phone-h: 915px;
+    --statusbar-h: 38px; --topbar-h: 56px; --drawer-w: 306px;
+    --touch: 48px; /* 最小触控目标 */
+
+    /* --- L3 语义色 = 宣纸白（默认） --- */
+    --color-bg:            oklch(97.9% 0.003 85);
+    --color-surface:       oklch(99.8% 0.0015 85);
+    --color-surface-2:     oklch(96.2% 0.004 82);
+    --color-fg:            oklch(30% 0.009 46);
+    --color-muted:         oklch(52% 0.009 54);
+    --color-faint:         oklch(60% 0.009 58);
+    --color-border:        oklch(92.4% 0.003 82);
+    --color-border-strong: oklch(86.4% 0.006 72);
+    --color-orange:        oklch(73% 0.068 60);
+    --color-accent:        oklch(55% 0.072 42);
+    --color-red:           oklch(58% 0.075 32);
+    --color-accent-ink:    oklch(47% 0.062 41);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(97.2% 0.011 156);
+    --color-warn:          oklch(59% 0.07 80);
+    --color-warn-bg:       oklch(97.1% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-danger-bg:     oklch(97.1% 0.009 33);
+    --color-info:          oklch(54% 0.05 235);
+    --color-info-bg:       oklch(97.2% 0.007 236);
+    --color-on-accent:     #fff;
+
+    --color-accent-9:   color-mix(in oklab, var(--color-accent) 9%, var(--color-surface));
+    --color-accent-8-t: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    --color-accent-11:  color-mix(in oklab, var(--color-accent) 11%, var(--color-surface));
+    --color-accent-45:  color-mix(in oklab, var(--color-accent) 45%, transparent);
+    --color-warn-6:     color-mix(in oklab, var(--color-warn) 6%, transparent);
+    --color-danger-12:  color-mix(in oklab, var(--color-danger) 12%, var(--color-surface));
+    --color-danger-32:  color-mix(in oklab, var(--color-danger) 32%, transparent);
+    --color-chrome-bg:  color-mix(in oklab, var(--color-surface) 82%, transparent);
+    --color-focus-ring: color-mix(in oklab, var(--color-accent) 42%, transparent);
+    --color-warn-40:    color-mix(in oklab, var(--color-warn) 40%, transparent);
+
+    --grad-accent: linear-gradient(105deg,
+      var(--color-orange) 0%, var(--color-accent) 48%, var(--color-red) 100%);
+    --grad-warn-text: linear-gradient(105deg,
+      oklch(82% 0.055 85), oklch(59% 0.07 80) 55%, oklch(68% 0.07 75));
+
+    --shadow-1: 0 1px 2px rgba(40, 22, 10, 0.04), 0 8px 24px rgba(40, 22, 10, 0.045);
+    --shadow-2: 0 2px 4px rgba(40, 22, 10, 0.05), 0 16px 40px rgba(40, 22, 10, 0.11);
+    --shadow-xs: 0 1px 3px rgba(20, 12, 6, 0.08);
+  }
+  /* ============ 墨夜 ============ */
+  [data-theme="ink"] {
+    --color-bg:            oklch(21% 0.005 80);
+    --color-surface:       oklch(25.5% 0.006 80);
+    --color-surface-2:     oklch(28.5% 0.007 78);
+    --color-fg:            oklch(89% 0.006 85);
+    --color-muted:         oklch(70% 0.008 80);
+    --color-faint:         oklch(59% 0.007 80);
+    --color-border:        oklch(31% 0.007 80);
+    --color-border-strong: oklch(40% 0.01 78);
+    --color-orange:        oklch(77% 0.095 62);
+    --color-accent:        oklch(68% 0.115 42);
+    --color-red:           oklch(66% 0.115 30);
+    --color-accent-ink:    oklch(78% 0.09 45);
+    --color-success:       oklch(72% 0.095 156);
+    --color-success-bg:    oklch(29% 0.032 156);
+    --color-warn:          oklch(75% 0.1 80);
+    --color-warn-bg:       oklch(29% 0.034 85);
+    --color-danger:        oklch(67% 0.1 32);
+    --color-danger-bg:     oklch(28% 0.03 33);
+    --color-info:          oklch(70% 0.075 235);
+    --color-info-bg:       oklch(28% 0.024 236);
+    --color-on-accent:     oklch(24% 0.03 42);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.48);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+  /* ============ 黛青 ============ */
+  [data-theme="celadon"] {
+    --color-bg:            oklch(20% 0.013 235);
+    --color-surface:       oklch(24% 0.015 235);
+    --color-surface-2:     oklch(27% 0.017 232);
+    --color-fg:            oklch(89% 0.009 225);
+    --color-muted:         oklch(69% 0.013 230);
+    --color-faint:         oklch(58% 0.012 230);
+    --color-border:        oklch(30% 0.015 235);
+    --color-border-strong: oklch(38% 0.019 232);
+    --color-orange:        oklch(78% 0.07 190);
+    --color-accent:        oklch(75% 0.1 195);
+    --color-red:           oklch(68% 0.11 265);
+    --color-accent-ink:    oklch(84% 0.075 205);
+    --color-success:       oklch(72% 0.095 158);
+    --color-success-bg:    oklch(28% 0.032 158);
+    --color-warn:          oklch(76% 0.1 90);
+    --color-warn-bg:       oklch(28% 0.032 88);
+    --color-danger:        oklch(68% 0.11 25);
+    --color-danger-bg:     oklch(28% 0.03 25);
+    --color-info:          oklch(72% 0.08 240);
+    --color-info-bg:       oklch(28% 0.028 240);
+    --color-on-accent:     oklch(20% 0.04 230);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.32);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.32), 0 16px 40px rgba(0, 0, 0, 0.5);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.36);
+  }
+  /* ============ 雪青 ============ */
+  [data-theme="frost"] {
+    --color-bg:            oklch(97.4% 0.004 240);
+    --color-surface:       oklch(99.5% 0.002 240);
+    --color-surface-2:     oklch(95.6% 0.005 234);
+    --color-fg:            oklch(29% 0.016 262);
+    --color-muted:         oklch(50% 0.014 256);
+    --color-faint:         oklch(59% 0.012 254);
+    --color-border:        oklch(91.6% 0.005 240);
+    --color-border-strong: oklch(85.4% 0.009 240);
+    --color-orange:        oklch(72% 0.075 230);
+    --color-accent:        oklch(52% 0.1 262);
+    --color-red:           oklch(54% 0.1 285);
+    --color-accent-ink:    oklch(44% 0.09 262);
+    --color-success:       oklch(52% 0.07 156);
+    --color-success-bg:    oklch(96.8% 0.011 156);
+    --color-warn:          oklch(58% 0.07 80);
+    --color-warn-bg:       oklch(96.7% 0.011 86);
+    --color-danger:        oklch(54% 0.068 32);
+    --color-danger-bg:     oklch(96.7% 0.009 33);
+    --color-info:          oklch(54% 0.055 240);
+    --color-info-bg:       oklch(96.8% 0.008 240);
+    --color-on-accent:     #fff;
+    --shadow-1: 0 1px 2px rgba(12, 18, 40, 0.05), 0 8px 24px rgba(12, 18, 40, 0.055);
+    --shadow-2: 0 2px 4px rgba(12, 18, 40, 0.06), 0 16px 40px rgba(12, 18, 40, 0.13);
+    --shadow-xs: 0 1px 3px rgba(12, 18, 40, 0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font-ui);
+    background: var(--color-surface-2);
+    color: var(--color-fg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; }
+  .ic { width: 16px; height: 16px; flex: none; display: inline-block; vertical-align: -3px; }
+  .ic-lg { width: 20px; height: 20px; }
+
+  /* ============ 舞台与手机框架 ============ */
+  .env {
+    position: fixed; inset: 0 0 0 0; bottom: 128px;
+    display: flex; align-items: flex-start; justify-content: center;
+    background:
+      radial-gradient(1200px 500px at 50% -10%, var(--color-accent-8-t), transparent 60%),
+      var(--color-surface-2);
+    overflow: hidden;
+  }
+  .phoneWrap { transform-origin: top center; padding-top: 28px; }
+  .phone {
+    width: var(--phone-w); height: var(--phone-h);
+    background: var(--color-bg);
+    border-radius: 34px;
+    box-shadow: var(--shadow-2), 0 0 0 1px var(--color-border-strong), 0 0 0 10px oklch(20% 0.01 80 / .9), 0 0 0 11px oklch(40% 0.01 80 / .8);
+    overflow: hidden;
+    position: relative;
+    display: flex; flex-direction: column;
+    transition: width .25s var(--ease-out), height .25s var(--ease-out);
+  }
+  /* 状态栏（模拟） */
+  .statusbar {
+    height: var(--statusbar-h); flex: none;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; font-size: var(--fs-12-5); font-weight: var(--fw-medium);
+    position: relative; z-index: 40;
+  }
+  .statusbar .cam {
+    position: absolute; left: 50%; top: 9px; transform: translateX(-50%);
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #000; box-shadow: inset 0 0 2px 1px #1a2b44;
+  }
+  .statusIcons { display: flex; gap: 5px; align-items: center; font-size: 10px; }
+  .statusIcons .ic { width: 13px; height: 13px; }
+
+  /* 主屏区 */
+  .screen { flex: 1; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+  .scr { position: absolute; inset: 0; display: none; flex-direction: column; }
+  .scr.on { display: flex; animation: view-in .3s var(--ease-out); }
+  @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* 底部手势条 */
+  .gestureBar {
+    height: 22px; flex: none; display: flex; align-items: center; justify-content: center;
+  }
+  .gestureBar::after {
+    content: ""; width: 108px; height: 4px; border-radius: 2px;
+    background: var(--color-fg); opacity: .35;
+  }
+
+  /* ============ Material 骨组件 ============ */
+  /* TopAppBar */
+  .topbar {
+    height: var(--topbar-h); flex: none;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 8px 0 16px;
+    background: var(--color-surface); border-bottom: 1px solid var(--color-border);
+    position: relative; z-index: 30;
+  }
+  .topbarTitle { flex: 1; min-width: 0; }
+  .topbarTitle .t1 { font-size: var(--fs-14); font-weight: var(--fw-semibold); }
+  .topbarTitle .t2 { font-size: var(--fs-11); color: var(--color-muted); margin-top: 1px; }
+  .iconBtn {
+    width: var(--touch); height: var(--touch); border-radius: var(--radius-pill);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--color-muted); flex: none;
+    transition: background var(--duration-fast) ease;
+  }
+  .iconBtn:hover { background: var(--color-accent-9); color: var(--color-accent-ink); }
+  .iconBtn:focus-visible, .mBtn:focus-visible, .chip:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }
+
+  /* 按钮 */
+  .mBtn {
+    min-height: var(--touch); padding: 0 24px; border-radius: var(--radius-pill);
+    font-size: var(--fs-14); font-weight: var(--fw-semibold);
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+    user-select: none;
+  }
+  .mBtn:active { transform: scale(.97); }
+  .mBtn.filled { background: var(--grad-accent); color: var(--color-on-accent); box-shadow: var(--shadow-xs); }
+  .mBtn.tonal { background: var(--color-accent-11); color: var(--color-accent-ink); }
+  .mBtn.outlined { border: 1px solid var(--color-border-strong); color: var(--color-accent-ink); background: var(--color-surface); }
+  .mBtn.dangerOutlined { border: 1px solid var(--color-danger-32); color: var(--color-danger); background: var(--color-surface); }
+  .mBtn.dangerTonal { background: var(--color-danger-12); color: var(--color-danger); }
+  .mBtn:disabled { opacity: .5; pointer-events: none; }
+  .txtBtn { min-height: var(--touch); padding: 0 12px; border-radius: var(--radius-pill); color: var(--color-accent-ink); font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+  .txtBtn.danger { color: var(--color-danger); }
+  .txtBtn:hover { background: var(--color-accent-9); }
+
+  /* ============ 侧边抽屉（ModalDrawer） ============ */
+  .drawerScrim { position: absolute; inset: 0; background: oklch(15% .01 80 / .45); z-index: 72; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  .drawerScrim.show { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 306px; z-index: 73;
+    background: var(--color-surface); box-shadow: var(--shadow-2);
+    transform: translateX(-104%); transition: transform .28s var(--ease-out);
+    display: flex; flex-direction: column; padding-bottom: 12px;
+  }
+  .drawer.show { transform: none; }
+  .drHead { padding: 44px 18px 14px; border-bottom: 1px solid var(--color-border); }
+  .drHead .who { font-size: 14.5px; font-weight: var(--fw-bold); display: flex; align-items: center; gap: 7px; }
+  .drHead .srv { font-size: var(--fs-11); color: var(--color-muted); font-family: var(--font-mono); margin-top: 4px; }
+  .drSec { font-size: var(--fs-10-5); font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: .05em; padding: 14px 18px 5px; }
+  .drItem {
+    min-height: var(--touch); display: flex; align-items: center; gap: 13px;
+    padding: 0 18px; font-size: var(--fs-13-5); width: 100%; text-align: left;
+  }
+  .drItem:hover { background: var(--color-accent-9); }
+  .drItem .ic, .drItem .ic-lg { color: var(--color-accent-ink); }
+  .drItem .sub { font-size: var(--fs-10-5); color: var(--color-faint); margin-top: 1px; }
+  .drItem .main { flex: 1; min-width: 0; }
+  .drItem.cur { background: var(--color-accent-11); color: var(--color-accent-ink); font-weight: var(--fw-semibold); border-radius: 0 99px 99px 0; margin-right: 12px; }
+  .drBadge {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
+    background: var(--color-warn); color: #fff;
+    font-size: 10.5px; font-weight: var(--fw-bold);
+    display: none; align-items: center; justify-content: center; flex: none;
+  }
+  .drBadge.show { display: inline-flex; animation: cnt-pop .3s var(--ease-out); }
+  @keyframes cnt-pop { 0% { transform: scale(.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+  /* 项目 Fragment = 底部宿主（persistent bottom sheet）：
+     会话底部常驻浮动 peek 卡 → 展开近全高 sheet；收起回会话 */
+  .projPeek {
+    flex: none; margin: 2px 12px 10px; padding: 10px 10px 10px 12px;
+    display: flex; align-items: center; gap: 11px; position: relative;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 18px;
+    box-shadow: var(--shadow-2);
+    overflow: hidden;
+    transition: transform var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+  }
+  .projPeek::before { /* 把手凹槽 */
+    content: ""; position: absolute; top: 5px; left: 50%; transform: translateX(-50%);
+    width: 30px; height: 4px; border-radius: 2px; background: var(--color-fg); opacity: .13;
+  }
+  .projPeek::after { /* 底缘进度线（46% 硬切） */
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+    background: linear-gradient(90deg,
+      var(--color-accent) 0%, var(--color-accent) 46%,
+      var(--color-accent-9) 46%, var(--color-accent-9) 100%);
+  }
+  .projPeek .ppAvatar {
+    width: 36px; height: 36px; border-radius: 11px; flex: none;
+    background: var(--color-accent-11); color: var(--color-accent-ink);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .projPeek .ppMain { flex: 1; min-width: 0; text-align: left; padding-left: 2px; }
+  .projPeek .ppMain .l1 { display: block; font-size: var(--fs-13-5); font-weight: var(--fw-semibold); }
+  .projPeek .ppMain .l2 { display: block; font-size: var(--fs-11); color: var(--color-muted); margin-top: 2px; }
+  .projPeek .ppGo {
+    width: 32px; height: 32px; border-radius: 50%; flex: none;
+    background: var(--color-accent-9); color: var(--color-accent-ink);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .projPeek:active { transform: scale(.985); }
+
+  /* 项目 sheet（近全高 · 圆角 · 上滑进场） */
+  #scr-project {
+    top: 16px; border-radius: 24px 24px 0 0; overflow: hidden;
+    background: var(--color-bg);
+    box-shadow: 0 -12px 40px oklch(15% .01 80 / .18);
+    z-index: 66;
+  }
+  #scr-project.on { animation: sheet-up .34s var(--ease-out); }
+  @keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+  #scr-project .body { padding-bottom: 24px; }
+  .sheetGrab { flex: none; height: 22px; display: flex; align-items: center; justify-content: center; background: var(--color-surface); cursor: grab; touch-action: none; }
+  .sheetGrab i { width: 40px; height: 4px; border-radius: 2px; background: var(--color-fg); opacity: .22; }
+
+  /* 内容 sheet · 四栏资料位 = GUI segTabs（分段控件） */
+  .segTabs {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px;
+    padding: 3px; margin: 10px 14px 0; flex: none;
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface-2); box-shadow: var(--shadow-xs);
+  }
+  .segTab {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 0 7px; border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--color-muted);
+    font-size: var(--fs-11); font-weight: var(--fw-medium);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .segTab .n { font-family: var(--font-mono); font-size: var(--fs-10-5); color: var(--color-faint); }
+  .segTab[aria-selected="true"] { background: var(--color-surface); color: var(--color-accent-ink); box-shadow: var(--shadow-xs); }
+  .segTab[aria-selected="true"] .n { color: var(--color-accent-ink); }
+  .segTab:active { background: var(--color-accent-9); }
+
+  /* GUI 树（大纲/卷章）：行 + 引导线 + chev */
+  .dirRow {
+    display: flex; align-items: center; gap: 7px;
+    padding: 10px 10px; border: 1px solid transparent; border-radius: 8px;
+    width: 100%; text-align: left; background: none; color: var(--color-fg);
+    transition: background-color var(--duration-fast) var(--ease-out);
+  }
+  .dirRow:active { background: color-mix(in oklab, var(--color-fg) 5%, transparent); }
+  .dirRow .chev {
+    width: 15px; height: 15px; flex: none; display: grid; place-items: center;
+    color: var(--color-faint); transition: transform 0.18s var(--ease-out);
+  }
+  .dirRow.open > .chev { transform: rotate(90deg); }
+  .treeChildren {
+    display: flex; flex-direction: column;
+    margin-left: 9px; padding-left: 7px;
+    border-left: 1px solid color-mix(in oklab, var(--color-border-strong) 60%, transparent);
+  }
+  .treeTick { width: 12px; height: 15px; flex: none; position: relative; }
+  .treeTick::before {
+    content: ""; position: absolute; left: 2px; top: 50%;
+    width: 7px; height: 1px;
+    background: color-mix(in oklab, var(--color-border-strong) 75%, transparent);
+  }
+  .treeLabel { flex: 1; min-width: 0; font-size: var(--fs-12-5); font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dirRow.parent .treeLabel { font-weight: var(--fw-semibold); }
+  .miniNum { font-family: var(--font-mono); font-size: var(--fs-10-5); color: var(--color-faint); flex: none; }
+  .statusDot { width: 6px; height: 6px; flex: none; border-radius: 50%; }
+  .dirGroup {
+    display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+    padding: 10px 10px 6px; border: 0; background: none;
+    font-size: var(--fs-11); color: var(--color-faint); font-weight: var(--fw-semibold); letter-spacing: 0.03em;
+  }
+  .dirGroup .chev { width: 14px; height: 14px; color: var(--color-faint); display: grid; place-items: center; transition: transform .18s var(--ease-out); }
+  .dirGroup.open .chev { transform: rotate(90deg); }
+  .dirGroup .gcnt { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--color-faint); }
+  .treeLegend { display: flex; flex-wrap: wrap; gap: 4px 6px; padding: 10px 8px 4px; border-top: 1px dashed var(--color-border); margin-top: 8px; }
+  .treeLegend .legendLine { width: 100%; font-size: var(--fs-10-5); color: var(--color-faint); }
+  .treeLegend .legendLbl { font-size: 10px; color: var(--color-faint); font-weight: var(--fw-semibold); letter-spacing: 0.06em; align-self: center; }
+
+  /* 档案列表行 / 下钻详情（GUI dirRow 列表 + profileHead + cardBlock） */
+  .dirLabel { flex: 1; min-width: 0; font-size: var(--fs-13); font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dirLabel small { display: block; font-size: var(--fs-11); font-weight: var(--fw-regular); color: var(--color-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .avatar {
+    display: inline-grid; place-items: center; flex: none;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--color-accent-11); color: var(--color-accent-ink);
+    font-size: var(--fs-12); font-weight: var(--fw-semibold);
+  }
+  .convIcon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; flex: none; border-radius: var(--radius-sm);
+    background: var(--color-accent-8-t); color: var(--color-accent-ink);
+  }
+  .profileHead { display: flex; align-items: center; gap: 13px; margin: 6px 2px 14px; }
+  .profileHead .avatar, .profileHead .convIcon { width: 46px; height: 46px; font-size: 19px; }
+  .profileHead h2 { margin: 0; font-size: 18px; font-weight: var(--fw-bold); }
+  .profileHead .kicker { font-size: var(--fs-12); color: var(--color-muted); margin-top: 2px; }
+  .cardBlock {
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    background: var(--color-surface); padding: 12px 14px 13px; box-shadow: var(--shadow-1);
+    margin: 0 2px 10px;
+  }
+  .cardBlock h3 { margin: 0 0 8px; font-size: var(--fs-12); font-weight: var(--fw-semibold); color: var(--color-muted); letter-spacing: 0.04em; }
+  .cardP { margin: 0; font-size: var(--fs-13); line-height: 1.85; color: var(--color-fg); }
+  .cardP.kai { font-family: var(--font-kai); color: var(--color-muted); }
+  .refChips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .refChip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 11px; border-radius: var(--radius-pill);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 22%, var(--color-border));
+    background: var(--color-accent-8-t); color: var(--color-accent-ink);
+    font-size: var(--fs-11-5); font-weight: var(--fw-medium);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .refChip:active { background: var(--color-accent-11); }
+  .refChip small { font-size: var(--fs-10-5); color: var(--color-faint); font-weight: var(--fw-regular); }
+
+  /* leaf 详情（GUI LeafPlanCard / apParam / leafSeq / paraDirRow） */
+  .apSectionHead { display: flex; align-items: center; gap: 5px; font-size: var(--fs-10-5); font-weight: var(--fw-bold); color: var(--color-faint); letter-spacing: 0.05em; margin-bottom: 5px; }
+  .apParam { display: grid; grid-template-columns: 76px 1fr; gap: 5px 10px; margin: 0; }
+  .apParam dt { font-size: var(--fs-11); color: var(--color-faint); padding-top: 2px; }
+  .apParam dd { margin: 0; font-size: var(--fs-12); color: var(--color-fg); line-height: 1.6; overflow-wrap: anywhere; }
+  .leafSeq { display: flex; flex-direction: column; gap: 3px; }
+  .leafSeq span { display: flex; gap: 7px; align-items: baseline; font-size: var(--fs-12); line-height: 1.6; }
+  .leafSeq i { font-family: var(--font-mono); font-style: normal; font-size: var(--fs-10-5); color: var(--color-faint); flex: none; }
+  .statRowChips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 2px 12px; align-items: center; }
+  .paraDirRow {
+    display: flex; align-items: flex-start; gap: 7px;
+    margin: 0 2px 5px; padding: 8px 8px; border-radius: var(--radius-sm);
+    border: 1px solid transparent; text-align: left; width: 100%; background: none;
+  }
+  .paraDirRow:active { background: color-mix(in oklab, var(--color-fg) 5%, transparent); }
+  .paraDirRow .pIdx { flex: none; margin-top: 1px; font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-semibold); color: var(--color-faint); letter-spacing: 0.04em; }
+  .paraDirRow .pTxt { flex: 1; min-width: 0; font-size: var(--fs-11-5); line-height: 1.7; color: var(--color-muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+
+  /* 下钻详情页（GUI dirDetail 模式：返回胶囊 + 标题行 + 滚动区） */
+  .dirDetailWrap { display: none; flex-direction: column; flex: 1; min-height: 0; background: var(--color-bg); }
+  .dirDetailWrap.show { display: flex; animation: view-in .22s var(--ease-out); }
+  .dirDetailHead { display: flex; align-items: center; gap: 6px; flex: none; padding: 8px 10px 6px; }
+  .dirBack {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 5px 11px 5px 7px; border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill); background: none;
+    color: var(--color-muted); font-size: var(--fs-11-5); font-weight: var(--fw-medium);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .dirBack:active { color: var(--color-accent-ink); border-color: var(--color-accent); background: var(--color-accent-8-t); }
+  .dirDetailTitle { display: flex; align-items: center; gap: 7px; flex: none; padding: 2px 14px 10px; border-bottom: 1px solid var(--color-border); }
+  .dirDetailTitle b { font-size: var(--fs-13); font-weight: var(--fw-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dirDetailTitle .kicker { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-family: var(--font-mono); font-size: var(--fs-10-5); color: var(--color-faint); }
+  .dirDetailScroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 20px; }
+  .banner { display: flex; align-items: flex-start; gap: 8px; padding: 9px 12px; border-radius: var(--radius-md); font-size: var(--fs-12); font-weight: var(--fw-medium); line-height: 1.6; margin: 0 2px 10px; }
+  .banner.warn { background: var(--color-warn-bg); color: var(--color-warn); }
+  .banner.faint { background: var(--color-surface-2); color: var(--color-faint); }
+
+  /* 正文草稿预览（GUI draftBlock） */
+  .draftBlock {
+    margin: 0 16px 10px; padding: 10px 14px;
+    border-left: 3px solid var(--color-warn);
+    background: color-mix(in oklab, var(--color-warn) 6%, var(--color-surface));
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  }
+  .draftBlock p { margin: 0; font-family: var(--font-body); font-size: var(--fs-13); line-height: 1.9; color: var(--color-fg); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  .draftTagLine { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; font-size: var(--fs-10-5); font-weight: var(--fw-semibold); color: var(--color-warn); letter-spacing: 0.05em; }
+
+  .tabPane { display: none; }
+  .tabPane.on { display: block; animation: view-in .22s var(--ease-out); }
+  .paneList { padding: 8px 10px 4px; }
+
+  /* ============ 项目页 ============ */
+  #scr-project .body, #scr-library .body { flex: 1; overflow-y: auto; }
+  .projCard { margin: 14px 16px 12px; padding: 16px; border-radius: var(--radius-lg); background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-1); }
+  .projCard .pName { font-size: 17px; font-weight: var(--fw-bold); }
+  .projCard .pMeta { font-size: var(--fs-11); color: var(--color-muted); margin-top: 5px; font-family: var(--font-mono); }
+  .projCard .pBar { height: 6px; border-radius: 3px; background: var(--color-surface-2); margin-top: 12px; overflow: hidden; }
+  .projCard .pBar i { display: block; height: 100%; width: 46%; background: var(--grad-accent); }
+  .segRow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 16px 12px; background: var(--color-surface-2); padding: 4px; border-radius: 12px; }
+  .seg { border-radius: 9px; padding: 9px 0 7px; text-align: center; font-size: var(--fs-11-5); color: var(--color-muted); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .seg.on { background: var(--color-surface); color: var(--color-accent-ink); box-shadow: var(--shadow-xs); font-weight: var(--fw-semibold); }
+  .resRow { margin: 0 16px 8px; padding: 13px 14px; border-radius: 11px; background: var(--color-surface); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 12px; }
+  .resRow:active { transform: scale(.985); }
+  .resRow .rmain { flex: 1; min-width: 0; }
+  .resRow .rl1 { font-size: var(--fs-13); font-weight: var(--fw-medium); }
+  .resRow .rl2 { font-size: var(--fs-10-5); color: var(--color-faint); margin-top: 2px; }
+  .resRow .ic { color: var(--color-accent-ink); }
+
+  /* ============ 书库页 ============ */
+  .bookRow { margin: 10px 16px 0; padding: 13px 15px; border-radius: 11px; background: var(--color-surface); border: 1px solid var(--color-border); display: flex; gap: 12px; align-items: center; width: calc(100% - 32px); text-align: left; }
+  .bookSpine { width: 34px; height: 46px; border-radius: 4px; background: var(--grad-accent); color: var(--color-on-accent); display: flex; align-items: center; justify-content: center; font-size: 15px; font-family: var(--font-body); flex: none; }
+  .libFoot { padding: 16px 24px 28px; font-size: var(--fs-10-5); color: var(--color-faint); line-height: 1.9; text-align: center; }
+
+  /* 卡片 / 分组 */
+  .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-1); }
+  .settingGroup { margin: 14px 16px 0; }
+  .settingGroupTitle { font-size: var(--fs-11); font-weight: var(--fw-bold); letter-spacing: .06em; color: var(--color-muted); margin: 0 4px 7px; }
+  .settingList { border-radius: var(--radius-lg); overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-border); }
+  .settingRow {
+    min-height: 52px; display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px; border-bottom: 1px solid var(--color-border);
+  }
+  .settingRow:last-child { border-bottom: none; }
+  .settingRow .ic { color: var(--color-accent-ink); }
+  .settingMain { flex: 1; min-width: 0; }
+  .settingMain .l1 { font-size: var(--fs-14); font-weight: var(--fw-medium); }
+  .settingMain .l2 { font-size: var(--fs-11-5); color: var(--color-muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .settingMain .l2.mono { font-family: var(--font-mono); }
+
+  /* 输入框（M3 outlined） */
+  .field { margin: 0 16px 14px; }
+  .field label { display: block; font-size: var(--fs-11-5); color: var(--color-muted); font-weight: var(--fw-medium); margin: 0 4px 5px; }
+  .field input {
+    width: 100%; height: var(--touch); padding: 0 14px;
+    border: 1px solid var(--color-border-strong); border-radius: 10px;
+    background: var(--color-surface); color: var(--color-fg);
+    font-family: inherit; font-size: var(--fs-14);
+  }
+  .field input.mono { font-family: var(--font-mono); font-size: var(--fs-12-5); }
+  .field input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-8-t); }
+  .field .hint { font-size: var(--fs-10-5); color: var(--color-faint); margin: 5px 4px 0; }
+
+  /* chip 族（与桌面 GUI 同配方：实底 tonal 胶囊，无描边） */
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; min-height: 22px; border-radius: var(--radius-pill);
+    font-size: var(--fs-10-5); font-weight: var(--fw-semibold); line-height: 1.6;
+    background: var(--color-surface-2); color: var(--color-muted); white-space: nowrap;
+  }
+  .chip.accent { background: var(--color-accent-11); color: var(--color-accent-ink); }
+  .chip.neutral { background: var(--color-surface-2); color: var(--color-muted); }
+  .chip.info { background: var(--color-info-bg); color: var(--color-info); }
+  .chip.warn { background: var(--color-warn-bg); color: var(--color-warn); }
+  .chip.success { background: var(--color-success-bg); color: var(--color-success); }
+  .chip.danger { background: var(--color-danger-bg); color: var(--color-danger); }
+  .chip.faint { background: transparent; color: var(--color-faint); border: 1px solid var(--color-border); }
+  .chip.mono { font-family: var(--font-mono); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
+  .dot.success { background: var(--color-success); }
+  .dot.warn { background: var(--color-warn); }
+  .dot.danger { background: var(--color-danger); }
+  .dot.faint { background: var(--color-faint); }
+  .dot.pulse { animation: node-pulse 2.4s ease-in-out infinite; }
+  @keyframes node-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+  /* Switch */
+  .switch { width: 52px; height: 32px; border-radius: var(--radius-pill); background: var(--color-surface-2); border: 2px solid var(--color-border-strong); position: relative; flex: none; transition: all var(--duration-base) var(--ease-out); }
+  .switch::after { content: ""; position: absolute; top: 50%; left: 6px; transform: translateY(-50%); width: 16px; height: 16px; border-radius: 50%; background: var(--color-muted); transition: all var(--duration-base) var(--ease-out); }
+  .switch.on { background: var(--color-accent); border-color: var(--color-accent); }
+  .switch.on::after { left: 26px; width: 24px; height: 24px; background: var(--color-surface); }
+
+  /* ============ 会话屏 ============ */
+  #scr-chat { background: var(--color-bg); }
+  .chatBody { flex: 1; overflow-y: auto; padding: 14px 14px 8px; scroll-behavior: smooth; }
+  .loadOlder { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; padding: 10px 0 6px; font-size: var(--fs-11-5); color: var(--color-muted); font-weight: var(--fw-medium); }
+  .loadOlder:active { color: var(--color-accent-ink); }
+  .loadOlder.done { pointer-events: none; color: var(--color-faint); }
+  .chatBody::-webkit-scrollbar { width: 3px; }
+  .chatBody::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--color-fg) 15%, transparent); border-radius: 2px; }
+  .chatCol { max-width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .roundDivider { display: flex; align-items: center; gap: 10px; color: var(--color-faint); font-size: var(--fs-11); margin: 4px 0; }
+  .roundDivider::before, .roundDivider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+  .userMsg { align-self: flex-end; max-width: 82%; background: var(--color-accent-9); border: 1px solid color-mix(in oklab, var(--color-accent) 14%, transparent); border-radius: 14px 14px 4px 14px; padding: 9px 13px; font-size: var(--fs-14); line-height: 1.7; animation: msg-enter .22s var(--ease-out); }
+  @keyframes msg-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .aiMsg { max-width: 96%; display: flex; flex-direction: column; gap: 8px; }
+  .toolLine { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12-5); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toolLine .mono { font-family: var(--font-mono); font-size: var(--fs-12); }
+  .toolLine.ok { color: var(--color-muted); }
+  .toolLine.ok .ic { color: var(--color-success); }
+  .toolLine.run { color: var(--color-fg); font-weight: var(--fw-medium); }
+  .toolLine.run .spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--color-warn-40); border-top-color: var(--color-warn); animation: spin .8s linear infinite; flex: none; }
+  .toolLine.run .sec { font-family: var(--font-mono); font-size: var(--fs-12); animation: node-pulse 2.4s ease-in-out infinite; }
+  .toolLine.fail { color: var(--color-danger); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .aiProse { font-family: var(--font-body); font-size: var(--fs-15-5); line-height: 1.85; }
+  /* 草稿面板（品牌渐变描边） */
+  .draftPanel {
+    border-radius: var(--radius-md); padding: 12px 14px;
+    background:
+      linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+      var(--grad-accent) border-box;
+    border: 1.5px solid transparent;
+  }
+  .draftKicker { font-size: var(--fs-11); font-weight: var(--fw-bold); background: var(--grad-accent); background-clip: text; -webkit-background-clip: text; color: transparent; margin-bottom: 6px; }
+  .draftPanel .draftText { font-family: var(--font-body); font-size: var(--fs-15-5); line-height: 1.95; }
+  .caret { display: inline-block; width: 2px; height: 1.05em; background: var(--color-accent); vertical-align: -0.15em; margin-left: 1px; animation: caret-blink 1.1s steps(2) infinite; }
+  @keyframes caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  /* 审批系统胶囊 */
+  .sysPill {
+    align-self: center; display: inline-flex; align-items: center; gap: 7px;
+    background: var(--color-warn-bg); border: 1px solid var(--color-warn-40);
+    color: var(--color-warn); border-radius: var(--radius-pill);
+    padding: 7px 14px; font-size: var(--fs-12-5); font-weight: var(--fw-medium);
+    animation: msg-enter .22s var(--ease-out); max-width: 100%;
+  }
+  .sysPill:hover { box-shadow: 0 0 0 4px var(--color-warn-6); }
+  .sysLine { align-self: center; font-size: var(--fs-11); color: var(--color-faint); font-family: var(--font-mono); }
+
+  /* 只读横幅 */
+  .roBanner {
+    flex: none; margin: 8px 12px 0; padding: 10px 14px;
+    background: var(--color-info-bg); border: 1px solid color-mix(in oklab, var(--color-info) 25%, transparent);
+    border-radius: var(--radius-md); display: none; flex-direction: column; gap: 8px;
+  }
+  .roBanner.show { display: flex; }
+  .roBanner .l1 { font-size: var(--fs-12-5); font-weight: var(--fw-semibold); color: var(--color-info); display: flex; gap: 7px; align-items: center; }
+  .roBanner .l2 { font-size: var(--fs-11-5); color: var(--color-muted); }
+  .roBanner .l2 .mono { font-family: var(--font-mono); color: var(--color-info); }
+  .roBanner .actions { display: flex; gap: 8px; }
+  .roBanner .actions .mBtn { min-height: 40px; font-size: var(--fs-12-5); padding: 0 18px; }
+
+  /* 运行状态行 GenStatus */
+  .genStatus { flex: none; padding: 6px 14px 2px; display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s var(--ease-out); }
+  .genStatus.on { grid-template-rows: 1fr; }
+  .genStatus > div { overflow: hidden; }
+  .genRow { display: flex; align-items: center; gap: 9px; font-size: var(--fs-12-5); min-height: 26px; }
+  .genRow .sec { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--color-muted); }
+  .genRow.generating .gtxt, .genRow.thinking .gtxt { background: var(--grad-accent); background-clip: text; -webkit-background-clip: text; color: transparent; font-weight: var(--fw-semibold); }
+  .genRow.generating .ic-lg, .genRow.thinking .ic-lg { animation: bob 1.5s ease-in-out infinite; }
+  .genRow.asking .gtxt { background: var(--grad-accent); background-clip: text; -webkit-background-clip: text; color: transparent; font-weight: var(--fw-semibold); }
+  .genRow.waiting .gtxt { background: var(--grad-warn-text); background-clip: text; -webkit-background-clip: text; color: transparent; font-weight: var(--fw-semibold); }
+  .genRow.waiting .ic-lg { animation: sway 2.8s ease-in-out infinite; }
+  .genRow.failed { color: var(--color-danger); font-weight: var(--fw-semibold); }
+  .genRow.failed .ic-lg { animation: shake .45s ease; }
+  .genRow .reason { font-weight: var(--fw-regular); color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .retryBtn { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--color-danger-32); color: var(--color-danger); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .retryBtn:hover { background: var(--color-danger); color: var(--color-surface); }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @keyframes sway { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+  /* 输入区 */
+  .composer { flex: none; padding: 8px 12px 10px; background: var(--color-bg); position: relative; }
+  .inputCard { background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: 6px 8px 6px 14px; transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease; }
+  .inputCard:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-8-t), var(--shadow-1); }
+  .inputCard textarea {
+    width: 100%; border: none; outline: none; resize: none; background: transparent;
+    font-family: inherit; font-size: var(--fs-14); line-height: 1.6; color: var(--color-fg);
+    min-height: 40px; max-height: 120px; padding: 8px 0 4px;
+  }
+  .inputFoot { display: flex; align-items: center; gap: 8px; }
+  .modeBtn { display: inline-flex; align-items: center; gap: 5px; min-height: 40px; padding: 0 10px 0 8px; border-radius: var(--radius-pill); font-size: var(--fs-12-5); font-weight: var(--fw-medium); color: var(--color-muted); }
+  .modeBtn:hover { background: var(--color-accent-9); color: var(--color-accent-ink); }
+  .modeBtn .ic { color: var(--color-accent-ink); }
+  .modeBtn .arrow { transition: transform var(--duration-base) var(--ease-out); font-size: 10px; }
+  .modeBtn.open .arrow { transform: rotate(180deg); }
+  .spacer { flex: 1; }
+  .sendBtn { width: 44px; height: 44px; border-radius: 50%; background: var(--grad-accent); color: var(--color-on-accent); display: inline-flex; align-items: center; justify-content: center; box-shadow: var(--shadow-xs); flex: none; }
+  .sendBtn:active { transform: scale(.94); }
+  .pauseBtn { width: 44px; height: 44px; border-radius: 50%; background: var(--color-warn-6); border: 1px solid var(--color-warn-40); color: var(--color-warn); display: none; align-items: center; justify-content: center; flex: none; }
+  .pauseBtn.show { display: inline-flex; }
+  .pauseBtn:hover { background: var(--color-warn); color: var(--color-surface); }
+  .roFooter { display: none; padding: 10px 12px; background: var(--color-bg); border-top: 1px solid var(--color-border); }
+  .roFooter.show { display: flex; gap: 8px; }
+  .roFooter .mBtn { flex: 1; }
+
+  /* 模式菜单（向上弹出） */
+  .modeMenu {
+    position: absolute; bottom: calc(100% + 8px); left: 12px; min-width: 272px;
+    background: var(--color-chrome-bg); backdrop-filter: blur(14px);
+    border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
+    padding: 6px; display: none; z-index: 60;
+  }
+  .modeMenu.show { display: block; animation: view-in .18s var(--ease-out); }
+  .modeItem { width: 100%; display: flex; gap: 11px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius-sm); text-align: left; }
+  .modeItem:hover, .modeItem.cur { background: var(--color-accent-9); }
+  .modeItem .ic-lg { margin-top: 2px; color: var(--color-accent-ink); }
+  .modeItem .mn { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+  .modeItem .md { font-size: var(--fs-11); color: var(--color-faint); margin-top: 2px; }
+
+  /* ============ 审批中心屏 ============ */
+  #scr-center .body, #scr-settings .body, #scr-login .body { flex: 1; overflow-y: auto; }
+  .pendingItem { margin: 10px 14px 0; padding: 12px 14px; text-align: left; width: calc(100% - 28px); }
+  .pendingItem:active { transform: scale(.985); }
+  .piHead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .piTitle { font-size: var(--fs-14); font-weight: var(--fw-semibold); margin-top: 7px; }
+  .piMeta { font-size: var(--fs-11); color: var(--color-faint); margin-top: 3px; font-family: var(--font-mono); }
+  .centerEmpty { text-align: center; padding: 64px 40px; font-family: var(--font-kai); color: var(--color-muted); font-size: var(--fs-14); line-height: 2; }
+  .centerFoot { padding: 18px 24px; font-size: var(--fs-10-5); color: var(--color-faint); line-height: 1.9; text-align: center; }
+
+  /* ============ 设置屏 ============ */
+  .connHero {
+    margin: 14px 16px 0; padding: 16px; border-radius: var(--radius-lg);
+    background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-1);
+    display: flex; align-items: center; gap: 13px;
+  }
+  .connDot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .themeGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 2px 16px 0; }
+  .themeCard { border-radius: var(--radius-md); border: 1.5px solid var(--color-border); background: var(--color-surface); padding: 9px 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .themeCard.sel { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-8-t); }
+  .themeSw { width: 100%; height: 30px; border-radius: 6px; border: 1px solid var(--color-border); }
+  .themeName { font-size: var(--fs-11-5); font-weight: var(--fw-medium); }
+  .aboutBlock { padding: 14px 20px; font-size: var(--fs-11-5); color: var(--color-muted); line-height: 2; }
+  .aboutBlock .mono { font-family: var(--font-mono); color: var(--color-fg); }
+
+  /* ============ 登录屏 ============ */
+  #scr-login { background: var(--color-bg); }
+  .loginHead { padding: 72px 28px 8px; display: flex; flex-direction: column; align-items: flex-start; }
+  .brandRow { display: flex; align-items: center; gap: 10px; }
+  .brandDot { width: 26px; height: 26px; border-radius: 50%; background: var(--grad-accent); position: relative; }
+  .brandDot::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--color-bg); }
+  .brandName { font-size: 21px; font-weight: var(--fw-bold); }
+  .loginKick { font-family: var(--font-kai); color: var(--color-muted); font-size: var(--fs-13); margin-top: 14px; line-height: 1.9; }
+  .loginForm { padding: 18px 0 0; }
+  .loginActions { display: flex; align-items: center; justify-content: space-between; margin: 2px 16px 0; }
+  .loginSuccess { padding: 80px 28px; display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+  .loginSuccess.show { display: flex; animation: view-in .3s var(--ease-out); }
+  .okBadge { width: 64px; height: 64px; border-radius: 50%; background: var(--color-success-bg); color: var(--color-success); display: flex; align-items: center; justify-content: center; }
+  .reloginBanner { margin: 14px 16px 0; padding: 10px 14px; border-radius: var(--radius-md); background: var(--color-warn-bg); border: 1px solid var(--color-warn-40); color: var(--color-warn); font-size: var(--fs-12); line-height: 1.7; display: none; }
+  .reloginBanner.show { display: block; animation: view-in .25s var(--ease-out); }
+
+  /* ============ BottomSheet 审批 ============ */
+  .sheetScrim { position: absolute; inset: 0; background: oklch(15% .01 80 / .45); z-index: 70; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  .sheetScrim.show { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; max-height: 78%;
+    background: var(--color-surface); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+    box-shadow: var(--shadow-2); z-index: 71;
+    display: flex; flex-direction: column;
+    transform: translateY(103%); transition: transform .3s var(--ease-out);
+  }
+  .sheet.show { transform: none; }
+  .sheetHandle { width: 36px; height: 4px; border-radius: 2px; background: var(--color-border-strong); margin: 10px auto 4px; flex: none; }
+  .sheetHead { flex: none; padding: 4px 16px 10px; border-bottom: 1px solid var(--color-border); }
+  .sheetHeadRow { display: flex; align-items: center; gap: 8px; }
+  .sheetTitle { font-size: var(--fs-14); font-weight: var(--fw-bold); }
+  .cntBadge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--color-warn-bg); color: var(--color-warn); font-size: var(--fs-11); font-weight: var(--fw-bold); display: inline-flex; align-items: center; justify-content: center; }
+  .cdChip { font-family: var(--font-mono); font-size: var(--fs-11-5); font-weight: var(--fw-semibold); color: var(--color-warn); display: inline-flex; align-items: center; gap: 5px; }
+  .cdChip.low { color: var(--color-danger); animation: node-pulse 1.2s ease-in-out infinite; }
+  .sheetSub { font-size: var(--fs-10-5); color: var(--color-faint); margin-top: 5px; font-family: var(--font-mono); }
+  .batchRow { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--color-border); background: var(--color-bg); flex: none; }
+  .batchRow .lab { font-size: var(--fs-12-5); font-weight: var(--fw-medium); flex: 1; }
+  .batchRow .mBtn { min-height: 40px; padding: 0 16px; font-size: var(--fs-12-5); }
+  .sheetCards { flex: 1; overflow-y: auto; padding: 12px 14px 18px; }
+  .apCard { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 12px 13px; margin-bottom: 12px; }
+  .apId { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .apId .tool { font-family: var(--font-mono); font-size: var(--fs-11-5); font-weight: var(--fw-semibold); color: var(--color-muted); }
+  .apTitle { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+  .apTitle .op { font-family: var(--font-mono); font-size: 15px; font-weight: var(--fw-bold); width: 16px; text-align: center; flex: none; }
+  .op.add { color: var(--color-success); } .op.edit, .op.exit { color: var(--color-accent-ink); } .op.del { color: var(--color-danger); }
+  .apTitle .tt { font-size: var(--fs-13); font-weight: var(--fw-semibold); line-height: 1.5; }
+  .apSecT { font-size: var(--fs-10-5); font-weight: var(--fw-bold); letter-spacing: .04em; color: var(--color-muted); margin: 11px 0 5px; }
+  .curBox { border-left: 3px solid var(--color-warn); background: var(--color-warn-6); border-radius: 0 6px 6px 0; padding: 8px 11px; }
+  .curBox.del { border-left-color: var(--color-danger); background: color-mix(in oklab, var(--color-danger) 5%, transparent); }
+  .curBox.new { border-left-style: dashed; border-left-color: var(--color-border-strong); background: transparent; }
+  .curBox .serif { font-family: var(--font-body); font-size: var(--fs-13); line-height: 1.85; color: var(--color-fg); }
+  .curBox dl { display: grid; grid-template-columns: 64px 1fr; gap: 3px 8px; font-size: var(--fs-12); }
+  .curBox dt { color: var(--color-faint); } .curBox dd { color: var(--color-fg); }
+  .chgBand { display: flex; align-items: center; gap: 6px; font-size: var(--fs-10-5); font-weight: var(--fw-bold); padding: 4px 9px; border-radius: 5px; margin-bottom: 7px; }
+  .chgBand.add { background: var(--color-success-bg); color: var(--color-success); }
+  .chgBand.del { background: var(--color-danger-bg); color: var(--color-danger); }
+  .chgBand.edit { background: var(--color-accent-11); color: var(--color-accent-ink); }
+  .chgDl { display: grid; grid-template-columns: 64px 1fr; gap: 4px 8px; font-size: var(--fs-12); }
+  .chgDl dt { color: var(--color-faint); } .chgDl dd { font-family: var(--font-body); line-height: 1.8; }
+  .verBanner { margin-top: 9px; font-size: var(--fs-11); color: var(--color-warn); background: var(--color-warn-bg); border: 1px solid var(--color-warn-40); border-radius: 6px; padding: 6px 10px; line-height: 1.6; }
+  .apActions { display: flex; gap: 8px; margin-top: 12px; }
+  .apActions .mBtn { flex: 1; min-height: 44px; font-size: var(--fs-13); padding: 0 8px; }
+  .opinionBox { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s var(--ease-out); }
+  .opinionBox.open { grid-template-rows: 1fr; }
+  .opinionBox > div { overflow: hidden; }
+  .opinionInner { padding-top: 10px; }
+  .opinionInner textarea { width: 100%; min-height: 72px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-surface); padding: 9px 12px; font-family: inherit; font-size: var(--fs-13); color: var(--color-fg); resize: none; }
+  .opinionInner textarea:focus { outline: none; border-color: var(--color-accent); }
+  .opinionBtns { display: flex; justify-content: flex-end; gap: 4px; margin-top: 6px; }
+  .apDone { border-radius: 8px; padding: 12px; text-align: center; font-size: var(--fs-13); font-weight: var(--fw-semibold); animation: pulse .6s ease; }
+  .apDone.ok { background: var(--color-success-bg); color: var(--color-success); }
+  .apDone.no { background: var(--color-danger-bg); color: var(--color-danger); }
+  .apDone.exp { background: var(--color-danger-bg); color: var(--color-danger); }
+  @keyframes pulse { 0% { transform: scale(.96); } 40% { transform: scale(1.015); } 100% { transform: scale(1); } }
+
+  /* ============ 通知 shade / 锁屏 ============ */
+  .notifShade {
+    position: absolute; inset: 0; z-index: 80; display: flex; flex-direction: column;
+    background: oklch(12% .01 80 / .82); backdrop-filter: blur(18px);
+    opacity: 0; pointer-events: none; transition: opacity .25s ease;
+    padding: 8px 10px 26px;
+  }
+  .notifShade.show { opacity: 1; pointer-events: auto; }
+  .notifShade .shadeClock { color: oklch(96% .005 85); text-align: center; font-size: 13px; padding: 26px 0 12px; letter-spacing: .3em; font-family: var(--font-mono); }
+  .notifCard {
+    background: oklch(97% .003 85 / .96); color: oklch(25% .01 60);
+    border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; text-align: left; width: 100%;
+    display: flex; gap: 11px; align-items: flex-start;
+    box-shadow: 0 4px 14px oklch(0% 0 0 / .18);
+  }
+  .notifCard:active { transform: scale(.98); }
+  .notifIcon { width: 30px; height: 30px; border-radius: 50%; background: var(--grad-accent); flex: none; display: flex; align-items: center; justify-content: center; color: #fff; margin-top: 1px; }
+  .notifMain { flex: 1; min-width: 0; }
+  .notifTop { display: flex; gap: 6px; align-items: baseline; }
+  .notifApp { font-size: 10.5px; font-weight: var(--fw-bold); }
+  .notifWhen { font-size: 10px; color: oklch(50% .01 60); margin-left: auto; flex: none; }
+  .notifT { font-size: 12.5px; font-weight: var(--fw-semibold); margin-top: 2px; }
+  .notifB { font-size: 11.5px; color: oklch(42% .01 60); margin-top: 1px; line-height: 1.55; }
+  .notifCard.approval { outline: 1.5px solid oklch(72% .1 80 / .8); }
+  .notifCard.approval .notifT { color: oklch(52% .08 60); }
+  .shadeHint { text-align: center; color: oklch(96% .005 85 / .5); font-size: 10.5px; margin-top: auto; padding-top: 10px; }
+  /* 锁屏 */
+  .lockView {
+    position: absolute; inset: 0; z-index: 90;
+    background: linear-gradient(oklch(16% .012 70), oklch(10% .008 80));
+    display: none; flex-direction: column; align-items: center;
+    color: oklch(96% .005 85); padding: 68px 18px 30px;
+  }
+  .lockView.show { display: flex; }
+  .lockClock { font-size: 64px; font-weight: 200; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+  .lockDate { font-size: 13px; opacity: .7; margin-top: 4px; }
+  .lockNotifs { width: 100%; margin-top: 34px; display: flex; flex-direction: column; }
+  .lockHint { margin-top: auto; font-size: 11px; opacity: .55; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .lockHint .chev { animation: bob 1.8s ease-in-out infinite; }
+
+  /* ============ 恢复向导 ============ */
+  .wizard {
+    position: absolute; inset: 0; z-index: 85; background: var(--color-bg);
+    display: none; flex-direction: column; padding: 56px 24px 24px;
+  }
+  .wizard.show { display: flex; animation: view-in .3s var(--ease-out); }
+  .wzIcon { width: 56px; height: 56px; border-radius: 18px; background: var(--color-warn-bg); border: 1px solid var(--color-warn-40); color: var(--color-warn); display: flex; align-items: center; justify-content: center; }
+  .wzIcon .ic { width: 26px; height: 26px; }
+  .wzTitle { font-size: 20px; font-weight: var(--fw-bold); margin-top: 18px; }
+  .wzSub { font-size: var(--fs-13); color: var(--color-muted); line-height: 1.8; margin-top: 8px; }
+  .wzDetail { margin-top: 18px; padding: 13px 15px; border-radius: var(--radius-md); background: var(--color-surface); border: 1px solid var(--color-border); font-family: var(--font-mono); font-size: var(--fs-11-5); line-height: 2; color: var(--color-muted); }
+  .wzDetail b { color: var(--color-warn); font-weight: var(--fw-semibold); }
+  .wzChoices { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+  .wzChoice { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 16px 18px; border-radius: var(--radius-lg); }
+  .wzChoice .wt { font-size: var(--fs-14); font-weight: var(--fw-bold); display: flex; gap: 8px; align-items: center; }
+  .wzChoice .wd { font-size: var(--fs-11-5); color: var(--color-muted); line-height: 1.7; }
+  .wzChoice.tonal .wd { color: color-mix(in oklab, var(--color-accent-ink) 72%, var(--color-muted)); }
+  .wzFoot { margin-top: auto; padding-top: 16px; font-size: var(--fs-10-5); color: var(--color-faint); line-height: 1.9; }
+
+  /* ============ 对话框（断线/冲突） ============ */
+  .dlgScrim { position: absolute; inset: 0; z-index: 88; background: oklch(15% .01 80 / .45); display: none; align-items: center; justify-content: center; padding: 24px; }
+  .dlgScrim.show { display: flex; }
+  .dlg { width: 100%; background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); padding: 22px 20px 14px; animation: view-in .25s var(--ease-out); }
+  .dlgTitle { font-size: var(--fs-15-5); font-weight: var(--fw-bold); display: flex; gap: 9px; align-items: center; }
+  .dlgTitle .ic-lg { color: var(--color-warn); }
+  .dlgBody { font-size: var(--fs-12-5); color: var(--color-muted); line-height: 1.9; margin-top: 10px; }
+  .dlgBody .mono { font-family: var(--font-mono); color: var(--color-fg); }
+  .dlgActions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .dlgActions .mBtn { width: 100%; }
+  .dlgNote { font-size: var(--fs-10-5); color: var(--color-faint); margin-top: 10px; line-height: 1.8; text-align: center; }
+
+  /* ============ Snackbar ============ */
+  .snackbar {
+    position: absolute; left: 14px; right: 14px; bottom: 18px;
+    background: color-mix(in oklab, var(--color-fg) 92%, var(--color-bg));
+    color: var(--color-bg);
+    border-radius: 10px; padding: 12px 16px; font-size: var(--fs-12-5); line-height: 1.6;
+    box-shadow: var(--shadow-2); z-index: 95;
+    opacity: 0; transform: translateY(8px); pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .snackbar.show { opacity: 1; transform: none; pointer-events: auto; }
+
+  /* ============ demo 控制条 ============ */
+  .demoBar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 128px; z-index: 200;
+    background: var(--color-surface); border-top: 1px solid var(--color-border);
+    display: flex; flex-direction: column; overflow-x: auto; overflow-y: hidden;
+  }
+  .demoRow { display: flex; gap: 6px; padding: 5px 12px 0; align-items: center; flex: none; }
+  .demoRow .lab { font-size: 10px; color: var(--color-faint); width: 52px; flex: none; font-weight: var(--fw-semibold); }
+  .demoBtn {
+    height: 24px; padding: 0 11px; border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border-strong); font-size: 11px; color: var(--color-muted);
+    display: inline-flex; align-items: center; gap: 5px; flex: none; white-space: nowrap;
+  }
+  .demoBtn:hover { border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .demoBtn.on { background: var(--color-accent-9); border-color: color-mix(in oklab, var(--color-accent) 30%, transparent); color: var(--color-accent-ink); font-weight: var(--fw-semibold); }
+  .demoBtn .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .demoBar::-webkit-scrollbar { height: 4px; }
+  .demoBar::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 2px; }
+
+  /* 说明弹层 */
+  .aboutMask { position: fixed; inset: 0; z-index: 300; background: oklch(15% .01 80 / .5); display: none; align-items: center; justify-content: center; padding: 30px; }
+  .aboutMask.show { display: flex; }
+  .aboutCard { max-width: 640px; max-height: 82vh; overflow-y: auto; background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); padding: 26px 30px; font-size: var(--fs-12-5); line-height: 1.95; }
+  .aboutCard h3 { font-size: 15px; margin: 18px 0 6px; }
+  .aboutCard h3:first-child { margin-top: 0; }
+  .aboutCard code { font-family: var(--font-mono); font-size: var(--fs-11-5); background: var(--color-surface-2); border-radius: 4px; padding: 1px 5px; }
+  .aboutCard .closeRow { text-align: right; margin-top: 16px; }
+
+  /* ============ Android 原生化打磨 ============ */
+  /* M3 触摸态：state-layer 按压反馈（所有可点元素） */
+  .mBtn, .iconBtn, .txtBtn, .drItem, .seg, .resRow, .pendingItem, .bookRow,
+  .settingRow, .themeCard, .navItem, .wzChoice, .sysPill, .chip.clickable, .entChip {
+    position: relative; overflow: hidden; -webkit-tap-highlight-color: transparent;
+  }
+  .mBtn::after, .iconBtn::after, .txtBtn::after, .drItem::after, .resRow::after,
+  .pendingItem::after, .bookRow::after, .sysPill::after, .entChip::after {
+    content: ""; position: absolute; inset: 0; background: currentColor; opacity: 0;
+    transition: opacity .32s var(--ease-out); pointer-events: none; border-radius: inherit;
+  }
+  .mBtn:active::after, .iconBtn:active::after, .txtBtn:active::after, .drItem:active::after,
+  .resRow:active::after, .pendingItem:active::after, .bookRow:active::after,
+  .sysPill:active::after, .entChip:active::after { opacity: .09; transition-duration: .06s; }
+  /* 顶栏滚动行为：贴顶时透明融入背景，滚动态升起为 surface；继续下滑可隐藏（仅会话/项目） */
+  .topbar {
+    background: color-mix(in oklab, var(--color-bg) 88%, transparent);
+    border-bottom-color: transparent; backdrop-filter: blur(10px);
+    transition: background .25s ease, border-color .25s ease, box-shadow .25s ease, transform .28s var(--ease-out);
+  }
+  .topbar.elev { background: var(--color-surface); border-bottom-color: var(--color-border); box-shadow: var(--shadow-xs); }
+  .scr.hidebar .topbar { transform: translateY(-100%); }
+  /* 边缘返回手势指示（次级页面左缘） */
+  .scr .backHint {
+    position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 5px; height: 64px; border-radius: 0 5px 5px 0;
+    background: var(--color-accent-8-t); border: 1px solid var(--color-border); border-left: none;
+    opacity: .8; pointer-events: none; z-index: 20;
+  }
+  .scr .backHint::after {
+    content: "‹"; position: absolute; left: -1px; top: 50%; transform: translateY(-54%);
+    color: var(--color-accent-ink); font-size: 22px; font-weight: var(--fw-bold); line-height: 1;
+  }
+  /* BottomSheet 拖拽关闭时的瞬时位移 */
+  .sheet.dragging { transition: none; }
+
+  /* 排队幽灵消息 */
+  .msgGhost { align-self: flex-end; max-width: 82%; border-radius: 14px 14px 4px 14px; padding: 9px 13px; font-size: var(--fs-14); line-height: 1.7; background: var(--color-surface-2); border: 1px dashed var(--color-border-strong); color: var(--color-muted); opacity: .72; position: relative; animation: msg-enter .22s var(--ease-out); }
+  .msgGhost .qBadge { display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; font-size: var(--fs-10-5); color: var(--color-warn); font-weight: var(--fw-semibold); }
+  .msgGhost .qBadge .dot { width: 6px; height: 6px; }
+  .msgGhost.promoted { background: var(--color-accent-9); border: 1px solid color-mix(in oklab, var(--color-accent) 14%, transparent); color: var(--color-fg); opacity: 1; transition: all .3s var(--ease-out); }
+  .msgGhost.promoted .qBadge { display: none; }
+
+  /* 实体标签 chip（对话流内） */
+  .entChip {
+    display: inline-flex; align-items: center; gap: 3px; padding: 0 7px; margin: 0 1px;
+    border-radius: var(--radius-pill); border: 1px solid color-mix(in oklab, var(--color-accent) 24%, transparent);
+    background: var(--color-accent-8-t); color: var(--color-accent-ink);
+    font-family: var(--font-ui); font-size: .82em; font-weight: var(--fw-medium); line-height: 1.75; vertical-align: baseline; cursor: pointer;
+  }
+
+  /* 提问卡（AskUserQuestion · 移动版） */
+  .askCard { border-radius: var(--radius-lg); background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-1); padding: 13px 15px; max-width: 96%; animation: msg-enter .3s var(--ease-out); }
+  .askHead { display: flex; align-items: center; gap: 8px; font-size: var(--fs-12-5); font-weight: var(--fw-bold); color: var(--color-accent-ink); padding-bottom: 9px; border-bottom: 1px solid var(--color-border); }
+  .askHead .cnt { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-10-5); color: var(--color-faint); font-weight: var(--fw-regular); }
+  .askQ { padding: 11px 0 4px; }
+  .askQ .qt { font-size: var(--fs-13-5); font-weight: var(--fw-semibold); line-height: 1.6; display: flex; gap: 7px; }
+  .askQ .qt .qn { color: var(--color-faint); font-family: var(--font-mono); font-size: var(--fs-11); margin-top: 2px; }
+  .askOpt {
+    display: flex; align-items: flex-start; gap: 9px; width: 100%; text-align: left;
+    border: 1px solid var(--color-border-strong); border-radius: 12px; padding: 10px 12px; margin-top: 7px;
+    font-size: var(--fs-12-5); line-height: 1.65;
+  }
+  .askOpt .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--color-border-strong); flex: none; margin-top: 2px; transition: all .18s var(--ease-out); }
+  .askOpt.sel { border-color: var(--color-accent); background: var(--color-accent-8-t); }
+  .askOpt.sel .radio { border-color: var(--color-accent); border-width: 6px; }
+  .askOpt .rec { font-size: 10px; color: var(--color-success); border: 1px solid color-mix(in oklab, var(--color-success) 36%, transparent); border-radius: var(--radius-pill); padding: 1px 7px; margin-left: 6px; flex: none; }
+  .askOpt .od { color: var(--color-faint); font-size: var(--fs-11); margin-top: 2px; }
+  .askOpen { width: 100%; margin-top: 7px; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--color-bg); padding: 9px 12px; font-family: inherit; font-size: var(--fs-12-5); color: var(--color-fg); resize: none; min-height: 40px; }
+  .askOpen:focus { outline: none; border-color: var(--color-accent); }
+  .askSkip { margin-left: auto; }
+  .askDone { font-size: var(--fs-12); line-height: 1.9; color: var(--color-muted); }
+  .askDone b { color: var(--color-fg); }
+  .askDone .q { color: var(--color-fg); font-weight: var(--fw-semibold); }
+
+  /* 顶栏 ⋯ 弹出菜单 */
+  .popMenu {
+    position: absolute; top: calc(var(--topbar-h) + 4px); right: 12px; min-width: 230px;
+    background: var(--color-chrome-bg); backdrop-filter: blur(14px);
+    border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
+    padding: 6px; display: none; z-index: 62;
+  }
+  .popMenu.show { display: block; animation: view-in .18s var(--ease-out); }
+  .popItem { width: 100%; display: flex; align-items: center; gap: 11px; padding: 12px 13px; border-radius: var(--radius-sm); font-size: var(--fs-13-5); text-align: left; }
+  .popItem:active { background: var(--color-accent-9); }
+  .popItem .sub { font-size: var(--fs-10-5); color: var(--color-faint); margin-top: 1px; }
+  .popItem.danger { color: var(--color-danger); }
+  .popSep { height: 1px; background: var(--color-border); margin: 5px 8px; }
+
+  /* ============ 项目页 · 阅读版 ============ */
+  .pgSecT { font-size: var(--fs-11); font-weight: var(--fw-bold); letter-spacing: .06em; color: var(--color-muted); margin: 18px 20px 8px; display: flex; align-items: center; gap: 6px; }
+  .pgSecT .more { margin-left: auto; font-weight: var(--fw-medium); color: var(--color-faint); font-size: var(--fs-10-5); }
+  .todoRow { margin: 0 16px 7px; padding: 12px 14px; border-radius: 11px; background: var(--color-surface); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 11px; width: calc(100% - 32px); text-align: left; }
+  .todoRow .todoMain { flex: 1; min-width: 0; }
+  .todoRow .tl1 { font-size: var(--fs-13); font-weight: var(--fw-medium); line-height: 1.5; }
+  .todoRow .tl2 { font-size: var(--fs-10-5); color: var(--color-faint); margin-top: 2px; }
+  .flashTarget { animation: row-flash 1.6s var(--ease-out); }
+  @keyframes row-flash { 0% { background: var(--color-accent-8-t); box-shadow: 0 0 0 3px var(--color-accent-8-t); } 100% { background: var(--color-surface); } }
+
+  /* ============ 阅读视图（全屏沉浸） ============ */
+  .readView { position: absolute; inset: 0; z-index: 84; background: var(--color-bg); display: none; flex-direction: column; animation: view-in .28s var(--ease-out); }
+  .readView.show { display: flex; }
+  .readBody { flex: 1; overflow-y: auto; padding: 18px 26px 40px; }
+  .readMeta { font-family: var(--font-mono); font-size: var(--fs-10-5); color: var(--color-faint); margin-bottom: 4px; }
+  .readTitle { font-family: var(--font-body); font-size: 20px; font-weight: var(--fw-semibold); margin: 6px 0 18px; }
+  .readBody p { font-family: var(--font-body); font-size: var(--fs-16-5); line-height: 2.05; text-indent: 2em; text-align: justify; margin-bottom: 14px; }
+  .readBody p.noIndent { text-indent: 0; }
+  .readBar { flex: none; padding: 10px 12px calc(10px + 6px); display: flex; gap: 8px; border-top: 1px solid var(--color-border); background: var(--color-bg); }
+  .readBar .mBtn { flex: 1; min-height: 44px; }
+  .draftTag { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-11); color: var(--color-warn); background: var(--color-warn-bg); border: 1px solid var(--color-warn-40); border-radius: var(--radius-pill); padding: 4px 11px; margin-bottom: 16px; }
+
+  /* ============ 书库 · 书详情 ============ */
+  .axisRow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: 12px 16px 0; }
+  .axisPill { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-11); font-weight: var(--fw-medium); padding: 5px 11px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); color: var(--color-muted); background: var(--color-surface); }
+  .axisPill.cur { border-color: color-mix(in oklab, var(--color-accent) 32%, transparent); background: var(--color-accent-8-t); color: var(--color-accent-ink); }
+  .axisPill.done { border-color: color-mix(in oklab, var(--color-success) 30%, transparent); background: var(--color-success-bg); color: var(--color-success); }
+  .axisArrow { color: var(--color-faint); font-size: 11px; }
+  .readyChips { display: flex; gap: 7px; flex-wrap: wrap; margin: 10px 16px 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="env">
+  <div class="phoneWrap" id="phoneWrap">
+    <div class="phone" id="phone">
+
+      <!-- 状态栏 -->
+      <div class="statusbar" id="statusbar">
+        <span id="clock">21:24</span>
+        <span class="cam"></span>
+        <span class="statusIcons">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4"/></svg>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01"/></svg>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="17" height="10" rx="2.5"/><path d="M22 11v2"/></svg>
+        </span>
+      </div>
+
+      <div class="screen">
+
+        <!-- ========== 屏1 · 会话 ChatScreen ========== -->
+        <section class="scr on" id="scr-chat">
+          <div class="topbar">
+            <button class="iconBtn openDrawerBtn" id="menuBtn" title="打开抽屉">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            </button>
+            <div class="topbarTitle">
+              <div class="t1">长夜余烬</div>
+              <div class="t2">第 2 章 · 追逃段修订 · 第 3 轮</div>
+            </div>
+            <button class="iconBtn" id="connChip" title="连接状态（点击切换演示）" style="width:auto;padding:0 10px;gap:6px;font-size:11px;font-weight:650;">
+              <span class="dot success" id="connDot"></span><span id="connLabel" style="font-size:11px;">在线</span>
+            </button>
+            <button class="iconBtn" id="moreBtn" title="更多">
+              <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+            </button>
+          </div>
+
+          <!-- ⋯ 弹出菜单 -->
+          <div class="popMenu" id="moreMenu">
+            <button class="popItem" onclick="closeMore();snackbar('会话 conv_2 · run #47 · 模式 需审核 · journal seq 213')">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <span>会话信息<span class="sub" style="display:block;">conv_2 · 需审核模式 · seq 213</span></span>
+            </button>
+            <button class="popItem" onclick="closeMore();snackbar('已导出 Markdown：长夜余烬-追逃段-第3轮.md（分享面板 demo）')">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+              <span>导出本轮 Markdown</span>
+            </button>
+            <div class="popSep"></div>
+            <button class="popItem danger" onclick="closeMore();snackbar('已清空上下文 · 新一轮开始——此前档案与正文保留');">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>清空上下文 · 新一轮</span>
+            </button>
+          </div>
+
+          <!-- 只读横幅（他端持租约） -->
+          <div class="roBanner" id="roBanner">
+            <div class="l1">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              本会话正由 桌面端 · MacBook Pro 编辑
+            </div>
+            <div class="l2">租约持有 <span class="mono">dev_mb14 · 剩余 46s</span> · 实时同步对方进度（SSE）· 当前 <span class="mono" id="roSeq">seq 213</span></div>
+            <div class="actions">
+              <button class="mBtn tonal" id="btnResume">接续（申请租约）</button>
+              <button class="mBtn outlined" id="btnRoWatch">只看进度</button>
+            </div>
+          </div>
+
+          <div class="chatBody" id="chatBody">
+            <div class="chatCol" id="chatCol">
+              <button class="loadOlder" id="loadOlder" title="会话历史分段懒加载——投影首开只载最近 50 run，滚顶触发前插、锚点不跳">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                加载更早的对话 <span class="mono" style="font-size:var(--fs-10-5);color:var(--color-faint);">· 剩 8 轮</span>
+              </button>
+              <div class="roundDivider">第 2 轮 · 沈砚档案核对</div>
+              <div class="userMsg">把沈砚的设定再顺一遍——袖口那枚火漆印和漕帮失窃案是什么关系？</div>
+              <div class="aiMsg">
+                <div class="toolLine ok"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span class="mono">NovelRead</span>· 沈砚 · 档案 v2</div>
+                <div class="aiProse">火漆印首次出现在第 1 卷第 7 章（漕帮账房密室失窃当夜）。三年来<button class="entChip" data-ent="沈砚" onclick="goEntity('entShen')">沈砚</button>从未离开<button class="entChip" data-ent="北桥渡口" onclick="goEntity('entFerry')">北桥渡口</button>——「贴身藏印」与「不知情转交」两条解释线里，前者与现有 12 处伏笔兼容性更好。建议本轮先把袖口轮廓写实，渡口对峙留到下一轮。</div>
+
+              <!-- 提问卡（AskUserQuestion · 移动版：碎片时间答作者决策） -->
+              <div class="askCard" id="askCard" style="display:none;">
+                <div class="askHead">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                  作者决策 · 影响下一段走向<span class="cnt">conv_2 · 第 3 轮</span>
+                </div>
+                <div class="askQ">
+                  <div class="qt"><span class="qn">Q1</span>渡口对峙这一拍，沈砚对火漆印的态度？</div>
+                  <button class="askOpt" data-q="1" data-v="认印不认人"><span class="radio"></span><span>认印不认人——火漆印是他主动保管的信物<span class="rec">推荐</span><br><span class="od">与第 1 卷 7 处伏笔兼容；沈砚保持深藏不露的人设</span></span></button>
+                  <button class="askOpt" data-q="1" data-v="不知情转交"><span class="radio"></span><span>不知情转交——印是三年前有人塞进他袖口的<br><span class="od">需要补一段三年前的插叙，节奏会放缓</span></span></button>
+                  <button class="askOpt" data-q="1" data-v="当场烧毁"><span class="radio"></span><span>当场烧毁——斩断漕帮线索，转向新暗线<br><span class="od">激进；12 处伏笔中 5 处需重写</span></span></button>
+                </div>
+                <div class="askQ" style="border-top:1px solid var(--color-border);margin-top:4px;padding-top:11px;">
+                  <div class="qt"><span class="qn">Q2</span>对峙结束的落点（开放，可跳过）</div>
+                  <textarea class="askOpen" id="askOpen" placeholder="例：火光里认出对方是旧账房的儿子…"></textarea>
+                </div>
+                <div class="askQ" style="display:flex;align-items:center;padding-bottom:8px;">
+                  <button class="txtBtn" onclick="askSkip()">跳过 = 授权 AI 自定</button>
+                  <div class="spacer"></div>
+                  <button class="mBtn filled" id="askSubmit" style="min-height:42px;padding:0 20px;font-size:var(--fs-12-5);" disabled>提交作答</button>
+                </div>
+              </div>
+              <!-- 提问卡留痕（答后替换） -->
+              <div class="askCard" id="askDone" style="display:none;">
+                <div class="askHead">
+                  <svg class="ic" style="color:var(--color-success);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                  已作答<span class="cnt">原地留痕 · 时间线即审计</span>
+                </div>
+                <div class="askDone" style="padding-top:10px;">
+                  <span class="q">Q1 渡口对峙这一拍，沈砚对火漆印的态度？</span><br>→ <b id="askA1">认印不认人</b><br>
+                  <span class="q" style="display:inline-block;margin-top:6px;">Q2 对峙结束的落点</span><br>→ <b id="askA2">（跳过 · 授权自定）</b>
+                </div>
+              </div>
+              </div>
+
+              <div class="roundDivider">第 3 轮 · 追逃段修订</div>
+              <div class="userMsg">沈砚在雾夜里认出了那枚火漆印——把他袖口的轮廓写清楚一点，顺便推进到渡口对峙。</div>
+              <div class="aiMsg" id="liveMsgs">
+                <div class="toolLine ok"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span class="mono">Read</span>· NOVEL.md</div>
+                <div class="toolLine ok"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span class="mono">MemorySearch</span>· 袖口 火漆印</div>
+                <div class="toolLine run" id="runToolLine"><span class="spinner"></span><span>正在调用</span><span class="mono">NovelWrite</span><span class="sec" id="runSec">3s</span></div>
+              </div>
+              <!-- 打字机草稿面板（重放「打字机」时填充） -->
+              <div class="aiMsg" id="draftWrap" style="display:none;">
+                <div class="draftPanel">
+                  <div class="draftKicker">正文草稿 · 第 2 章 · 追逃段</div>
+                  <div class="draftText"><span id="draftText"></span><span class="caret" id="draftCaret"></span></div>
+                </div>
+              </div>
+              <!-- 审批系统胶囊（重放「审批到达」时插入） -->
+              <button class="sysPill" id="sysPill" style="display:none;">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+                <span id="sysPillText">角色写入 · 沈砚 等 3 项待审批 —— 点击查看</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 运行状态行 -->
+          <div class="genStatus" id="genStatus"><div>
+            <div class="genRow thinking" id="genThink" style="display:none;">
+              <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg>
+              <span class="gtxt">深度思考中 · 梳理伏笔线</span><span class="sec" id="thinkSec">0s</span>
+            </div>
+            <div class="genRow generating" id="genGen">
+              <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+              <span class="gtxt">正在生成 · 追逃段续写</span><span class="sec" id="genSec">12s</span>
+            </div>
+            <div class="genRow waiting" id="genWait" style="display:none;">
+              <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+              <span class="gtxt">正在审批</span><span class="sec" id="waitSec">18s</span>
+            </div>
+            <div class="genRow asking" id="genAsk" style="display:none;">
+              <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              <span class="gtxt">等待作答</span><span class="sec" id="askSec">18s</span>
+            </div>
+            <div class="genRow failed" id="genFail" style="display:none;">
+              <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span>生成失败</span><span class="reason">provider 超时（120s）：上游无响应</span>
+              <button class="retryBtn" id="btnRetry" title="重试"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+            </div>
+          </div></div>
+
+          <!-- 输入区 -->
+          <div class="composer" id="composer">
+            <div class="inputCard">
+              <textarea id="chatInput" rows="1" placeholder="输入创作指令…（Enter 发送）"></textarea>
+              <div class="inputFoot">
+                <button class="modeBtn" id="modeBtn">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+                  <span id="modeName">需审核</span><span class="arrow">▾</span>
+                </button>
+                <span class="chip warn" id="pendModeChip" style="display:none;">
+                  <svg class="ic" style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>待生效
+                </span>
+                <div class="spacer"></div>
+                <button class="pauseBtn" id="btnPause" title="暂停">
+                  <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                </button>
+                <button class="sendBtn" id="btnSend" title="发送">
+                  <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+                </button>
+              </div>
+            </div>
+            <!-- 模式菜单 -->
+            <div class="modeMenu" id="modeMenu"></div>
+          </div>
+          <!-- 只读时的底部栏 -->
+          <div class="roFooter" id="roFooter">
+            <button class="mBtn tonal" id="btnResume2">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+              接续（申请租约）
+            </button>
+            <button class="mBtn outlined" id="btnRoRefresh">刷新进度</button>
+          </div>
+
+          <!-- 项目 Fragment peek 卡（底部宿主 · 点击展开） -->
+          <button class="projPeek" id="projPeek" title="展开内容面板">
+            <span class="ppAvatar">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            </span>
+            <span class="ppMain">
+              <span class="l1">长夜余烬</span>
+              <span class="l2">卷一 12/26 章 · 今天 21:02 更新</span>
+            </span>
+            <span class="ppGo">
+              <svg style="width:15px;height:15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+            </span>
+          </button>
+        </section>
+
+        <!-- ========== 屏2 · 内容 sheet（底部 Fragment · 四栏 tab） ========== -->
+        <section class="scr" id="scr-project">
+          <div class="sheetGrab" id="sheetGrab" title="下拉收起 / 返回会话"><i></i></div>
+          <div class="topbar">
+            <button class="iconBtn" data-back title="收起 · 返回会话">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="topbarTitle">
+              <div class="t1">内容 · 长夜余烬</div>
+              <div class="t2">阅读与速查——编辑在桌面端</div>
+            </div>
+            <button class="iconBtn" onclick="setScreen('library')" title="书库">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            </button>
+          </div>
+          <span class="backHint" title="边缘返回手势"></span>
+
+          <div class="segTabs" id="segTabs" role="tablist">
+            <button class="segTab" data-tab="outline" role="tab" aria-selected="false" title="大纲">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4a2 2 0 0 0 2 2h3"/><path d="M3 10v6"/></svg>
+              <span>大纲</span>
+            </button>
+            <button class="segTab" data-tab="text" role="tab" aria-selected="true" title="正文">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              <span>正文</span>
+            </button>
+            <button class="segTab" data-tab="char" role="tab" aria-selected="false" title="人物">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+              <span style="display:inline-flex;align-items:center;gap:3px;"><span>人物</span><span class="n">7</span></span>
+            </button>
+            <button class="segTab" data-tab="place" role="tab" aria-selected="false" title="地点">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span style="display:inline-flex;align-items:center;gap:3px;"><span>地点</span><span class="n">3</span></span>
+            </button>
+          </div>
+
+          <div class="body" id="projBody">
+            <!-- ▸ 大纲：GUI 树（数据驱动渲染） -->
+            <div class="tabPane" id="pane-outline">
+              <div class="paneList" id="outlineTree"></div>
+              <div class="treeLegend">
+                <span class="legendLine">saga 全书 → arc 卷 → sequence 序列 → scene 场景（叶 = 场景，正文挂叶）</span>
+                <span class="legendLbl">规划</span><span class="chip neutral">点子</span><span class="chip info">已成纲</span><span class="chip accent">可开写</span>
+                <span class="legendLbl">实现</span><span class="chip neutral">未动笔</span><span class="chip warn">写作中</span><span class="chip success">已完成</span><span class="chip danger">受阻</span><span class="chip faint">废弃</span>
+              </div>
+            </div>
+
+            <!-- ▸ 正文：摘要 + 卷·章 -->
+            <div class="tabPane on" id="pane-text">
+              <div class="projCard">
+                <div class="pName">长夜余烬</div>
+                <div class="pMeta">卷一 · 12/26 章 · 18.4 万字 · 今天 21:02 更新</div>
+                <div class="pBar"><i></i></div>
+              </div>
+
+              <div class="pgSecT">最新动态<span class="more">阅读为主 · 编辑在桌面</span></div>
+              <button class="draftBlock" style="width:calc(100% - 32px);text-align:left;display:block;" onclick="openRead('draft')" title="阅读草稿">
+                <p>「上船。」那声音说。沈砚没有回头，只把橹又压深了一寸。对岸的灯笼次第灭下去，只剩渡口最东头那一盏，晃着，把他的影子钉在船板上。水面下有第二道桨声，压得极低，跟了他至少半里……</p>
+                <span class="draftTagLine">草稿 812 字 · 21:02 生成 · 未转入正式稿</span>
+              </button>
+
+              <div class="pgSecT">待办<span class="more">计划视图的手机蒸馏</span></div>
+              <div class="todoRow">
+                <span class="dot warn"></span>
+                <span class="todoMain"><span class="tl1">沈砚档案 v3 待审批</span><br><span class="tl2">桌面端 21:04 提请 · 批次 b2 · 3 项</span></span>
+                <button class="mBtn tonal" style="min-height:38px;padding:0 14px;font-size:var(--fs-12);" onclick="openSheet()">去审批</button>
+              </div>
+              <div class="todoRow">
+                <span class="dot" style="background:var(--color-border-strong);"></span>
+                <span class="todoMain"><span class="tl1">第 3 章 · 雾锁开头 待写</span><br><span class="tl2">等第 2 章定稿 · 桌面端待办同步</span></span>
+                <button class="txtBtn" onclick="snackbar('已标记完成')">标记完成</button>
+              </div>
+
+              <div class="pgSecT">卷 · 章<span class="more">阅读 · 编辑在桌面</span></div>
+              <div class="paneList">
+                <button class="dirGroup open" data-vol="v1">
+                  <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+                  第一卷 · 雾起北桥<span class="gcnt">2</span>
+                </button>
+                <div id="volRows-v1">
+                  <button class="dirRow" style="padding-left:28px;" onclick="openRead('ch1')">
+                    <span class="statusDot" style="background:var(--color-success);"></span>
+                    <span class="treeLabel">第 1 章 · 夜航</span>
+                    <span class="miniNum">3,214 字</span>
+                  </button>
+                  <button class="dirRow" style="padding-left:28px;" onclick="openRead('draft')">
+                    <span class="statusDot" style="background:var(--color-warn);"></span>
+                    <span class="treeLabel">第 2 章 · 追逃段</span>
+                    <span class="chip warn" style="padding:0 6px;">草</span>
+                  </button>
+                </div>
+                <button class="dirGroup" data-vol="v2">
+                  <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+                  第二卷 · 灯塔<span class="gcnt">0</span>
+                </button>
+                <div id="volRows-v2" style="display:none;">
+                  <div class="libFoot" style="margin-top:2px;">未开卷——大纲构想阶段。</div>
+                </div>
+              </div>
+
+              <div class="libFoot">续写与审批在「会话」页；项目切换经抽屉（☰）。</div>
+            </div>
+
+            <!-- ▸ 人物：列表（GUI dirRow） -->
+            <div class="tabPane" id="pane-char">
+              <div class="paneList" id="charList"></div>
+              <div class="libFoot">人物 7 · 只读速查；完整档案在桌面端。</div>
+            </div>
+
+            <!-- ▸ 地点：列表（GUI dirRow） -->
+            <div class="tabPane" id="pane-place">
+              <div class="paneList" id="placeList"></div>
+              <div class="libFoot">地点 3 · 只读速查；编辑在桌面端。</div>
+            </div>
+          </div>
+
+          <!-- 下钻详情（GUI dirDetail 模式：覆盖资料位） -->
+          <div class="dirDetailWrap" id="dirDetail">
+            <div class="dirDetailHead">
+              <button class="dirBack" id="dirBack">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                目录
+              </button>
+            </div>
+            <div class="dirDetailTitle"><b id="ddTitle"></b><span class="kicker" id="ddKicker"></span></div>
+            <div class="dirDetailScroll" id="ddScroll"></div>
+          </div>
+        </section>
+
+        <!-- ========== 屏3 · 审批中心 ========== -->
+        <section class="scr" id="scr-center">
+          <span class="backHint"></span>
+          <div class="topbar">
+            <button class="iconBtn" data-back title="返回会话">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+            </button>
+            <div class="topbarTitle">
+              <div class="t1">审批中心</div>
+              <div class="t2">跨端征询 · 任意端批准即生效</div>
+            </div>
+          </div>
+          <div class="body" id="centerBody"></div>
+        </section>
+
+        <!-- ========== 屏4 · 书库 ========== -->
+        <section class="scr" id="scr-library">
+          <span class="backHint"></span>
+          <div class="topbar">
+            <button class="iconBtn" data-back title="返回会话">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+            </button>
+            <div class="topbarTitle">
+              <div class="t1">书库</div>
+              <div class="t2">云端共享 · 只读引用 · 跨项目</div>
+            </div>
+          </div>
+          <div class="body">
+            <button class="bookRow" onclick="openBook()">
+              <span class="bookSpine">夜</span>
+              <span class="rmain" style="flex:1;text-align:left;"><b style="font-size:var(--fs-14);">长夜行</b><br><span style="font-size:var(--fs-10-5);color:var(--color-faint);">142 章 · 310 万字 · 幕 24 · 人物 31</span></span>
+              <span class="chip success">云端最新</span>
+            </button>
+            <button class="bookRow" onclick="openBook()">
+              <span class="bookSpine">雾</span>
+              <span class="rmain" style="flex:1;text-align:left;"><b style="font-size:var(--fs-14);">雾都十夜</b><br><span style="font-size:var(--fs-10-5);color:var(--color-faint);">68 章 · 94 万字 · 幕 12 · 人物 22</span></span>
+              <span class="chip success">云端最新</span>
+            </button>
+            <div class="libFoot">书库随云端项目共享（解析管线在云端进行，移动端不做导入）；只读消费：幕级大纲 / 人物 / 地点 / 风格 / 摘录，<br>会话中经 <span style="font-family:var(--font-mono);">library.read</span> 引用——正文引用一律 paragraph id。</div>
+          </div>
+        </section>
+
+        <!-- ========== 屏5 · 设置 ========== -->
+        <section class="scr" id="scr-settings">
+          <span class="backHint"></span>
+          <div class="topbar">
+            <button class="iconBtn" data-back title="返回会话">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+            </button>
+            <div class="topbarTitle"><div class="t1">设置</div></div>
+          </div>
+          <div class="body">
+
+            <div class="connHero">
+              <span class="connDot" id="setConnDot" style="background:var(--color-success);"></span>
+              <div class="settingMain">
+                <div class="l1" id="setConnT">在线 · fang@192.168.1.8</div>
+                <div class="l2 mono" id="setConnS">https://192.168.1.8:8787 · 设备 Pixel 9 · 已连接 2h</div>
+              </div>
+              <button class="txtBtn danger" id="btnLogout">登出</button>
+            </div>
+
+            <div class="settingGroup">
+              <div class="settingGroupTitle">服务器</div>
+              <div class="settingList">
+                <div class="settingRow">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                  <div class="settingMain"><div class="l1">服务器地址</div><div class="l2 mono">https://192.168.1.8:8787</div></div>
+                </div>
+                <div class="settingRow" id="rowRelogin">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M21 8a9 9 0 1 0-2.64 8.36"/></svg>
+                  <div class="settingMain"><div class="l1">重新登录</div><div class="l2">令牌复用检测触发——需重新登录</div></div>
+                  <span class="chip warn">需要</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settingGroup">
+              <div class="settingGroupTitle">设备管理 · 3 台在线会话</div>
+              <div class="settingList" id="deviceList">
+                <div class="settingRow">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+                  <div class="settingMain"><div class="l1">Pixel 9（本机）</div><div class="l2">当前设备 · 在线</div></div>
+                  <span class="chip success">当前</span>
+                </div>
+                <div class="settingRow">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M2 20h20"/></svg>
+                  <div class="settingMain"><div class="l1">MacBook Pro · 桌面端</div><div class="l2">dev_mb14 · 2 小时前活跃 · 持有 conv_2 租约</div></div>
+                  <button class="txtBtn danger" onclick="kickDevice(this, 'MacBook Pro · 桌面端')">踢出</button>
+                </div>
+                <div class="settingRow">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M12 17.5h.01"/></svg>
+                  <div class="settingMain"><div class="l1">iPad · 阅读端</div><div class="l2">dev_ip02 · 3 天前活跃</div></div>
+                  <button class="txtBtn danger" onclick="kickDevice(this, 'iPad · 阅读端')">踢出</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settingGroup">
+              <div class="settingGroupTitle">模型（BYOK · 自带密钥）</div>
+              <div class="settingList">
+                <div class="settingRow">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  <div class="settingMain"><div class="l1">Base URL</div><div class="l2 mono">https://api.deepseek.com/v1</div></div>
+                </div>
+                <div class="settingRow" onclick="snackbar('密钥经 Android Keystore 加密存储，永不上传 server')">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+                  <div class="settingMain"><div class="l1">API Key</div><div class="l2 mono">sk-••••••••••••3a7f</div></div>
+                  <span class="chip faint">Keystore</span>
+                </div>
+                <div class="settingRow">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11H4m8-7v16M7 7l-3 4 3 4M17 7l3 4-3 4"/></svg>
+                  <div class="settingMain"><div class="l1">模型</div><div class="l2 mono">deepseek-chat · timeout 60000ms</div></div>
+                </div>
+                <div class="settingRow">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12 17 7"/></svg>
+                  <div class="settingMain"><div class="l1">连接测试</div><div class="l2">上次成功 · 5 分钟前 · 421ms</div></div>
+                  <span class="chip success">可用</span>
+                </div>
+                <div class="settingRow" onclick="snackbar('Agent 采样与压缩阈值在桌面端配置——移动端只读')">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                  <div class="settingMain"><div class="l1">Agent 策略（只读）</div><div class="l2 mono">温度 0.7 · 压缩 T1 0.7 / T2 摘要 2048</div></div>
+                  <span class="chip faint">桌面端配置</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settingGroup">
+              <div class="settingGroupTitle">外观</div>
+            </div>
+            <div class="themeGrid" id="themeGrid"></div>
+
+            <div class="settingGroup" style="margin-top:16px;">
+              <div class="settingGroupTitle">关于</div>
+              <div class="aboutBlock">
+                Nova Writing Android <span class="mono">0.1.0 (M4 demo)</span> · 定义包 <span class="mono">1.6.0</span><br>
+                碎片时间的补充端 · 云端项目 · BYOK · 审批异步化<br>
+                视觉/交互基准：<span class="mono">docs/design/android-app-demo.html</span>
+              </div>
+            </div>
+            <div style="height:24px;"></div>
+          </div>
+        </section>
+
+        <!-- ========== 屏6 · 登录/注册 ========== -->
+        <section class="scr" id="scr-login">
+          <div class="body">
+            <div class="loginHead">
+              <div class="brandRow">
+                <span class="brandDot"></span>
+                <span class="brandName">Nova Writing</span>
+              </div>
+              <div class="loginKick">桌面在写，手机在批。<br>登录后，任意一端的审批都汇到这里。</div>
+            </div>
+            <div class="reloginBanner" id="reloginBanner">登录已过期——检测到 refresh token 复用，整个会话族已吊销，请重新登录。</div>
+            <div class="loginForm" id="loginForm">
+              <div class="field"><label>服务器</label><input class="mono" id="lgServer" value="https://192.168.1.8:8787"></div>
+              <div class="field"><label>用户名</label><input id="lgUser" placeholder="3-32 个字符" autocomplete="off"></div>
+              <div class="field"><label>密码</label><input id="lgPass" type="password" placeholder="至少 8 位"></div>
+              <div class="field"><label>设备名（多端会话中如何称呼这台设备）</label><input id="lgDevice" value="Android · Pixel 9"></div>
+              <div class="loginActions">
+                <button class="txtBtn" id="lgSwitch">没有账号？注册</button>
+                <button class="txtBtn" id="lgSkip">连不上？查看排障提示</button>
+              </div>
+              <div class="field" style="margin-top:10px;">
+                <button class="mBtn filled" id="lgSubmit" style="width:100%;">登录</button>
+                <div class="hint" id="lgHint">错误统一提示「用户名或密码错误」（防枚举）。</div>
+              </div>
+            </div>
+            <div class="loginSuccess" id="loginSuccess">
+              <div class="okBadge"><svg class="ic" style="width:30px;height:30px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:17px;font-weight:var(--fw-bold);" id="lgOkWho">fang@192.168.1.8</div>
+              <div style="font-size:var(--fs-12);color:var(--color-muted);">设备 Pixel 9 已注册 · 双令牌已安全存储<br>JWT 15min · refresh 60 天 · 过期前 1 分钟自动轮换</div>
+              <button class="mBtn tonal" id="lgOkBack" style="margin-top:8px;">开始使用</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== 侧边抽屉（多数入口在此） ========== -->
+        <div class="drawerScrim" id="drawerScrim"></div>
+        <nav class="drawer" id="drawer" aria-label="抽屉导航">
+          <div class="drHead">
+            <div class="who"><span class="dot success" id="drConn"></span>fang</div>
+            <div class="srv">fang@192.168.1.8 · Pixel 9</div>
+          </div>
+          <div class="drSec">云端项目</div>
+          <button class="drItem cur drNav" data-screen="project">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <span class="main">长夜余烬<span class="sub" style="display:block;">第 2 章 · 追逃段 · 18.4 万字</span></span>
+          </button>
+          <button class="drItem" id="drSwitchProject">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <span class="main">雾都异闻录<span class="sub" style="display:block;">第 8 章 · 停更 3 天</span></span>
+          </button>
+          <div class="drSec">功能</div>
+          <button class="drItem drNav" data-screen="center">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+            <span class="main">审批中心</span>
+            <span class="drBadge" id="drApBadge">3</span>
+          </button>
+          <button class="drItem drNav" data-screen="library">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span class="main">书库</span>
+          </button>
+          <button class="drItem drNav" data-screen="settings">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span class="main">设置</span>
+            <span class="sub" style="margin-left:auto;">server · BYOK</span>
+          </button>
+          <div class="drSec">账号</div>
+          <button class="drItem drNav" data-screen="settings" id="drDevices">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M2 20h20"/></svg>
+            <span class="main">设备管理</span>
+            <span class="sub" style="margin-left:auto;">3 台</span>
+          </button>
+          <button class="drItem" id="drLogout">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+            <span class="main">登出</span>
+          </button>
+        </nav>
+
+        <!-- ========== 审批 BottomSheet ========== -->
+        <div class="sheetScrim" id="sheetScrim"></div>
+        <div class="sheet" id="approvalSheet" role="dialog" aria-label="审批">
+          <div class="sheetHandle"></div>
+          <div class="sheetHead">
+            <div class="sheetHeadRow">
+              <span class="sheetTitle">审批</span>
+              <span class="cntBadge" id="apCount">3</span>
+              <div class="spacer"></div>
+              <span class="cdChip" id="apCd"><svg class="ic" style="width:12px;height:12px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span id="apCdSec">120s</span></span>
+              <button class="iconBtn" id="apClose" style="width:36px;height:36px;" title="收起">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="sheetSub" id="apReqId">approval:conv_2:47:b2 · 一次工具调用一批 · 批量决策作用于整批</div>
+          </div>
+          <div class="batchRow" id="batchRow">
+            <span class="lab">本批 3 项</span>
+            <button class="mBtn tonal" id="btnBatchOk">全部批准</button>
+            <button class="mBtn dangerOutlined" id="btnBatchNo">全部驳回</button>
+          </div>
+          <div class="sheetCards" id="apCards"></div>
+        </div>
+
+        <!-- ========== 阅读视图（沉浸 · 只读） ========== -->
+        <div class="readView" id="readView">
+          <div class="topbar elev">
+            <button class="iconBtn" onclick="closeRead()" title="返回">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+            </button>
+            <div class="topbarTitle">
+              <div class="t1" id="readT1">长夜余烬</div>
+              <div class="t2" id="readT2">第 2 章 · 追逃段 · 草稿</div>
+            </div>
+            <button class="iconBtn" onclick="snackbar('已复制本章正文（demo）')" title="复制">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+          <div class="readBody" id="readBody"></div>
+          <div class="readBar" id="readBar">
+            <button class="mBtn outlined" onclick="snackbar('桌面端继续打磨——手机只读');">去桌面端编辑</button>
+            <button class="mBtn filled" onclick="closeRead();openSheet()">审批本段草稿</button>
+          </div>
+        </div>
+
+        <!-- ========== 书库 · 书详情 ========== -->
+        <div class="readView" id="bookDetail">
+          <div class="topbar elev">
+            <button class="iconBtn" onclick="closeBook()" title="返回">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+            </button>
+            <div class="topbarTitle">
+              <div class="t1">长夜行</div>
+              <div class="t2">完本解构 · 只读消费</div>
+            </div>
+          </div>
+          <div style="flex:1;overflow-y:auto;">
+            <div class="projCard" style="margin-top:14px;">
+              <div class="pName">长夜行</div>
+              <div class="pMeta">142 章 · 310 万字 · 幕 24 · 人物 31 · 地点 18</div>
+            </div>
+            <div class="pgSecT">云端同步</div>
+            <div class="axisRow">
+              <span class="axisPill done"><svg class="ic" style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>域快照已缓存</span><span class="axisArrow">→</span>
+              <span class="axisPill done">journal 镜像</span><span class="axisArrow">→</span>
+              <span class="axisPill cur"><span class="dot success pulse"></span>最新 · seq 412</span>
+            </div>
+            <div class="pgSecT">解构产物就绪位</div>
+            <div class="readyChips">
+              <span class="chip accent">幕级大纲 24</span>
+              <span class="chip accent">人物 31</span>
+              <span class="chip accent">地点 18</span>
+              <span class="chip success">style.md</span>
+              <span class="chip success">excerpts.md</span>
+            </div>
+            <div class="libFoot" style="text-align:left;padding:16px 20px 28px;line-height:2;">
+              移动端只读消费：幕级大纲 / 人物 / 地点 / 风格 / 摘录——会话中经 <span style="font-family:var(--font-mono);">library.read</span> 引用，正文引用一律 paragraph id（单次 ≤ 20,000 字符）。<br>
+              解析管线在云端随项目共享；本地仅性能缓存（域快照 + journal 镜像）。
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 通知 shade ========== -->
+        <div class="notifShade" id="notifShade">
+          <div class="shadeClock" id="shadeClock">9月3日 星期四</div>
+          <button class="notifCard" id="notifFgs">
+            <span class="notifIcon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h4l3-8 4 16 3-8h6"/></svg></span>
+            <span class="notifMain">
+              <span class="notifTop"><span class="notifApp">Nova Writing</span><span class="notifWhen">刚刚</span></span>
+              <span class="notifT">续写运行中 · 第 2 章追逃段 · <span id="notifSec">01:24</span></span>
+              <span class="notifB">前台服务保持会话与流式输出（dataSync）· 点击回到会话</span>
+            </span>
+          </button>
+          <button class="notifCard approval" id="notifApproval">
+            <span class="notifIcon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <span class="notifMain">
+              <span class="notifTop"><span class="notifApp">Nova Writing · 待审批</span><span class="notifWhen" id="notifApprovalWhen">刚刚</span></span>
+              <span class="notifT">角色写入 · 沈砚 等 3 项变更待审批</span>
+              <span class="notifB" id="notifApprovalBody">来自 桌面端 · dev_mb14 · 120s 无决策将自动拒绝</span>
+            </span>
+          </button>
+          <div class="shadeHint">↑ 下滑收起（点击任意处关闭）</div>
+        </div>
+
+        <!-- ========== 锁屏 ========== -->
+        <div class="lockView" id="lockView">
+          <div class="lockClock" id="lockClock">21:24</div>
+          <div class="lockDate">9月3日 星期四</div>
+          <div class="lockNotifs">
+            <button class="notifCard" onclick="lockBack()">
+              <span class="notifIcon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h4l3-8 4 16 3-8h6"/></svg></span>
+              <span class="notifMain">
+                <span class="notifTop"><span class="notifApp">Nova Writing</span><span class="notifWhen">刚刚</span></span>
+                <span class="notifT">续写运行中 · 第 2 章追逃段</span>
+                <span class="notifB">前台服务 · 锁屏不中断</span>
+              </span>
+            </button>
+            <button class="notifCard approval" onclick="lockBack()">
+              <span class="notifIcon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+              <span class="notifMain">
+                <span class="notifTop"><span class="notifApp">Nova Writing · 待审批</span><span class="notifWhen">刚刚</span></span>
+                <span class="notifT">角色写入 · 沈砚 等 3 项变更</span>
+                <span class="notifB">点击处理 · 120s 无决策自动拒绝</span>
+              </span>
+            </button>
+          </div>
+          <div class="lockHint">
+            <span class="chev">⌃</span>
+            <span>上滑解锁（demo：点击任意处返回）</span>
+          </div>
+        </div>
+
+        <!-- ========== 崩溃恢复向导 ========== -->
+        <div class="wizard" id="wizard">
+          <div class="wzIcon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></div>
+          <div class="wzTitle">上次会话异常中断</div>
+          <div class="wzSub">重放 journal 后检测到悬挂的工具调用。两项均未执行——AI 停在了提请审批的那一刻。</div>
+          <div class="wzDetail">
+            conv_2 · run #47 · 重放至 <b>seq 213</b><br>
+            findPendingToolCalls → <b>2 项悬挂</b>（NovelEdit · 沈砚 / NovelWrite · 第2章）<br>
+            decider 已回填「重启前中断未执行」——journal 保持一致，由你决定去留
+          </div>
+          <div class="wzChoices">
+            <button class="mBtn filled wzChoice" id="wzResume">
+              <span class="wt">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-14 9V3z"/></svg>
+                从断点继续
+              </span>
+              <span class="wd">新 run 接续上下文——重发审批，AI 从中断处接着写。</span>
+            </button>
+            <button class="mBtn tonal wzChoice" id="wzStop">
+              <span class="wt">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                先停在这里
+              </span>
+              <span class="wd">恢复到出事前的现场，稍后再继续。草稿与审批都会留在原处。</span>
+            </button>
+          </div>
+          <div class="wzFoot">崩溃恢复不改变已落盘内容——journal 事件溯源保证账本一致；选择只影响下一条 run 的走向。</div>
+        </div>
+
+        <!-- ========== 断线降级对话框 ========== -->
+        <div class="dlgScrim" id="offlineDlg">
+          <div class="dlg">
+            <div class="dlgTitle">
+              <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="m12 17 .01 0"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              服务器不可达
+            </div>
+            <div class="dlgBody">重连 4 次未成功（退避 1/2/5/10s 封顶）→ 降级离线。本地性能缓存（journal 镜像 + 域快照）仍可完整查看已同步内容；新指令进待发队列（上限 10k 行），恢复后按序补推。<br><b>纯云端架构：没有「本地项目」可切——离线只读缓存 + 排队。</b></div>
+            <div class="dlgActions">
+              <button class="mBtn filled" id="offLocal">排队发送（恢复后补推）</button>
+              <button class="mBtn outlined" id="offWait">等待恢复（只读缓存）</button>
+            </div>
+            <div class="dlgNote">离线期间的另一端若也写过，补推冲突将提示人工裁决（见「409 冲突」演示）。</div>
+          </div>
+        </div>
+
+        <!-- ========== 409 冲突对话框 ========== -->
+        <div class="dlgScrim" id="conflictDlg">
+          <div class="dlg">
+            <div class="dlgTitle">
+              <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14"/><path d="M5 21h14"/><path d="M12 5v16"/></svg>
+              补推冲突 · 需人工裁决
+            </div>
+            <div class="dlgBody">恢复连接后补推积压时命中 <span class="mono">409</span>：<br>桌面端在离线期间写过 <span class="mono">沈砚 · 角色档案（v3）</span>，与你本地的积压改动同源。租约需重新申请。</div>
+            <div class="dlgActions">
+              <button class="mBtn filled" id="cfServer">保留服务器版本（丢弃本地积压）</button>
+              <button class="mBtn dangerTonal" id="cfLocal">保留本地版本（覆盖服务器）</button>
+            </div>
+            <div class="dlgNote">M4 只提示不合并——完整的冲突合并 UI 属 M6（跨端续跑向导）。</div>
+          </div>
+        </div>
+
+        <!-- Snackbar -->
+        <div class="snackbar" id="snackbar"></div>
+
+      </div><!-- /screen -->
+
+      <div class="gestureBar"></div>
+    </div><!-- /phone -->
+  </div>
+</div><!-- /env -->
+
+<!-- ========== demo 控制条 ========== -->
+<div class="demoBar" id="demoBar">
+  <div class="demoRow">
+    <span class="lab">主题</span>
+    <button class="demoBtn on" data-theme-btn="paper"><span class="sw" style="background:linear-gradient(135deg,oklch(73% .068 60),oklch(55% .072 42))"></span>宣纸白</button>
+    <button class="demoBtn" data-theme-btn="ink"><span class="sw" style="background:linear-gradient(135deg,oklch(21% .005 80),oklch(89% .006 85))"></span>墨夜</button>
+    <button class="demoBtn" data-theme-btn="celadon"><span class="sw" style="background:linear-gradient(135deg,oklch(20% .013 235),oklch(75% .1 195))"></span>黛青</button>
+    <button class="demoBtn" data-theme-btn="frost"><span class="sw" style="background:linear-gradient(135deg,oklch(97.4% .004 240),oklch(52% .1 262))"></span>雪青</button>
+    <span class="lab" style="margin-left:10px;">屏幕</span>
+    <button class="demoBtn on" data-screen-btn="chat">会话</button>
+    <button class="demoBtn" data-screen-btn="project">内容</button>
+    <button class="demoBtn" data-screen-btn="center">审批中心</button>
+    <button class="demoBtn" data-screen-btn="library">书库</button>
+    <button class="demoBtn" data-screen-btn="settings">设置</button>
+    <button class="demoBtn" data-screen-btn="login">登录</button>
+    <span class="lab" style="margin-left:10px;">尺寸</span>
+    <button class="demoBtn on" data-size="412">412×915</button>
+    <button class="demoBtn" data-size="360">360×800</button>
+    <button class="demoBtn" id="btnAbout" style="margin-left:auto;">说明</button>
+  </div>
+  <div class="demoRow">
+    <span class="lab">状态重放</span>
+    <button class="demoBtn" data-replay="typer">打字机生成</button>
+    <button class="demoBtn" data-replay="think">深度思考→生成</button>
+    <button class="demoBtn" data-replay="ask">提问卡到达</button>
+    <button class="demoBtn" data-replay="queue">排队消息</button>
+    <button class="demoBtn" data-replay="approval">审批到达</button>
+    <button class="demoBtn" data-replay="reject">驳回附意见</button>
+    <button class="demoBtn" data-replay="timeout">120s 超时拒绝</button>
+    <button class="demoBtn" data-replay="fail">生成失败·重试</button>
+    <button class="demoBtn" data-replay="recovery">崩溃恢复向导</button>
+    <button class="demoBtn" data-replay="readonly">只读·他端接管</button>
+    <button class="demoBtn" data-replay="resume">接续租约 409</button>
+    <button class="demoBtn" data-replay="offline">断线降级</button>
+    <button class="demoBtn" data-replay="conflict">409 冲突</button>
+    <button class="demoBtn" data-replay="notif">通知 shade</button>
+    <button class="demoBtn" data-replay="lock">锁屏预览</button>
+    <button class="demoBtn" data-replay="relogin">令牌复用·重登</button>
+    <button class="demoBtn" data-replay="reset">↺ 复位</button>
+  </div>
+</div>
+
+<!-- 说明弹层 -->
+<div class="aboutMask" id="aboutMask">
+  <div class="aboutCard">
+    <h3>Android 端 demo（M4 前置 · 移动端唯一视觉/交互基准）</h3>
+    总体框架（2026-09-04 决议 v5）：<b>无底部导航——会话页为基座（非 Fragment）；内容 = 底部宿主 Fragment（persistent bottom sheet）</b>：会话底部常驻 peek 卡（书名+进度），点开展开近全高 sheet；sheet 内与桌面 GUI 同构：segTabs 四栏资料位（大纲/正文/人物/地点）、大纲 treeRow 树（引导线+双轴状态 chip+图例）、scene 叶/人物/地点点击下钻详情页（LeafPlanCard：事件序列/节奏拍/实体变更；profileHead+cardBlock 档案）；审批中心（角标）/ 书库 / 设置 / 设备管理 / 项目切换 / 登出经侧边抽屉（☰）。
+    设计基调 = <b>品牌皮 + Material 骨</b>：四主题 token 与桌面端 <code>app-redesign-demo.html</code> 同源同值（宣纸白/墨夜/黛青/雪青）；组件形态遵循 Material 3（TopAppBar / BottomSheet / ModalDrawer / Snackbar），触控目标 ≥48px。
+    <h3>屏幕（6 + 覆盖层）</h3>
+    ① 会话——打字机草稿面板（累计文本流）、工具行三态、运行状态三态（生成/审批挂起/失败重试）、三档执行模式、底部内容 peek 卡；② 内容 sheet（GUI 同构）——segTabs 四栏：大纲（treeRow 树+图例）/正文（摘要+卷·章树）/人物/地点（档案列表），scene 叶与档案行下钻详情页（LeafPlanCard 事件序列/节奏拍/实体变更；profileHead+cardBlock）；③ 审批中心——跨端 pending 列表；④ 书库——书单+解析状态（只读消费）；⑤ 设置——连接四态、设备管理、BYOK·Keystore、四主题；⑥ 登录/注册——单一表单 + deviceName + 成功态 用户名@server。
+    覆盖层：审批 BottomSheet（编辑·将被覆盖 / 新建·无既有数据 / 删除·将被删除；批准/驳回附意见、整批决策、120s 倒时自动拒绝）、通知（FGS 常驻 + 审批请求，shade 与锁屏）、崩溃恢复向导（续跑 / 先停在这里）、只读会话（他端持租约 + SSE 进度 + 接续 409）、断线降级、409 冲突。
+    <h3>对应 PRD</h3>
+    <code>docs/PRD/android-移动端MVP.md</code>（打字机/审批/恢复/BYOK）· <code>docs/PRD/Android接入-数据通道server化.md</code>（连接四态/审批中心/只读+接续/断线降级/409）· <code>docs/PRD/认证-登录与多端会话.md</code>（登录/设备管理）。契约：审批两段式（本地 resolve 与 SSE <code>approval_resolved</code> 先到者生效）、租约 409/410、journal 补推 10k 上限。
+    <h3>操作提示</h3>
+    ☰ 打开抽屉（项目切换 / 审批中心 / 书库 / 设置 / 设备管理 / 登出）；顶栏书名「长夜余烬 ›」进入项目页；顶部「在线」小圆点可点——循环演示连接四态（online/offline/unconfigured/needRelogin）；审批卡片可逐项批准/驳回（驳回附意见会回填到会话流）；demo 控制条非产品需求。
+    <div class="closeRow"><button class="mBtn tonal" id="aboutClose">关闭</button></div>
+  </div>
+</div>
+
+<script>
+/* ================= 工具 ================= */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+let snackTimer;
+function snackbar(msg) {
+  const el = $("#snackbar");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(() => el.classList.remove("show"), 2600);
+}
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+/* ================= 主题 ================= */
+const THEMES = [
+  { id: "paper", name: "宣纸白" },
+  { id: "ink", name: "墨夜" },
+  { id: "celadon", name: "黛青" },
+  { id: "frost", name: "雪青" },
+];
+function setTheme(id) {
+  document.documentElement.setAttribute("data-theme", id);
+  $$("[data-theme-btn]").forEach(b => b.classList.toggle("on", b.dataset.themeBtn === id));
+  renderThemeGrid();
+}
+$$("[data-theme-btn]").forEach(b => b.addEventListener("click", () => setTheme(b.dataset.themeBtn)));
+function renderThemeGrid() {
+  const cur = document.documentElement.getAttribute("data-theme");
+  $("#themeGrid").innerHTML = THEMES.map(t => `
+    <button class="themeCard ${t.id === cur ? "sel" : ""}" data-tg="${t.id}">
+      <span class="themeSw" style="background:linear-gradient(120deg, oklch(${t.id === "paper" ? "97.9% .003 85" : t.id === "ink" ? "21% .005 80" : t.id === "celadon" ? "20% .013 235" : "97.4% .004 240"}), ${t.id === "paper" ? "oklch(73% .068 60) 30%, oklch(55% .072 42) 60%, oklch(58% .075 32)" : t.id === "ink" ? "oklch(77% .095 62) 35%, oklch(68% .115 42) 65%, oklch(66% .115 30)" : t.id === "celadon" ? "oklch(78% .07 190) 35%, oklch(75% .1 195) 65%, oklch(68% .11 265)" : "oklch(72% .075 230) 35%, oklch(52% .1 262) 65%, oklch(54% .1 285)"});"></span>
+      <span class="themeName">${t.name}</span>
+    </button>`).join("");
+  $$("[data-tg]", $("#themeGrid")).forEach(b => b.addEventListener("click", () => setTheme(b.dataset.tg)));
+}
+
+/* ================= 屏幕路由 ================= */
+/* 会话页 = 基座（Activity 直载，非 Fragment）；内容 = 底部宿主 Fragment（sheet） */
+const NAV_SCREENS = { chat: "#scr-chat", center: "#scr-center", library: "#scr-library", settings: "#scr-settings", login: "#scr-login" };
+function openProject() {
+  $("#scr-project").classList.add("on");
+  $$("[data-screen-btn]").forEach(b => b.classList.toggle("on", b.dataset.screenBtn === "project"));
+}
+function closeProject() { closeDetail(); $("#scr-project").classList.remove("on"); }
+function setScreen(id) {
+  if (id === "project") { openProject(); return; }
+  closeProject(); /* 离开时收起项目 sheet */
+  Object.entries(NAV_SCREENS).forEach(([k, sel]) => $(sel).classList.toggle("on", k === id));
+  $$("[data-screen-btn]").forEach(b => b.classList.toggle("on", b.dataset.screenBtn === id));
+}
+$$("[data-screen-btn]").forEach(b => b.addEventListener("click", () => setScreen(b.dataset.screenBtn)));
+$("#projPeek").addEventListener("click", () => openProject());
+$("#sheetGrab").addEventListener("click", () => closeProject());
+
+/* 项目 sheet 把手：下拉拖拽收起（dy > 90 视为下滑手势） */
+(() => {
+  const grab = $("#sheetGrab"), sheet = $("#scr-project");
+  let y0 = null, dy = 0;
+  grab.addEventListener("pointerdown", e => { y0 = e.clientY; dy = 0; grab.setPointerCapture(e.pointerId); });
+  grab.addEventListener("pointermove", e => {
+    if (y0 === null) return;
+    dy = e.clientY - y0;
+    if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+  });
+  const end = () => {
+    if (y0 === null) return;
+    const dismiss = dy > 90;
+    sheet.style.transition = "transform .22s var(--ease-out)";
+    sheet.style.transform = dismiss ? "translateY(105%)" : "";
+    if (dismiss) setTimeout(() => { closeProject(); sheet.style.transform = ""; }, 210);
+    setTimeout(() => { sheet.style.transition = ""; }, 240);
+    y0 = null; dy = 0;
+  };
+  grab.addEventListener("pointerup", end);
+  grab.addEventListener("pointercancel", end);
+})();
+
+/* 各屏返回键 → 会话（抽屉目的地回到上一顶级页） */
+$$("[data-back]").forEach(b => b.addEventListener("click", () => setScreen("chat")));
+
+/* ================= 侧边抽屉 ================= */
+function openDrawer() { $("#drawerScrim").classList.add("show"); $("#drawer").classList.add("show"); }
+function closeDrawer() { $("#drawerScrim").classList.remove("show"); $("#drawer").classList.remove("show"); }
+$$(".openDrawerBtn").forEach(b => b.addEventListener("click", openDrawer));
+$("#drawerScrim").addEventListener("click", closeDrawer);
+$$(".drNav").forEach(d => d.addEventListener("click", () => { closeDrawer(); setScreen(d.dataset.screen); }));
+$("#drDevices").addEventListener("click", () => snackbar("设备管理在设置页 · 「服务器」分组内"));
+$("#drSwitchProject").addEventListener("click", () => { closeDrawer(); snackbar("云端项目列表（demo 占位）——打开 / 新建命名 / 删除（server 软删确认）；会话与内容面板随之刷新"); });
+$("#drLogout").addEventListener("click", () => { closeDrawer(); setScreen("login"); snackbar("已登出——双令牌已吊销，本地数据保留"); });
+$$("[data-size]").forEach(b => b.addEventListener("click", () => {
+  $$("[data-size]").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  const w = b.dataset.size;
+  document.documentElement.style.setProperty("--phone-w", w + "px");
+  document.documentElement.style.setProperty("--phone-h", w === "412" ? "915px" : "800px");
+  fitPhone();
+}));
+
+/* 手机自适应缩放 */
+function fitPhone() {
+  const h = document.documentElement.getAttribute("data-zoom") === "off" ? 1
+    : Math.min(1, (innerHeight - 128 - 40) / 915);
+  $("#phoneWrap").style.transform = `scale(${h})`;
+}
+addEventListener("resize", fitPhone);
+
+/* ================= 时钟 ================= */
+function tickClock() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+  const t = `${hh}:${mm}`;
+  $("#clock").textContent = t; $("#lockClock").textContent = t;
+}
+tickClock(); setInterval(tickClock, 30000);
+
+/* ================= 连接状态四态 ================= */
+const CONN = [
+  { id: "online", label: "在线", dot: "success" },
+  { id: "offline", label: "离线", dot: "warn" },
+  { id: "unconfigured", label: "未配置", dot: "faint" },
+  { id: "needRelogin", label: "需重登", dot: "danger" },
+];
+let connIdx = 0;
+function renderConn() {
+  const c = CONN[connIdx];
+  $("#connDot").className = "dot " + c.dot;
+  $("#connDot").classList.add("pulse");
+  $("#drConn").className = "dot " + c.dot;
+  $("#connLabel").textContent = c.label;
+  const set = $("#setConnDot");
+  set.style.background = `var(--color-${c.id === "online" ? "success" : c.id === "offline" ? "warn" : c.id === "needRelogin" ? "danger" : "faint"})`;
+  $("#setConnT").textContent = c.id === "online" ? "在线 · fang@192.168.1.8"
+    : c.id === "offline" ? "离线 · 缓存可读 · 排队中"
+    : c.id === "unconfigured" ? "未配置 · 登录后启用"
+    : "需要重新登录 · 令牌复用";
+  $("#setConnS").textContent = c.id === "online" ? "https://192.168.1.8:8787 · 设备 Pixel 9 · 已连接 2h"
+    : c.id === "offline" ? "server 不可达 · 重连退避中（1/2/5/10s）· 本地缓存可读"
+    : c.id === "unconfigured" ? "纯云端架构：填写服务器地址并登录（唯一入口）"
+    : "refresh token 复用 → 会话族已吊销（全端重登）";
+  $("#rowRelogin").style.display = c.id === "needRelogin" ? "" : "none";
+}
+$("#connChip").addEventListener("click", () => { connIdx = (connIdx + 1) % CONN.length; renderConn(); });
+
+/* ================= 模式菜单 ================= */
+const MODES = [
+  { id: "review", name: "需审核", icon: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z|M9 12l2 2 4-4", desc: "工具调用与档案写入均生成审批，逐项确认后执行" },
+  { id: "direct", name: "直接执行", icon: "M13 2 3 14h7l-1 8 10-12h-7z", desc: "不经审批直接执行工具，信任较高时使用" },
+  { id: "design", name: "设计", icon: "M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z|M16 8 2 22", desc: "产出设计草稿，不直接改动档案与正文" },
+];
+let curMode = "review", pendMode = null;
+function svgIcon(path, cls) {
+  const parts = path.split("|").map((d, i) => `<path d="${d}"/>`).join("");
+  return `<svg class="${cls || "ic-lg"}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${parts}</svg>`;
+}
+function renderModeMenu() {
+  $("#modeMenu").innerHTML = MODES.map(m => `
+    <button class="modeItem ${m.id === (pendMode || curMode) ? "cur" : ""}" data-mode="${m.id}">
+      ${svgIcon(m.icon)}
+      <span><span class="mn">${m.name}</span><br><span class="md">${m.desc}</span></span>
+    </button>`).join("");
+  $$("[data-mode]").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.mode;
+    if (id === curMode && pendMode === id) { pendMode = null; }
+    else if (id === curMode) { pendMode = null; }
+    else { pendMode = id; }
+    $("#pendModeChip").style.display = pendMode ? "" : "none";
+    renderModeMenu();
+    $("#modeMenu").classList.remove("show");
+    $("#modeBtn").classList.remove("open");
+    if (pendMode) snackbar("执行模式将随下一条消息生效（会话级）");
+  }));
+}
+$("#modeBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const m = $("#modeMenu");
+  m.classList.toggle("show");
+  $("#modeBtn").classList.toggle("open", m.classList.contains("show"));
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("#modeMenu") && !e.target.closest("#modeBtn")) {
+    $("#modeMenu").classList.remove("show");
+    $("#modeBtn").classList.remove("open");
+  }
+});
+
+/* ================= 输入区 ================= */
+const chatInput = $("#chatInput");
+chatInput.addEventListener("input", () => {
+  chatInput.style.height = "auto";
+  chatInput.style.height = Math.min(120, chatInput.scrollHeight) + "px";
+});
+let genRunning = false;
+chatInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); }
+});
+function applyModeIfPending() {
+  if (pendMode) {
+    curMode = pendMode; pendMode = null;
+    $("#pendModeChip").style.display = "none";
+    $("#modeName").textContent = MODES.find(m => m.id === curMode).name;
+  }
+}
+function sendMsg() {
+  const v = chatInput.value.trim();
+  if (!v) return;
+  chatInput.value = ""; chatInput.style.height = "auto";
+  if (genRunning) { queueGhost(v); return; }
+  applyModeIfPending();
+  const div = document.createElement("div");
+  div.className = "userMsg";
+  div.textContent = v;
+  $("#chatCol").appendChild(div);
+  chatInput.value = ""; chatInput.style.height = "auto";
+  startTypewriter(true);
+}
+
+/* ================= 运行状态行 ================= */
+let genSecTimer = null, genSecs = 0;
+function showGen(kind) {
+  const box = $("#genStatus");
+  const rows = { generating: "#genGen", waiting: "#genWait", failed: "#genFail", thinking: "#genThink", asking: "#genAsk" };
+  Object.entries(rows).forEach(([k, sel]) => $(sel).style.display = kind === k ? "" : "none");
+  box.classList.toggle("on", !!kind);
+  clearInterval(genSecTimer);
+  const secMap = { generating: ["#genSec", 12], waiting: ["#waitSec", 18], thinking: ["#thinkSec", 0], asking: ["#askSec", 18] };
+  const cfg = secMap[kind];
+  if (cfg) {
+    genSecs = cfg[1];
+    const secEl = $(cfg[0]);
+    secEl.textContent = genSecs + "s";
+    genSecTimer = setInterval(() => { genSecs++; secEl.textContent = genSecs + "s"; }, 1000);
+  }
+}
+$("#btnRetry").addEventListener("click", () => { showGen("generating"); setTimeout(() => showGen(null), 2200); });
+function setRunButtons(running) {
+  genRunning = running;
+  $("#btnSend").style.display = running ? "none" : "";
+  $("#btnPause").classList.toggle("show", running);
+  chatInput.placeholder = running ? "生成中…（可暂停）" : "输入创作指令…（Enter 发送）";
+}
+$("#btnPause").addEventListener("click", () => { setRunButtons(false); showGen(null); snackbar("已暂停——当前轮作废，journal 记录 ABORTED"); });
+
+/* ================= 打字机（累计文本流） ================= */
+const DRAFT_TEXT = "雾更浓了。沈砚把橹往水里一压，船头无声地转向上游的旧矶。火漆印贴着他的腕骨，隔着旧棉布，竟还有一点温度——像谁刚从火漆上取下来，又像它自己记着三年前那场火。对岸的灯笼次第灭下去，只剩渡口最东头那一盏，晃着，把他的影子钉在船板上。";
+let typerTimer = null, runToolSec = 0, runToolTimer = null;
+function startTypewriter(fresh) {
+  resetLive(fresh);
+  setRunButtons(true);
+  showGen("generating");
+  // 工具行进行中 → 完成
+  runToolSec = 3;
+  $("#runToolLine").style.display = "";
+  $("#runSec").textContent = runToolSec + "s";
+  clearInterval(runToolTimer);
+  runToolTimer = setInterval(() => {
+    runToolSec++;
+    $("#runSec").textContent = runToolSec + "s";
+    if (runToolSec >= 6) {
+      clearInterval(runToolTimer);
+      const line = $("#runToolLine");
+      line.className = "toolLine ok";
+      line.innerHTML = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span class="mono">NovelWrite</span>· 第 2 章 · 追逃段 · 提请审批`;
+      startDraft();
+    }
+  }, 1000);
+}
+function startDraft() {
+  const wrap = $("#draftWrap");
+  wrap.style.display = "";
+  $("#draftText").textContent = "";
+  let i = 0;
+  clearInterval(typerTimer);
+  typerTimer = setInterval(() => {
+    i += 2; // AssistantDelta 累计文本
+    $("#draftText").textContent = DRAFT_TEXT.slice(0, i);
+    $("#chatBody").scrollTop = $("#chatBody").scrollHeight;
+    if (i >= DRAFT_TEXT.length) {
+      clearInterval(typerTimer);
+      setTimeout(() => {
+        $("#draftCaret").style.display = "none";
+        setRunButtons(false);
+        showGen(null);
+        promoteGhosts();
+        replay("approval", true);
+      }, 700);
+    }
+  }, 60);
+}
+function resetLive(fresh) {
+  clearInterval(typerTimer); clearInterval(runToolTimer);
+  $("#draftCaret").style.display = "";
+  if (fresh) {
+    $("#draftWrap").style.display = "none";
+    $("#draftText").textContent = "";
+    $("#sysPill").style.display = "none";
+    const line = $("#runToolLine");
+    line.className = "toolLine run";
+    line.innerHTML = `<span class="spinner"></span><span>正在调用</span><span class="mono">NovelWrite</span><span class="sec" id="runSec">3s</span>`;
+  }
+}
+
+/* ================= 审批 BottomSheet ================= */
+const OP = { add: { s: "+", c: "add", band: "add", label: "写入内容" }, edit: { s: "~", c: "edit", band: "edit", label: "变更后" }, del: { s: "−", c: "del", band: "del", label: "删除参数" } };
+function apCardHtml(c) {
+  return `
+  <div class="apCard" id="apc-${c.id}">
+    <div class="apId">
+      <span class="tool">${c.tool}</span>
+      <span class="chip ${c.status === "pending" ? "warn" : c.status === "approved" ? "success" : "danger"}" id="apcs-${c.id}">
+        ${c.status === "pending" ? "待批准" : c.status === "approved" ? "已批准" : c.status === "rejected" ? "已拒绝" : "已过期"}
+      </span>
+      ${c.src ? `<span class="chip faint">${c.src}</span>` : ""}
+    </div>
+    <div class="apTitle"><span class="op ${OP[c.op].c}">${OP[c.op].s}</span><span class="tt">${c.title}</span></div>
+    <div class="apSecT">当前内容 · ${c.op === "edit" ? "将被覆盖" : c.op === "del" ? "将被删除" : "无既有数据 · 此操作为新建"}</div>
+    <div class="curBox ${c.op === "del" ? "del" : c.op === "add" ? "new" : ""}">${c.cur}</div>
+    <div class="apSecT">${OP[c.op].label}</div>
+    <div class="chgBand ${OP[c.op].band}">${OP[c.op].s} ${c.tool}</div>
+    <dl class="chgDl">${c.chg.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join("")}</dl>
+    ${c.stale ? `<div class="verBanner">版本已过期：正式稿已被其他修改更新（基线 v${c.stale[0]} → 当前 v${c.stale[1]}），批准后此操作可能执行失败。</div>` : ""}
+    ${c.status === "approved" ? `<div class="apDone ok">已处理 · 已批准——放行并通知会话继续</div>` : ""}
+    ${c.status === "rejected" ? `<div class="apDone no">已处理 · 已拒绝${c.opinion ? "——意见已回填" : ""}</div>` : ""}
+    ${c.status === "expired" ? `<div class="apDone exp">已过期 · 120s 无决策自动拒绝（server 懒过期）</div>` : ""}
+    <div class="apActions" id="apa-${c.id}" style="${c.status !== "pending" ? "display:none" : ""}">
+      <button class="mBtn filled" onclick="decide('${c.id}','approved')">批准</button>
+      <button class="mBtn dangerOutlined" onclick="toggleOpinion('${c.id}')">驳回并附意见</button>
+    </div>
+    <div class="opinionBox" id="opb-${c.id}"><div><div class="opinionInner">
+      <textarea id="opt-${c.id}" placeholder="驳回意见会作为 tool 消息回填给运行中的会话…"></textarea>
+      <div class="opinionBtns">
+        <button class="txtBtn" onclick="toggleOpinion('${c.id}')">取消</button>
+        <button class="txtBtn danger" onclick="decide('${c.id}','rejected')">提交驳回意见</button>
+      </div>
+    </div></div></div>
+  </div>`;
+}
+let approval = { cards: [], countdown: 0, cdTimer: null };
+function defaultCards() {
+  return [
+    {
+      id: "c1", tool: "NovelEdit", op: "edit", status: "pending", src: "桌面端 · dev_mb14",
+      title: "沈砚 · 角色档案（v2 → v3）",
+      cur: `<div class="serif">北桥渡口的老船工，五十出头，话少。三十年来只在雾夜里摆渡一条船，从不载回头客。</div>`,
+      chg: [["现状", "袖口旧铜扣换成半枚火漆印——与漕帮失窃案对上"], ["简介", "追加：认印不认人，认人不认账。"]],
+      stale: [2, 3],
+    },
+    {
+      id: "c2", tool: "NovelWrite", op: "add", status: "pending", src: "桌面端 · dev_mb14",
+      title: "正文 · 第 2 章 · 追逃段（草稿 812 字）",
+      cur: `<div class="serif" style="color:var(--color-muted);">（此章该段尚无正文）</div>`,
+      chg: [["位置", "第 2 章 · 追逃段 · 尾部"], ["内容", "沈砚压橹转向上游旧矶，火漆印在雾里一闪——渡口对峙的第一拍。"], ["去向", "草稿 · 批准后转入正式稿待作者校对"]],
+    },
+    {
+      id: "c3", tool: "NovelDelete", op: "del", status: "pending", src: "桌面端 · dev_mb14",
+      title: "地点 · 废弃渡口碑（v1）",
+      cur: `<dl><dt>名称</dt><dd>废弃渡口碑</dd><dt>现状</dt><dd>字迹漫漶，无人照看</dd><dt>关联</dt><dd>2 个大纲单元引用此地点</dd></dl>`,
+      chg: [["理由", "与「北桥渡口」重复建档"], ["影响", "2 处大纲关联将悬空，需在下一轮修复"]],
+    },
+  ];
+}
+function renderApproval() {
+  $("#apCards").innerHTML = approval.cards.map(apCardHtml).join("");
+  const pend = approval.cards.filter(c => c.status === "pending").length;
+  $("#apCount").textContent = pend;
+  $("#batchRow").style.display = pend ? "" : "none";
+  const badge = $("#drApBadge");
+  badge.textContent = pend;
+  badge.classList.toggle("show", pend > 0);
+  renderCenter();
+}
+function openSheet() { $("#approvalSheet").classList.add("show"); $("#sheetScrim").classList.add("show"); }
+function closeSheet() { $("#approvalSheet").classList.remove("show"); $("#sheetScrim").classList.remove("show"); }
+$("#apClose").addEventListener("click", closeSheet);
+$("#sheetScrim").addEventListener("click", closeSheet);
+function toggleOpinion(id) { $("#opb-" + id).classList.toggle("open"); }
+function decide(id, status) {
+  const c = approval.cards.find(x => x.id === id);
+  if (!c || c.status !== "pending") return;
+  const opinion = status === "rejected" ? (($("#opt-" + id) || {}).value || "").trim() : "";
+  if (status === "rejected" && !opinion) { $("#opb-" + id).classList.add("open"); ($("#opt-" + id) || {}).focus?.(); snackbar("驳回请附意见——它会回填给运行中的会话"); return; }
+  c.status = status;
+  c.opinion = opinion;
+  if (status === "rejected") addSysLine(`已驳回 ${c.tool} · ${c.title.split("（")[0]}${opinion ? " · 意见：" + esc(opinion) : ""}`);
+  renderApproval();
+  checkBatchDone();
+}
+function checkBatchDone() {
+  if (approval.cards.every(c => c.status !== "pending")) {
+    stopCountdown();
+    const ok = approval.cards.filter(c => c.status === "approved").length;
+    setTimeout(() => {
+      closeSheet();
+      snackbar(`本批 3 项已处理（${ok} 批准 / ${3 - ok} 拒绝）——SSE approval_resolved 已回填运行中的会话`);
+      showGen(null);
+    }, 900);
+  }
+}
+function batchDecide(status) {
+  approval.cards.filter(c => c.status === "pending").forEach(c => {
+    c.status = status;
+    if (status === "rejected") c.opinion = "整批驳回";
+  });
+  renderApproval();
+  const ok = approval.cards.filter(c => c.status === "approved").length;
+  addSysLine(`整批决策：3 项${status === "approved" ? "全部批准" : "全部驳回"}`);
+  stopCountdown(); closeSheet();
+  snackbar(`整批${status === "approved" ? "批准" : "驳回"} ${ok}/${3}——两段式决议已持久化`);
+  showGen(null);
+}
+$("#btnBatchOk").addEventListener("click", () => batchDecide("approved"));
+$("#btnBatchNo").addEventListener("click", () => batchDecide("rejected"));
+function startCountdown(sec) {
+  stopCountdown();
+  approval.countdown = sec;
+  const cd = $("#apCd");
+  cd.classList.toggle("low", sec <= 15);
+  $("#apCdSec").textContent = sec + "s";
+  approval.cdTimer = setInterval(() => {
+    approval.countdown--;
+    $("#apCdSec").textContent = approval.countdown + "s";
+    cd.classList.toggle("low", approval.countdown <= 15);
+    if (approval.countdown <= 0) expireBatch();
+  }, 1000);
+}
+function stopCountdown() { clearInterval(approval.cdTimer); }
+function expireBatch() {
+  stopCountdown();
+  approval.cards.filter(c => c.status === "pending").forEach(c => { c.status = "expired"; });
+  renderApproval();
+  $("#notifApprovalBody").textContent = "本批已超时自动拒绝";
+  addSysLine("审批超时 · 本批 3 项自动拒绝（120s）——AI 将收到拒绝回执并继续");
+  snackbar("120s 无决策——本批已自动拒绝");
+  showGen(null);
+}
+function addSysLine(text) {
+  const el = document.createElement("div");
+  el.className = "sysLine";
+  el.textContent = text;
+  $("#chatCol").appendChild(el);
+  $("#chatBody").scrollTop = $("#chatBody").scrollHeight;
+}
+
+/* ================= 审批中心 ================= */
+function renderCenter() {
+  const pend = approval.cards.filter(c => c.status === "pending");
+  if (!pend.length) {
+    $("#centerBody").innerHTML = `
+      <div class="centerEmpty">此刻没有待审批的写入。<br>AI 的每一次落笔，都会先到这里等你。</div>
+      <div class="centerFoot">审批经 server 两段式持久化——任意端批准即生效（本地 resolve 与 SSE approval_resolved 先到者胜）；120s 无决策自动拒绝。${approval.cards.length ? "<br>（刚才那批已全部处理）" : ""}</div>`;
+    return;
+  }
+  $("#centerBody").innerHTML = pend.map(c => `
+    <button class="card pendingItem" onclick="openSheet()">
+      <div class="piHead">
+        <span class="chip faint">${c.src || "本机"}</span>
+        <span class="chip mono">${c.tool}</span>
+        <span class="chip warn"><span class="dot warn pulse"></span>待批准</span>
+        <span class="cdChip" style="margin-left:auto;">${approval.countdown}s</span>
+      </div>
+      <div class="piTitle">${OP[c.op].s} ${c.title}</div>
+      <div class="piMeta">approval:conv_2:47:b2 · ${c.chg.length} 项变更</div>
+    </button>`).join("") + `<div class="centerFoot">来自任意端的征询都会汇到这里——手机可以批桌面挂起的审批。</div>`;
+}
+
+/* ================= 只读会话 / 接续 ================= */
+let roTimer = null, roSeq = 213;
+function setReadonly(on) {
+  $("#roBanner").classList.toggle("show", on);
+  $("#roFooter").classList.toggle("show", on);
+  $("#composer").style.display = on ? "none" : "";
+  clearInterval(roTimer);
+  if (on) {
+    roTimer = setInterval(() => {
+      roSeq++;
+      $("#roSeq").textContent = "seq " + roSeq;
+    }, 1200);
+  }
+}
+$("#btnResume").addEventListener("click", resumeLease);
+$("#btnResume2").addEventListener("click", resumeLease);
+$("#btnRoWatch").addEventListener("click", () => snackbar("只读跟随中——对方每写一批，这里推进一格"));
+$("#btnRoRefresh").addEventListener("click", () => { roSeq += 7; $("#roSeq").textContent = "seq " + roSeq; snackbar("已同步到 seq " + roSeq); });
+function resumeLease() {
+  snackbar("申请租约中（acquire conv_2）…");
+  setTimeout(() => {
+    setReadonly(false);
+    snackbar("409 · 租约仍由 dev_mb14 持有（TTL 60s / 心跳 20s）——稍后再试，或先只读看进度");
+    setReadonly(true);
+  }, 900);
+}
+
+/* ================= 弹层 ================= */
+function openDlg(id) { $(id).classList.add("show"); }
+function closeDlg(id) { $(id).classList.remove("show"); }
+$("#offLocal").addEventListener("click", () => { closeDlg("#offlineDlg"); setConnState("offline"); snackbar("离线排队中——指令进待发队列（上限 10k），恢复后按序补推"); });
+$("#offWait").addEventListener("click", () => { closeDlg("#offlineDlg"); setReadonly(true); snackbar("等待恢复——只读查看（SSE 断线，进度停在 seq " + roSeq + "）"); });
+$("#cfServer").addEventListener("click", () => { closeDlg("#conflictDlg"); snackbar("已保留服务器版本——本地积压的 2 条变更已丢弃，租约重新申请成功"); });
+$("#cfLocal").addEventListener("click", () => { closeDlg("#conflictDlg"); snackbar("已保留本地版本——覆盖服务器（expectedLastSeq 校验通过），桌面端将收到 409 转只读"); });
+function setConnState(id) {
+  connIdx = CONN.findIndex(c => c.id === id);
+  renderConn();
+}
+
+/* ================= 恢复向导 ================= */
+$("#wzResume").addEventListener("click", () => { $("#wizard").classList.remove("show"); snackbar("新 run #48 接续上下文——审批将重新提请"); startTypewriter(true); });
+$("#wzStop").addEventListener("click", () => { $("#wizard").classList.remove("show"); snackbar("已恢复到出事前现场——草稿与审批留在原处"); });
+
+/* ================= 通知 / 锁屏 ================= */
+let shadeOpenByNotif = false;
+function openShade() { $("#notifShade").classList.add("show"); }
+$("#notifShade").addEventListener("click", e => { if (e.target.id === "notifShade" || e.target.closest(".shadeHint")) $("#notifShade").classList.remove("show"); });
+$("#notifFgs").addEventListener("click", () => { $("#notifShade").classList.remove("show"); setScreen("chat"); });
+$("#notifApproval").addEventListener("click", () => { $("#notifShade").classList.remove("show"); setScreen("chat"); openSheet(); });
+$("#statusbar").addEventListener("click", openShade);
+function lockBack() { $("#lockView").classList.remove("show"); }
+$("#lockView").addEventListener("click", lockBack);
+
+/* ================= 登录 ================= */
+let regMode = false;
+$("#lgSwitch").addEventListener("click", () => {
+  regMode = !regMode;
+  $("#lgSwitch").textContent = regMode ? "已有账号？登录" : "没有账号？注册";
+  $("#lgSubmit").textContent = regMode ? "注册并登录" : "登录";
+  $("#lgHint").textContent = regMode ? "注册即颁发双令牌（201）；用户名重复将提示 409。" : "错误统一提示「用户名或密码错误」（防枚举）。";
+});
+$("#lgSkip").addEventListener("click", () => snackbar("纯云端架构：登录为唯一入口（强制登录门）。排障——检查服务器地址 / 自签证书 / 局域网可达性。"));
+$("#lgSubmit").addEventListener("click", () => {
+  const u = $("#lgUser").value.trim() || "fang";
+  $("#lgSubmit").disabled = true;
+  $("#lgSubmit").textContent = "验证中…";
+  setTimeout(() => {
+    $("#loginForm").style.display = "none";
+    $("#reloginBanner").classList.remove("show");
+    $("#lgOkWho").textContent = u + "@" + ($("#lgServer").value.replace(/^https?:\/\//, "") || "192.168.1.8");
+    $("#loginSuccess").classList.add("show");
+    setConnState("online");
+    $("#lgSubmit").disabled = false;
+    $("#lgSubmit").textContent = regMode ? "注册并登录" : "登录";
+  }, 700);
+});
+$("#lgOkBack").addEventListener("click", () => { $("#loginSuccess").classList.remove("show"); $("#loginForm").style.display = ""; setScreen("chat"); snackbar("双令牌已存入安全存储——过期前 1 分钟自动轮换"); });
+
+/* ================= 设备管理 ================= */
+function kickDevice(btn, name) { btn.closest(".settingRow").remove(); snackbar("已踢出 " + name + "——该设备的 refresh token 已吊销"); }
+
+/* ================= 说明 ================= */
+$("#btnAbout").addEventListener("click", () => $("#aboutMask").classList.add("show"));
+$("#aboutClose").addEventListener("click", () => $("#aboutMask").classList.remove("show"));
+$("#aboutMask").addEventListener("click", e => { if (e.target.id === "aboutMask") $("#aboutMask").classList.remove("show"); });
+
+/* ================= Android 原生行为 ================= */
+/* 顶栏滚动行为：贴顶透明融入 → 滚动升起 surface → 继续下滑隐藏 */
+function bindTopbarScroll(bodySel, scrSel) {
+  const body = $(bodySel), scr = $(scrSel);
+  if (!body || !scr) return;
+  let lastY = 0;
+  body.addEventListener("scroll", () => {
+    const y = body.scrollTop;
+    const tb = scr.querySelector(".topbar");
+    if (tb) tb.classList.toggle("elev", y > 8);
+    if (y > 140) scr.classList.toggle("hidebar", y > lastY);
+    else scr.classList.remove("hidebar");
+    lastY = y;
+  }, { passive: true });
+}
+bindTopbarScroll("#chatBody", "#scr-chat");
+bindTopbarScroll("#projBody", "#scr-project");
+
+/* BottomSheet 把手拖拽下滑关闭 */
+(function sheetDrag() {
+  const sheet = $("#approvalSheet");
+  const grip = sheet.querySelector(".sheetHead");
+  let startY = 0, dy = 0, dragging = false;
+  grip.addEventListener("pointerdown", e => { dragging = true; startY = e.clientY; dy = 0; sheet.classList.add("dragging"); grip.setPointerCapture(e.pointerId); });
+  grip.addEventListener("pointermove", e => { if (!dragging) return; dy = Math.max(0, e.clientY - startY); sheet.style.transform = "translateY(" + dy + "px)"; });
+  const end = () => { if (!dragging) return; dragging = false; sheet.classList.remove("dragging"); sheet.style.transform = ""; if (dy > 90) closeSheet(); };
+  grip.addEventListener("pointerup", end);
+  grip.addEventListener("pointercancel", end);
+})();
+
+/* ⋯ 弹出菜单 */
+function closeMore() { $("#moreMenu").classList.remove("show"); }
+$("#moreBtn").addEventListener("click", e => { e.stopPropagation(); $("#moreMenu").classList.toggle("show"); });
+document.addEventListener("click", e => { if (!e.target.closest("#moreMenu") && !e.target.closest("#moreBtn")) closeMore(); });
+
+/* 会话历史分段懒加载（对齐云端化：投影首开 50 run · 滚顶前插锚点不跳） */
+$("#loadOlder").addEventListener("click", function () {
+  const frag = document.createElement("div");
+  frag.innerHTML = `<div class="roundDivider">第 1 轮 · 开卷核对</div>
+    <div class="userMsg">第 1 章夜航定稿后，把沈砚的档案按新设定顺一遍。</div>
+    <div class="aiMsg"><div class="aiProse">已核对：档案 v1 → v2，补入「三十年来只在雾夜里摆渡一条船」；与第 1 卷 7 处伏笔登记一致。</div></div>`;
+  this.before(...Array.from(frag.children));
+  this.classList.add("done");
+  this.innerHTML = "已至开头 · 8 月 28 日开卷";
+  snackbar("已加载更早 1 段（分段懒加载 · 前插锚点不跳）");
+});
+
+/* 实体 chip → 内容档案（批/查 联动） */
+/* 内容 sheet · 四栏资料位（GUI segTabs / 树 / 下钻详情口径） */
+function switchTab(name) {
+  closeDetail();
+  $$(".segTab").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false"));
+  $$(".tabPane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
+  $("#projBody").scrollTop = 0;
+}
+$$(".segTab").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+/* ---- 大纲树（GUI treeRow：chev + 引导线 + 双轴 chip + miniNum） ---- */
+const PLAN_CHIP = { idea: ["点子", "neutral"], outlined: ["已成纲", "info"], ready: ["可开写", "accent"] };
+const REAL_CHIP = { pending: ["未动笔", "neutral"], writing: ["写作中", "warn"], done: ["已完成", "success"], blocked: ["受阻", "danger"], abandoned: ["废弃", "faint"] };
+const SCOPE_CHIP = { saga: ["全书", "faint"], arc: ["卷", "faint"], sequence: ["序列", "faint"], scene: ["场景", "faint"] };
+const CHEV_RT = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+const MAP_PIN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
+const USER_IC = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>';
+function chipHtml(pair, style) { return pair ? `<span class="chip ${pair[1]}"${style ? ` style="${style}"` : ""}>${pair[0]}</span>` : ""; }
+
+const OUTLINE = {
+  id: "sg0", scope: "saga", title: "长夜余烬", plan: "outlined", real: "writing", prog: [2, 10], open: true,
+  children: [
+    { id: "a1", scope: "arc", title: "卷一 · 雾起北桥", plan: "outlined", real: "writing", prog: [2, 5], open: true,
+      children: [
+        { id: "sq1", scope: "sequence", title: "追逃", plan: "ready", real: "writing", open: true,
+          children: [
+            { id: "u1", scope: "scene", title: "第 1 章 · 夜航", plan: "ready", real: "done", chapter: "ch1",
+              intent: "开卷：渡口的日常与暗流，夜航的调子。",
+              synopsis: "雨夜的渡口收船，沈砚的日常与暗流；章末袖口旧物初现轮廓。",
+              leaf: { time: "雨夜 · 亥时", chars: [], locs: [], events: [], beats: [], changes: [], paras: [] } },
+            { id: "u2", scope: "scene", title: "第 2 章 · 追逃段", plan: "ready", real: "writing", chapter: "draft",
+              intent: "把追逃推向渡口对峙：雾夜行船，身后第二道桨声。",
+              synopsis: "沈砚压橹转向上游旧矶，火漆印在雾里一闪；对峙的第一拍留到下一轮。",
+              leaf: {
+                time: "雨夜 · 亥时末",
+                chars: [{ id: "entShen", name: "沈砚", tag: "视角 · 在场" }],
+                locs: [{ id: "entFerry", name: "北桥渡口", tag: "主要" }],
+                events: ["渡口收船，梆子三长一短——雾夜的调子", "水面下第二道桨声，压得极低，跟了至少半里", "船头无声转向上游旧矶，火漆印在雾里一闪"],
+                beats: ["铺垫 · 强度 2 · 安稳里的不安", "上升 · 强度 3", "转折 · 强度 4 · 心头一紧"],
+                changes: [["认知", "沈砚确认身后的桨声不是渔火夜巡"], ["所有", "火漆印贴身藏匿的事实首次对读者显形"]],
+                paras: [
+                  "「上船。」那声音说。沈砚没有回头，只把橹又压深了一寸。",
+                  "对岸的灯笼次第灭下去，只剩渡口最东头那一盏，晃着，把他的影子钉在船板上。他忽然放慢了橹。水面下有第二道桨声，压得极低，跟了他至少半里。",
+                  "雾更浓了。沈砚把橹往水里一压，船头无声地转向上游的旧矶。火漆印贴着他的腕骨，隔着旧棉布，竟还有一点温度——像谁刚从火漆上取下来，又像它自己记着三年前那场火。"
+                ]
+              } }
+          ]},
+        { id: "sq2", scope: "sequence", title: "投宿", plan: "outlined", real: "pending" },
+        { id: "sq3", scope: "sequence", title: "雾锁", plan: "idea", real: "pending" }
+      ]},
+    { id: "a2", scope: "arc", title: "卷二 · 灯塔", plan: "idea", real: "pending" }
+  ]
+};
+function findNode(id, n = OUTLINE) { if (n.id === id) return n; for (const c of n.children || []) { const r = findNode(id, c); if (r) return r; } return null; }
+function treeNodeHtml(n) {
+  const isParent = !!n.children;
+  const row = `<button class="dirRow${isParent ? " parent" : ""}${isParent && n.open ? " open" : ""}" data-node="${n.id}">
+    ${isParent ? `<span class="chev">${CHEV_RT}</span>` : `<span class="treeTick"></span>`}
+    <span class="treeLabel">${n.title}</span>
+    ${isParent ? chipHtml(SCOPE_CHIP[n.scope], "padding:0 6px;") : ""}
+    ${n.prog ? `<span class="miniNum">${n.prog[0]}/${n.prog[1]}</span>` : ""}
+    ${chipHtml(REAL_CHIP[n.real])}
+  </button>`;
+  return `<div class="treeNode">${row}${isParent && n.open ? `<div class="treeChildren">${n.children.map(treeNodeHtml).join("")}</div>` : ""}</div>`;
+}
+function renderTree() { $("#outlineTree").innerHTML = treeNodeHtml(OUTLINE); }
+renderTree();
+$("#outlineTree").addEventListener("click", e => {
+  const row = e.target.closest(".dirRow"); if (!row) return;
+  const n = findNode(row.dataset.node); if (!n) return;
+  if (n.children) { n.open = !n.open; renderTree(); }
+  else openDetail("unit", n.id);
+});
+
+/* ---- 人物/地点档案（GUI dirRow 列表 → profileHead 详情） ---- */
+const ENTITIES = {
+  entShen: { kind: "char", name: "沈砚", sub: "北桥渡口的老船工 · 袖口藏火漆印", kicker: "北桥渡口的老船工 · v2",
+    intro: "北桥渡口的老船工，五十出头，话少。三十年来只在雾夜里摆渡一条船，从不载回头客。",
+    init: "独居渡口草棚。袖口旧铜扣换成半枚火漆印（v3 审批中）；与漕帮账房秦九三年未说话。",
+    note: "「认印不认人，认人不认账。」火漆印是他主动保管的信物——与第 1 卷 7 处伏笔兼容。",
+    refs: [["sq1", "卷一 · 追逃"], ["u2", "卷一 · 渡口对峙（草）"]],
+    warn: "档案 v3 审批中（批次 b2）——批准后「袖口旧铜扣 → 半枚火漆印」生效。" },
+  entQin: { kind: "char", name: "秦九", sub: "漕帮账房 · 失窃案当晚当值", kicker: "漕帮账房 · v1",
+    intro: "北桥漕帮分舵的账房，算盘打得比谁都快，话比谁都少。失窃案后称病，再没人见过他拨算盘。",
+    init: "失窃案当晚当值；账房密室是火漆印首次出现处（第 1 卷第 7 章）。",
+    note: "「他那算盘，三年前就该收了。」——渡口茶棚老板娘。",
+    refs: [["sq1", "卷一 · 追逃"]] },
+  entFerry: { kind: "loc", name: "北桥渡口", sub: "城南七里 · 雾夜才有渡", kicker: "地点 · v2 · 现状：雨夜亮灯",
+    intro: "城南七里，雾夜才有渡。灯挂在最东头的桩上，涨水年份淹掉半截。",
+    note: "「涨水年淹掉半截的灯桩」——追逃段的空间锚点，对峙戏在旧矶一侧。",
+    refs: [["sq1", "卷一 · 追逃"], ["u2", "第 2 章 · 追逃段"]] },
+  entStele: { kind: "loc", name: "废弃渡口碑", sub: "城南三里 · 字迹漫漶", kicker: "地点 · v1 · 删除审批中",
+    intro: "城南三里的旧渡口碑，字迹漫漶，无人照看。",
+    refs: [["sq2", "卷一 · 投宿"]],
+    warn: "NovelDelete 审批中（批次 b2）——批准后从档案移除，2 处大纲关联悬空待下一轮修复。" }
+};
+function entRowHtml(id, e) {
+  const ico = e.kind === "char" ? `<span class="avatar">${e.name[0]}</span>` : `<span class="convIcon">${MAP_PIN}</span>`;
+  return `<button class="dirRow" data-ent="${id}">${ico}<span class="dirLabel">${e.name}<small>${e.sub}</small></span><span class="chev">${CHEV_RT}</span></button>`;
+}
+$("#charList").innerHTML = ["entShen", "entQin"].map(id => entRowHtml(id, ENTITIES[id])).join("");
+$("#placeList").innerHTML = ["entFerry", "entStele"].map(id => entRowHtml(id, ENTITIES[id])).join("");
+["charList", "placeList"].forEach(listId => {
+  $("#" + listId).addEventListener("click", e => {
+    const row = e.target.closest(".dirRow[data-ent]"); if (!row) return;
+    openDetail("entity", row.dataset.ent);
+  });
+});
+
+/* ---- 下钻详情（GUI dirDetail：返回胶囊 + 标题行 + LeafPlanCard / profileHead） ---- */
+function refChipHtml(ref) { return `<button class="refChip" data-jump="${ref[0]}">${USER_IC}${ref[1]}</button>`; }
+function unitDetailHtml(u) {
+  const L = u.leaf;
+  const sec = t => `<div class="apSectionHead">${t}</div>`;
+  const leafCard = !L || (!L.events.length && !L.paras.length) ? "" : `
+    <div class="cardBlock"><h3>场景计划 · leaf</h3>
+      <dl class="apParam">
+        <dt>场景模式</dt><dd>located · 有确定地点</dd>
+        <dt>时间</dt><dd>${L.time}</dd>
+        ${L.chars.length ? `<dt>人物绑定</dt><dd><div class="refChips">${L.chars.map(c => `<button class="refChip" data-jump-ent="${c.id}">${USER_IC}${c.name}<small>${c.tag}</small></button>`).join("")}</div></dd>` : ""}
+        ${L.locs.length ? `<dt>地点绑定</dt><dd><div class="refChips">${L.locs.map(l => `<button class="refChip" data-jump-ent="${l.id}">${MAP_PIN}${l.name}<small>${l.tag}</small></button>`).join("")}</div></dd>` : ""}
+        ${L.events.length ? `<dt>事件序列</dt><dd><div class="leafSeq">${L.events.map((ev, i) => `<span><i>${String(i + 1).padStart(2, "0")}</i>${ev}</span>`).join("")}</div></dd>` : ""}
+        ${L.beats.length ? `<dt>节奏拍</dt><dd><div class="refChips" style="gap:4px;">${L.beats.map(b => `<span class="chip neutral">${b}</span>`).join("")}</div></dd>` : ""}
+        ${L.changes.length ? `<dt>实体变更</dt><dd><div class="leafSeq">${L.changes.map(c => `<span><i>${c[0]}</i>${c[1]}</span>`).join("")}</div></dd>` : ""}
+      </dl>
+    </div>`;
+  const paraCard = L && L.paras.length ? `
+    <div class="cardBlock"><h3>正文段落 · ${u.chapter === "draft" ? "草稿" : "已定稿"}</h3>
+      ${L.paras.map((p, i) => `<button class="paraDirRow" data-jump-read="${u.chapter}"><span class="pIdx">P${i + 1}</span><span class="pTxt">${p}</span>${u.chapter === "draft" && i === L.paras.length - 1 ? `<span class="chip warn" style="padding:0 6px;flex:none;">草</span>` : ""}</button>`).join("")}
+    </div>` : "";
+  return `
+    <div class="statRowChips">${chipHtml(PLAN_CHIP[u.plan])}${chipHtml(REAL_CHIP[u.real])}</div>
+    ${u.intent ? sec("意图 · intent") + `<p class="cardP" style="margin:0 2px 10px;">${u.intent}</p>` : ""}
+    ${u.synopsis ? sec("梗概 · synopsis") + `<p class="cardP" style="margin:0 2px 12px;">${u.synopsis}</p>` : ""}
+    ${leafCard}${paraCard}
+    ${u.children ? `<div class="cardBlock"><h3>子单元</h3><div class="refChips">${u.children.map(c => refChipHtml([c.id, c.title])).join("")}</div></div>` : ""}`;
+}
+function entDetailHtml(e) {
+  return `
+    <div class="profileHead">
+      ${e.kind === "char" ? `<span class="avatar">${e.name[0]}</span>` : `<span class="convIcon">${MAP_PIN}</span>`}
+      <div><h2>${e.name}</h2><div class="kicker">${e.kicker}</div></div>
+    </div>
+    ${e.warn ? `<div class="banner warn">${e.warn}</div>` : ""}
+    <div class="cardBlock"><h3>简介</h3><p class="cardP">${e.intro}</p></div>
+    ${e.init ? `<div class="cardBlock"><h3>初始状态</h3><p class="cardP">${e.init}</p></div>` : ""}
+    ${e.note ? `<div class="cardBlock"><h3>作者备注</h3><p class="cardP kai">${e.note}</p></div>` : ""}
+    ${e.refs ? `<div class="cardBlock"><h3>关联单元</h3><div class="refChips">${e.refs.map(refChipHtml).join("")}</div></div>` : ""}`;
+}
+function openDetail(kind, id) {
+  const t = kind === "unit" ? findNode(id) : ENTITIES[id];
+  if (!t) return;
+  $("#ddTitle").textContent = t.title || t.name;
+  $("#ddKicker").textContent = kind === "unit"
+    ? `大纲 · ${SCOPE_CHIP[t.scope][0]} · storyUnit ${t.id}`
+    : `${t.kind === "char" ? "人物档案" : "地点档案"} · ${t.id}`;
+  $("#ddScroll").innerHTML = kind === "unit" ? unitDetailHtml(t) : entDetailHtml(t);
+  $("#segTabs").style.display = "none";
+  $("#projBody").style.display = "none";
+  $("#dirDetail").classList.add("show");
+  $("#ddScroll").scrollTop = 0;
+}
+function closeDetail() {
+  $("#dirDetail").classList.remove("show");
+  $("#segTabs").style.display = "";
+  $("#projBody").style.display = "";
+}
+$("#dirBack").addEventListener("click", closeDetail);
+$("#ddScroll").addEventListener("click", e => {
+  const jump = e.target.closest("[data-jump]");
+  if (jump) { const n = findNode(jump.dataset.jump); if (n) { openDetail("unit", n.id); return; } }
+  const jent = e.target.closest("[data-jump-ent]");
+  if (jent && ENTITIES[jent.dataset.jumpEnt]) { openDetail("entity", jent.dataset.jumpEnt); return; }
+  const jread = e.target.closest("[data-jump-read]");
+  if (jread) openRead(jread.dataset.jumpRead);
+});
+
+/* 正文 pane · 卷分组折叠 */
+$$(".dirGroup[data-vol]").forEach(g => g.addEventListener("click", () => {
+  g.classList.toggle("open");
+  const rows = document.getElementById("volRows-" + g.dataset.vol);
+  if (rows) rows.style.display = g.classList.contains("open") ? "" : "none";
+}));
+
+/* 实体胶囊（聊天流内）→ 内容 sheet 对应档案 */
+const ENT_TAB = { entShen: "char", entQin: "char", entFerry: "place", entStele: "place" };
+function goEntity(id) {
+  setScreen("project");
+  switchTab(ENT_TAB[id] || "char");
+  if (ENTITIES[id]) openDetail("entity", id);
+}
+
+/* 阅读视图（看 · 沉浸只读） */
+const READ_CONTENT = {
+  draft: {
+    t2: "第 2 章 · 追逃段 · 草稿", meta: "草稿 812 字 · 21:02 生成 · 未转正式稿", draft: true,
+    paras: [
+      "雾更浓了。沈砚把橹往水里一压，船头无声地转向上游的旧矶。火漆印贴着他的腕骨，隔着旧棉布，竟还有一点温度——像谁刚从火漆上取下来，又像它自己记着三年前那场火。",
+      "对岸的灯笼次第灭下去，只剩渡口最东头那一盏，晃着，把他的影子钉在船板上。他忽然放慢了橹。水面下有第二道桨声，压得极低，跟了他至少半里。",
+      "「上船。」那声音说。沈砚没有回头，只把橹又压深了一寸。",
+    ],
+  },
+  ch1: {
+    t2: "第 1 章 · 夜航", meta: "3,214 字 · 已完成 · 9 月 1 日定稿", draft: false,
+    paras: [
+      "北桥渡口的灯是雾夜里唯一的准头。灯亮，渡开；灯灭，连沈砚也不接客。三十年来只此一条规矩，城里人都知道。",
+      "这一夜的雾比往常沉。灯影里先来的是个抱匣子的年轻人，靴底不带泥——渡口的人，靴底没有不带泥的。",
+    ],
+  },
+};
+function openRead(kind) {
+  const c = READ_CONTENT[kind];
+  $("#readT2").textContent = c.t2;
+  $("#readBody").innerHTML =
+    `<div class="readMeta">${c.meta}</div><div class="readTitle">${c.t2.replace(" · 草稿", "")}</div>` +
+    (c.draft ? `<div class="draftTag"><svg class="ic" style="width:12px;height:12px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/></svg>草稿 · 未转入正式稿</div>` : "") +
+    c.paras.map(p => `<p>${p}</p>`).join("");
+  $("#readBar").style.display = c.draft ? "" : "none";
+  $("#readView").classList.add("show");
+}
+function closeRead() { $("#readView").classList.remove("show"); }
+
+/* 书库 · 书详情 */
+function openBook() { $("#bookDetail").classList.add("show"); }
+function closeBook() { $("#bookDetail").classList.remove("show"); }
+
+/* 提问卡（答 · 碎片时间作创作决策） */
+let askSel = null;
+$$(".askOpt").forEach(o => o.addEventListener("click", () => {
+  $$(".askOpt").forEach(x => x.classList.remove("sel"));
+  o.classList.add("sel");
+  askSel = o.dataset.v;
+  $("#askSubmit").disabled = false;
+}));
+$("#askSubmit").addEventListener("click", () => {
+  if (!askSel) return;
+  const open = $("#askOpen").value.trim();
+  $("#askA1").textContent = askSel;
+  $("#askA2").textContent = open || "（跳过 · 授权自定）";
+  $("#askCard").style.display = "none";
+  $("#askDone").style.display = "";
+  showGen(null);
+  addSysLine(`已作答提问 · Q1 ${askSel}${open ? " · Q2 " + open : ""}——生成继续`);
+  snackbar("作答已回填 · AI 继续生成");
+});
+function askSkip() {
+  $("#askA1").textContent = "（跳过 · 授权 AI 自定）";
+  $("#askA2").textContent = "（跳过 · 授权自定）";
+  $("#askCard").style.display = "none";
+  $("#askDone").style.display = "";
+  showGen(null);
+  addSysLine("提问已跳过——授权 AI 自定，生成继续");
+}
+
+/* 排队幽灵消息（生成中再发送 → 回显排队，收口晋升） */
+let ghostEls = [], ghostTimer = null;
+function queueGhost(text) {
+  const el = document.createElement("div");
+  el.className = "msgGhost";
+  el.innerHTML = esc(text) + `<span class="qBadge" style="display:flex;"><span class="dot warn pulse"></span>排队中&nbsp;<span class="qs">0s</span></span>`;
+  $("#chatCol").appendChild(el);
+  $("#chatBody").scrollTop = $("#chatBody").scrollHeight;
+  const rec = { el, s: el.querySelector(".qs"), t0: Date.now() };
+  ghostEls.push(rec);
+  clearInterval(ghostTimer);
+  ghostTimer = setInterval(() => { ghostEls.forEach(g => { g.s.textContent = Math.round((Date.now() - g.t0) / 1000) + "s"; }); }, 1000);
+  snackbar("生成中——消息已进入队列，本轮收口后自动发出");
+}
+function promoteGhosts() {
+  clearInterval(ghostTimer);
+  ghostEls.forEach(g => g.el.classList.add("promoted"));
+  ghostEls = [];
+}
+
+/* ================= 状态重放引擎 ================= */
+let fgsSec = 84;
+setInterval(() => { fgsSec++; $("#notifSec").textContent = String(Math.floor(fgsSec / 60)).padStart(2, "0") + ":" + String(fgsSec % 60).padStart(2, "0"); }, 1000);
+
+function replay(name, chained) {
+  switch (name) {
+    case "typer":
+      setScreen("chat"); startTypewriter(true); break;
+    case "think":
+      setScreen("chat"); resetLive(true); setRunButtons(true); showGen("thinking");
+      setTimeout(() => startTypewriter(true), 4200);
+      break;
+    case "ask":
+      setScreen("chat"); $("#askCard").style.display = ""; $("#askDone").style.display = "none";
+      setRunButtons(false); showGen("asking");
+      $("#askCard").scrollIntoView({ behavior: "smooth", block: "center" });
+      snackbar("Agent 提请作者决策——答完继续生成");
+      break;
+    case "queue":
+      setScreen("chat"); startTypewriter(true);
+      setTimeout(() => queueGhost("对了，渡口对峙的火光里，让他认出对方的声音。"), 2800);
+      break;
+    case "approval":
+      approval.cards = defaultCards();
+      renderApproval();
+      $("#sysPill").style.display = "";
+      $("#sysPillText").textContent = "角色写入 · 沈砚 等 3 项待审批 —— 点击查看";
+      $("#notifApprovalBody").textContent = "来自 桌面端 · dev_mb14 · 120s 无决策将自动拒绝";
+      setRunButtons(false);
+      showGen("waiting");
+      startCountdown(120);
+      setTimeout(openSheet, chained ? 300 : 650);
+      break;
+    case "reject":
+      approval.cards = defaultCards();
+      renderApproval(); startCountdown(97); openSheet();
+      setTimeout(() => {
+        toggleOpinion("c1");
+        $("#opt-c1").value = "现状改动幅度太大——火漆印的来历这轮先按下不表，只写袖口轮廓。";
+      }, 450);
+      break;
+    case "timeout":
+      approval.cards = defaultCards();
+      renderApproval(); startCountdown(6); openSheet(); showGen("waiting");
+      break;
+    case "fail":
+      setScreen("chat"); showGen("failed"); setRunButtons(false); break;
+    case "recovery":
+      $("#wizard").classList.add("show"); break;
+    case "readonly":
+      setScreen("chat"); setReadonly(true); break;
+    case "resume":
+      setScreen("chat"); setReadonly(true); resumeLease(); break;
+    case "offline":
+      setScreen("chat"); openDlg("#offlineDlg"); break;
+    case "conflict":
+      openDlg("#conflictDlg"); break;
+    case "notif":
+      openShade(); break;
+    case "lock":
+      $("#lockView").classList.add("show"); break;
+    case "relogin":
+      setScreen("login");
+      $("#loginForm").style.display = "";
+      $("#loginSuccess").classList.remove("show");
+      $("#reloginBanner").classList.add("show");
+      setConnState("needRelogin");
+      break;
+    case "reset":
+      location.reload(); break;
+  }
+}
+$$("[data-replay]").forEach(b => b.addEventListener("click", () => replay(b.dataset.replay)));
+
+/* 键盘 Esc：关弹层 */
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if ($("#aboutMask").classList.contains("show")) return $("#aboutMask").classList.remove("show");
+  if ($("#drawer").classList.contains("show")) return closeDrawer();
+  if ($("#lockView").classList.contains("show")) return lockBack();
+  if ($("#notifShade").classList.contains("show")) return $("#notifShade").classList.remove("show");
+  if ($("#offlineDlg").classList.contains("show")) return closeDlg("#offlineDlg");
+  if ($("#conflictDlg").classList.contains("show")) return closeDlg("#conflictDlg");
+  if ($("#approvalSheet").classList.contains("show")) return closeSheet();
+});
+
+/* ================= 初始化 ================= */
+renderThemeGrid();
+renderModeMenu();
+renderConn();
+approval.cards = defaultCards();
+renderApproval();
+fitPhone();
+setRunButtons(false);
+/* 首屏静止在打字机前夕：工具行进行中 */
+</script>
+</body>
+</html>

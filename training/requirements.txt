@@ -1,0 +1,6 @@
+# prose-gate 训练框架依赖（Windows CPU）
+# 安装：setup.cmd（或见 README 的网络回退说明）
+torch>=2.2
+transformers>=4.44
+numpy>=1.26
+pytest>=8.0

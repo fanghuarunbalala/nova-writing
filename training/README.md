@@ -5,17 +5,34 @@
 输出每段 8 个独立缺陷概率（多标签）。产物 `prose-gate-weights.v1.json` 为语言无关契约，
 未来 TS runtime（M3）按同契约加载。
 
-## 快速开始
+## 训练数据工作台（推荐入口）
+
+```bash
+cd training && source .venv/bin/activate    # 或 Windows: .venv\Scripts\activate
+python -m prose_gate.workbench_server       # http://127.0.0.1:8321
+# 跨设备（Mac/手机连同一份磁盘进度）：python -m prose_gate.workbench_server --host 0.0.0.0
+```
+
+三模块：
+- **导入书**：首页上传 txt（utf-8/gbk 自动识别）→ 向导里 LLM 提取五要素大纲 → **网页编辑定稿**
+  （要素 ≤100 字防泄漏护栏）→ 自适应建窗；
+- **生成**：`/gen/<书>` 选某章定稿大纲仿写（配对照），或**自定义题目注入**（独立标注，
+  贴近生产门控场景）；文风基准/段落形式/批次名可调，扩写只见大纲不见原文；
+- **标注**：`/sheet/<书>` 双栏配对（原文|AI）、`/label/gen/<批次>` 单栏独立——逐窗
+  "保存并下一窗"自动落盘 `artifacts/labels-<scope>.jsonl`（训练管线直接读），
+  重启/换设备进度不丢、已标不重标；⚑ 存疑标记、跳过、标签命中实时统计。
+
+## 命令行（备用）
 
 ```bash
 cd training
 ./setup.sh            # 或 Windows: setup.cmd —— venv + pip（失败自动切清华镜像）
-python scripts/fetch_model.py        # 下载 bge-small-zh-v1.5（HF → hf-mirror → ModelScope 三源回退）
+python scripts/fetch_model.py        # 下载 bge-small-zh-v1.5（HF → hf-mirror → ModelScope 回退）
 python -m prose_gate.dataset --book ywjs           # 书库夹具 → artifacts/windows.jsonl
 python -m prose_gate.embed --limit 2               # 冒烟：首两窗段级嵌入 → artifacts/embeddings.npz
 python -m prose_gate.train --synthetic             # 合成数据端到端冒烟 → artifacts/prose-gate-weights.v1.json
 python -m prose_gate.infer --text "他推门。\n雨还没停。\n灯芯晃了一下。"   # 推理冒烟（需真权重）
-python -m pytest tests -q                          # 全部测试
+python -m pytest tests -q                          # 全部测试（含工作台集成，LLM mock）
 ```
 
 ## 数据流

@@ -52,6 +52,106 @@ _LABELS_JSON = json.dumps(
 	ensure_ascii=False,
 )
 
+# 标注页共享样式（单花括号纯文本，经 {css} 注入模板——勿用 .format 处理本常量本身）
+_SHEET_CSS = """ :root{--bg:#eef1f6;--card:#fff;--ink:#1c2430;--muted:#69758a;--line:#e3e8f0;
+ --orig:#0b7a4b;--ai:#2456c4;--origbg:#f2f9f5;--aibg:#f1f5fd;--accent:#2456c4;--warn:#b45309}
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.9 system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
+ .bar{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:16px;
+  padding:12px 28px;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+ .bar h1{font-size:18px;margin:0;letter-spacing:.3px} .bar p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+ .bar-right{display:flex;align-items:center;gap:12px}
+ .prog{font-size:13px;color:var(--muted);background:#f2f5fa;border:1px solid var(--line);border-radius:999px;padding:4px 14px;white-space:nowrap}
+ button.exportbtn{border:0;background:var(--accent);color:#fff;font-size:14px;font-weight:600;
+  padding:9px 20px;border-radius:10px;cursor:pointer;box-shadow:0 2px 10px rgba(36,86,196,.28)}
+ button.exportbtn:hover{filter:brightness(1.07)}
+ .legend{margin:20px auto 6px;max-width:1440px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 20px}
+ .legend summary{cursor:pointer;font-weight:600;font-size:14px}
+ .lb{margin:7px 0;font-size:13.5px;color:#39445a} .lb i{color:var(--muted)}
+ .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 6px 0 2px}
+ main{max-width:1440px;margin:0 auto;padding:4px 24px 90px}
+ h2{font-size:14px;font-weight:700;color:var(--muted);margin:34px 4px 10px;letter-spacing:1px}
+ .pair{display:none;background:var(--card);border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 1px 3px rgba(28,36,48,.05);padding:16px 18px;margin:14px 0}
+ .pair.cur{display:block}
+ .pair>h3{margin:0 0 12px;font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.5px}
+ .doneflag{color:var(--orig);margin-left:10px;font-weight:700}
+ .flaggedflag{color:var(--warn);margin-left:6px;font-weight:700}
+ .cols{display:flex;gap:16px;align-items:flex-start}
+ .col{flex:1 1 0;min-width:0;border-radius:12px;padding:10px 12px}
+ .col.orig{background:var(--origbg);border:1px solid #d5e9dd}
+ .col.ai{background:var(--aibg);border:1px solid #d7e2f8}
+ .colhead{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px;margin:2px 0 8px}
+ .badge{font-size:11.5px;font-weight:700;color:#fff;border-radius:999px;padding:2px 11px;letter-spacing:1px}
+ .orig .badge{background:var(--orig)} .ai .badge{background:var(--ai)}
+ .colhead code{font-size:11px;color:var(--muted);font-weight:400;overflow:hidden;text-overflow:ellipsis}
+ .zero{margin-left:auto;border:1px solid var(--line);background:#fff;color:var(--muted);
+  font-size:12px;border-radius:8px;padding:3px 10px;cursor:pointer}
+ .zero:hover{color:var(--ink);border-color:#c6cfdd}
+ table{width:100%;border-collapse:collapse}
+ td{border-top:1px dashed var(--line);padding:7px 6px;vertical-align:top}
+ tr:first-child td{border-top:0}
+ .pn{width:26px;color:#9aa5b8;font-size:12px;text-align:right;padding-top:9px}
+ .pt{width:44%;font-size:14.5px}
+ .pc{white-space:nowrap}
+ .chip{display:inline-flex;margin:2px 3px 2px 0;cursor:pointer;-webkit-user-select:none;user-select:none}
+ .chip input{position:absolute;opacity:0;pointer-events:none}
+ .chip span{border:1.5px solid var(--c);color:var(--c);border-radius:999px;padding:1px 10px;
+  font-size:12.5px;line-height:1.75;transition:background .12s,color .12s,filter .12s}
+ .chip:hover span{filter:brightness(.92)}
+ .chip input:checked+span{background:var(--c);color:#fff;font-weight:600}
+ .ev td{border-top:0;padding-top:0}
+ .evc{font-size:12px;color:var(--muted)}
+ .evc input{width:92%;border:0;border-bottom:1px dashed #c9d2e0;background:transparent;
+  font-size:12.5px;color:var(--ink);padding:3px 2px;outline:none}
+ .evc input:focus{border-bottom:1.5px solid var(--accent)}
+ .evc input.missing{border-bottom:2px solid #d64545}
+ .nav{position:sticky;bottom:0;z-index:20;display:flex;gap:10px;align-items:center;justify-content:center;
+  padding:10px 16px;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-top:1px solid var(--line)}
+ .nav button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 18px;
+  font-size:14px;cursor:pointer;color:var(--ink)}
+ .nav button:hover{border-color:#c6cfdd}
+ .nav .primary{background:var(--accent);color:#fff;border:0;font-weight:600;box-shadow:0 2px 10px rgba(36,86,196,.28)}
+ .nav .cnt{font-size:13px;color:var(--muted);min-width:110px;text-align:center}
+ .nav .on{border-color:var(--warn);color:var(--warn);font-weight:700}
+ .grid{display:none;position:fixed;left:0;right:0;bottom:58px;margin:0 auto;max-width:1440px;
+  background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;z-index:30;
+  flex-wrap:wrap;gap:6px;box-shadow:0 -4px 24px rgba(28,36,48,.12)}
+ .grid.open{display:flex}
+ .grid button{width:36px;height:30px;border:1px solid var(--line);background:#fff;border-radius:7px;
+  font-size:12px;cursor:pointer;color:var(--muted)}
+ .grid button.done{background:var(--orig);border-color:var(--orig);color:#fff}
+ .grid button.flagged{outline:2px dashed var(--warn);outline-offset:1px}
+ .grid button.curc{outline:2px solid var(--accent);outline-offset:1px}
+ .stats{font-size:12px;color:var(--muted);background:#f2f5fa;border:1px solid var(--line);
+  border-radius:999px;padding:4px 12px;white-space:nowrap}
+ @media (max-width:1100px){.cols{flex-direction:column}.pt{width:auto}}
+"""
+
+# 存储层两种模式（format 值，单花括号安全注入）：local=file://localStorage；server=工作台 API
+_STORAGE_SNIPPETS: dict[str, dict[str, str]] = {
+	"local": {
+		"loadStore": (
+			"try { store = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }\n"
+			"catch (e) { storageOk = false; "
+			"alert('浏览器禁用了本地存储：进度无法持久化，请每窗标完及时导出。'); }"
+		),
+		"persist": (
+			"if (storageOk) try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) {}"
+		),
+	},
+	"server": {
+		"loadStore": "store = await (await fetch('/api/labels/' + SCOPE)).json();",
+		"persist": (
+			"try { const r = await fetch('/api/save/' + SCOPE, {method: 'POST', "
+			"headers: {'Content-Type': 'application/json'}, body: JSON.stringify(recs)}); "
+			"if (!r.ok) alert('保存失败 HTTP ' + r.status); } "
+			"catch (e) { alert('保存到服务器失败：' + e); }"
+		),
+	},
+}
+
 
 def load_windows_by_chapter(path: Path, source: str) -> dict[int, list[dict]]:
 	by_chapter: dict[int, list[dict]] = {}
@@ -66,13 +166,18 @@ def load_windows_by_chapter(path: Path, source: str) -> dict[int, list[dict]]:
 	return by_chapter
 
 
-def generate_sheet(
+def generate_sheet_html(
 	original: dict[int, list[dict]],
 	ai_expanded: dict[int, list[dict]],
-	out_path: Path,
 	title: str = "prose-gate 配对标注表",
-) -> int:
-	"""按章配对（索引对齐），写出自包含 HTML；返回配对窗总数。"""
+	mode: str = "local",
+	scope: str = "sheet",
+) -> tuple[str, int]:
+	"""按章配对（索引对齐）构建标注页 HTML；返回 (html, 配对窗总数)。
+
+	mode：local=file://localStorage 离线单文件；server=工作台 API（snippet 见 _STORAGE_SNIPPETS）。
+	scope：server 模式的标注域（书 alias 或 gen id），对应 /api/labels/<scope>。
+	"""
 	chapters = sorted(set(original) & set(ai_expanded))
 	pairs_total = 0
 	sections: list[str] = []
@@ -92,18 +197,34 @@ def generate_sheet(
 			))
 		sections.append(f'<h2>第 {no} 章</h2>\n' + "\n".join(blocks))
 
-	out_path.parent.mkdir(parents=True, exist_ok=True)
-	out_path.write_text(
-		_PAGE.format(
-			title=html.escape(title),
-			pairs=pairs_total,
-			body="\n".join(sections),
-			labels=_LABELS_JSON,
-			labelsVersion=LABELS_VERSION,
-			sheetVersion=SHEET_VERSION,
-		),
-		encoding="utf-8",
+	if mode not in _STORAGE_SNIPPETS:
+		raise ValueError(f"未知存储模式：{mode}")
+	page = _PAGE.format(
+		title=html.escape(title),
+		pairs=pairs_total,
+		body="\n".join(sections),
+		labels=_LABELS_JSON,
+		labelsVersion=LABELS_VERSION,
+		sheetVersion=SHEET_VERSION,
+		css=_SHEET_CSS,
+		scope=html.escape(scope),
+		**_STORAGE_SNIPPETS[mode],
 	)
+	return page, pairs_total
+
+
+def generate_sheet(
+	original: dict[int, list[dict]],
+	ai_expanded: dict[int, list[dict]],
+	out_path: Path,
+	title: str = "prose-gate 配对标注表",
+	mode: str = "local",
+	scope: str = "sheet",
+) -> int:
+	"""写出自包含标注表 HTML；返回配对窗总数。"""
+	page, pairs_total = generate_sheet_html(original, ai_expanded, title=title, mode=mode, scope=scope)
+	out_path.parent.mkdir(parents=True, exist_ok=True)
+	out_path.write_text(page, encoding="utf-8")
 	return pairs_total
 
 
@@ -142,80 +263,10 @@ _PAIR_BLOCK = """<section class="pair" data-orig="{orig_id}" data-ai="{ai_id}" d
 _PAGE = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
-<style>
- :root{{--bg:#eef1f6;--card:#fff;--ink:#1c2430;--muted:#69758a;--line:#e3e8f0;
-  --orig:#0b7a4b;--ai:#2456c4;--origbg:#f2f9f5;--aibg:#f1f5fd;--accent:#2456c4}}
- *{{box-sizing:border-box}}
- body{{margin:0;background:var(--bg);color:var(--ink);
-  font:15px/1.9 system-ui,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}}
- .bar{{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:16px;
-  padding:12px 28px;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}}
- .bar h1{{font-size:18px;margin:0;letter-spacing:.3px}} .bar p{{margin:2px 0 0;font-size:12.5px;color:var(--muted)}}
- .bar-right{{display:flex;align-items:center;gap:12px}}
- .prog{{font-size:13px;color:var(--muted);background:#f2f5fa;border:1px solid var(--line);border-radius:999px;padding:4px 14px;white-space:nowrap}}
- button.exportbtn{{border:0;background:var(--accent);color:#fff;font-size:14px;font-weight:600;
-  padding:9px 20px;border-radius:10px;cursor:pointer;box-shadow:0 2px 10px rgba(36,86,196,.28)}}
- button.exportbtn:hover{{filter:brightness(1.07)}}
- .legend{{margin:20px auto 6px;max-width:1440px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 20px}}
- .legend summary{{cursor:pointer;font-weight:600;font-size:14px}}
- .lb{{margin:7px 0;font-size:13.5px;color:#39445a}} .lb i{{color:var(--muted)}}
- .dot{{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 6px 0 2px}}
- main{{max-width:1440px;margin:0 auto;padding:4px 24px 90px}}
- h2{{font-size:14px;font-weight:700;color:var(--muted);margin:34px 4px 10px;letter-spacing:1px}}
- .pair{{display:none;background:var(--card);border:1px solid var(--line);border-radius:16px;
-  box-shadow:0 1px 3px rgba(28,36,48,.05);padding:16px 18px;margin:14px 0}}
- .pair.cur{{display:block}}
- .pair>h3{{margin:0 0 12px;font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.5px}}
- .doneflag{{color:var(--orig);margin-left:10px;font-weight:700}}
- .cols{{display:flex;gap:16px;align-items:flex-start}}
- .col{{flex:1 1 0;min-width:0;border-radius:12px;padding:10px 12px}}
- .col.orig{{background:var(--origbg);border:1px solid #d5e9dd}}
- .col.ai{{background:var(--aibg);border:1px solid #d7e2f8}}
- .colhead{{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px;margin:2px 0 8px}}
- .badge{{font-size:11.5px;font-weight:700;color:#fff;border-radius:999px;padding:2px 11px;letter-spacing:1px}}
- .orig .badge{{background:var(--orig)}} .ai .badge{{background:var(--ai)}}
- .colhead code{{font-size:11px;color:var(--muted);font-weight:400;overflow:hidden;text-overflow:ellipsis}}
- .zero{{margin-left:auto;border:1px solid var(--line);background:#fff;color:var(--muted);
-  font-size:12px;border-radius:8px;padding:3px 10px;cursor:pointer}}
- .zero:hover{{color:var(--ink);border-color:#c6cfdd}}
- table{{width:100%;border-collapse:collapse}}
- td{{border-top:1px dashed var(--line);padding:7px 6px;vertical-align:top}}
- tr:first-child td{{border-top:0}}
- .pn{{width:26px;color:#9aa5b8;font-size:12px;text-align:right;padding-top:9px}}
- .pt{{width:44%;font-size:14.5px}}
- .pc{{white-space:nowrap}}
- .chip{{display:inline-flex;margin:2px 3px 2px 0;cursor:pointer;-webkit-user-select:none;user-select:none}}
- .chip input{{position:absolute;opacity:0;pointer-events:none}}
- .chip span{{border:1.5px solid var(--c);color:var(--c);border-radius:999px;padding:1px 10px;
-  font-size:12.5px;line-height:1.75;transition:background .12s,color .12s,filter .12s}}
- .chip:hover span{{filter:brightness(.92)}}
- .chip input:checked+span{{background:var(--c);color:#fff;font-weight:600}}
- .ev td{{border-top:0;padding-top:0}}
- .evc{{font-size:12px;color:var(--muted)}}
- .evc input{{width:92%;border:0;border-bottom:1px dashed #c9d2e0;background:transparent;
-  font-size:12.5px;color:var(--ink);padding:3px 2px;outline:none}}
- .evc input:focus{{border-bottom:1.5px solid var(--accent)}}
- .evc input.missing{{border-bottom:2px solid #d64545}}
- .nav{{position:sticky;bottom:0;z-index:20;display:flex;gap:10px;align-items:center;justify-content:center;
-  padding:10px 16px;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-top:1px solid var(--line)}}
- .nav button{{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 18px;
-  font-size:14px;cursor:pointer;color:var(--ink)}}
- .nav button:hover{{border-color:#c6cfdd}}
- .nav .primary{{background:var(--accent);color:#fff;border:0;font-weight:600;box-shadow:0 2px 10px rgba(36,86,196,.28)}}
- .nav .cnt{{font-size:13px;color:var(--muted);min-width:110px;text-align:center}}
- .grid{{display:none;position:fixed;left:0;right:0;bottom:58px;margin:0 auto;max-width:1440px;
-  background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;z-index:30;
-  flex-wrap:wrap;gap:6px;box-shadow:0 -4px 24px rgba(28,36,48,.12)}}
- .grid.open{{display:flex}}
- .grid button{{width:36px;height:30px;border:1px solid var(--line);background:#fff;border-radius:7px;
-  font-size:12px;cursor:pointer;color:var(--muted)}}
- .grid button.done{{background:var(--orig);border-color:var(--orig);color:#fff}}
- .grid button.curc{{outline:2px solid var(--accent);outline-offset:1px}}
- @media (max-width:1100px){{.cols{{flex-direction:column}}.pt{{width:auto}}}}
-</style></head><body>
+<style>{css}</style></head><body>
 <header class="bar">
   <div><h1>{title}</h1><p>{pairs} 配对窗 · 逐窗标注：勾选 → 补证据 → 保存并下一窗（自动存本地，刷新不丢）· 相对性标签先看整栏节奏</p></div>
-  <div class="bar-right"><span id="prog" class="prog">0/{pairs}</span><button id="export" class="exportbtn" type="button">导出 labels.jsonl</button></div>
+  <div class="bar-right"><span id="stats" class="stats">–</span><span id="prog" class="prog">0/{pairs}</span><button id="export" class="exportbtn" type="button">导出 labels.jsonl</button></div>
 </header>
 <details open class="legend"><summary>8 标签判定标准与边界（点击折叠 · 建议随手对照）</summary><div id="labels"></div></details>
 <main id="pairs">
@@ -224,8 +275,10 @@ _PAGE = """<!DOCTYPE html>
 <div id="grid" class="grid"></div>
 <nav class="nav">
   <button id="prev" type="button">‹ 上一窗</button>
+  <button id="skip" type="button">跳过</button>
   <button id="gridToggle" type="button">☰ 概览</button>
   <span class="cnt" id="cnt"></span>
+  <button id="flag" type="button">⚑ 存疑</button>
   <button id="next" class="primary" type="button">保存并下一窗 ›</button>
 </nav>
 <pre id="out" style="display:none"></pre>
@@ -233,14 +286,15 @@ _PAGE = """<!DOCTYPE html>
 const LABELS = {labels};
 const labelsVersion = "{labelsVersion}";
 const STORE_KEY = 'prose-gate-sheet:' + document.title;
+const SCOPE = "{scope}";
 document.getElementById('labels').innerHTML = LABELS.map(d =>
   `<div class="lb"><span class="dot" style="background:${{d.color}}"></span><b>${{d.short}}（${{d.key}}）</b> ${{d.rubric}} <i>边界：${{d.boundary}}</i></div>`).join('');
 
 const pairs = Array.from(document.querySelectorAll('.pair'));
 let store = {{}};
 let storageOk = true;
-try {{ store = JSON.parse(localStorage.getItem(STORE_KEY) || '{{}}'); }}
-catch (e) {{ storageOk = false; alert('浏览器禁用了本地存储（file:// 场景偶见）：进度无法持久化，请每窗标完及时导出。'); }}
+async function loadStore() {{ {loadStore} }}
+async function persistStore(recs) {{ {persist} }}
 
 document.querySelectorAll('.pair .zero').forEach(btn => btn.addEventListener('click', () => {{
   btn.closest('.col').querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
@@ -292,7 +346,7 @@ function findMissingEvidence(pair) {{
   return missing;
 }}
 
-function saveCurrent(silent) {{
+async function saveCurrent(silent) {{
   const pair = pairs[cur];
   let missing = findMissingEvidence(pair);
   if (missing.length && !silent) {{
@@ -304,8 +358,10 @@ function saveCurrent(silent) {{
     const cb = m.col.querySelector(`input[type=checkbox][data-p="${{m.p}}"][data-k="${{m.key}}"]`);
     if (cb) cb.checked = false;
   }});
-  pairRecords(pair).forEach(rec => store[rec.windowId] = rec);
-  if (storageOk) try {{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }} catch (e) {{}}
+  const recs = pairRecords(pair);
+  recs.forEach(rec => {{ if (pendingFlag) rec.flag = true; store[rec.windowId] = rec; }});
+  await persistStore(recs);
+  setPendingFlag(false);
   pair.classList.add('done');
   const h3 = pair.querySelector('h3');
   if (!h3.querySelector('.doneflag')) h3.insertAdjacentHTML('beforeend', '<span class="doneflag">✓ 已保存</span>');
@@ -333,10 +389,21 @@ function restore(pair) {{
 }}
 
 let cur = 0;
+let pendingFlag = false;
+function setPendingFlag(v) {{
+  pendingFlag = v;
+  document.getElementById('flag').classList.toggle('on', v);
+}}
+function currentFlagged() {{
+  const p = pairs[cur];
+  const rec = store[p.dataset.orig];
+  return !!(rec && rec.flag);
+}}
 function show(i) {{
   cur = Math.max(0, Math.min(pairs.length - 1, i));
   pairs.forEach((p, idx) => p.classList.toggle('cur', idx === cur));
   restore(pairs[cur]);
+  setPendingFlag(currentFlagged());
   document.getElementById('cnt').textContent = (cur + 1) + '/' + pairs.length + (isDone(pairs[cur]) ? ' ✓' : '');
   document.querySelector('main').scrollIntoView({{behavior: 'instant', block: 'start'}});
   syncGrid();
@@ -347,6 +414,12 @@ function isDone(pair) {{
 function upd() {{
   const done = pairs.filter(isDone).length;
   document.getElementById('prog').textContent = done + '/' + pairs.length;
+  // 标签命中统计（已保存记录聚合，标注时看缺陷画像成形）
+  const hits = {{}};
+  LABELS.forEach(d => hits[d.key] = 0);
+  Object.values(store).forEach(rec => rec.labels.forEach(row =>
+    Object.keys(row).forEach(k => {{ if (row[k] === 1) hits[k] = (hits[k] || 0) + 1; }})));
+  document.getElementById('stats').textContent = LABELS.map(d => d.short + ' ' + (hits[d.key] || 0)).join(' · ');
 }}
 function syncGrid() {{
   const grid = document.getElementById('grid');
@@ -355,14 +428,18 @@ function syncGrid() {{
     const b = document.createElement('button');
     b.textContent = idx + 1;
     if (isDone(p)) b.classList.add('done');
+    const rec = store[p.dataset.orig];
+    if (rec && rec.flag) b.classList.add('flagged');
     if (idx === cur) b.classList.add('curc');
     b.addEventListener('click', () => {{ grid.classList.remove('open'); show(idx); }});
     grid.appendChild(b);
   }});
 }}
 document.getElementById('prev').addEventListener('click', () => show(cur - 1));
-document.getElementById('next').addEventListener('click', () => {{
-  if (!saveCurrent(false)) return;
+document.getElementById('skip').addEventListener('click', () => show(cur + 1));
+document.getElementById('flag').addEventListener('click', () => setPendingFlag(!pendingFlag));
+document.getElementById('next').addEventListener('click', async () => {{
+  if (!(await saveCurrent(false))) return;
   show(cur + 1);
 }});
 document.getElementById('gridToggle').addEventListener('click', () => document.getElementById('grid').classList.toggle('open'));
@@ -372,8 +449,8 @@ document.addEventListener('change', e => {{
     upd();
   }}
 }});
-function doExport() {{
-  saveCurrent(true);  // 当前窗先落库再导出（不弹缺证据确认，缺的作废）
+async function doExport() {{
+  await saveCurrent(true);  // 当前窗先落库再导出（不弹缺证据确认，缺的作废）
   const lines = pairs.flatMap(p => pairRecords(p))
     .filter(rec => store[rec.windowId])
     .map(rec => JSON.stringify(store[rec.windowId], ensureAsciiReplacer));
@@ -389,10 +466,14 @@ function doExport() {{
 document.querySelectorAll('button.exportbtn').forEach(btn => btn.addEventListener('click', () => doExport()));
 function ensureAsciiReplacer(k, v) {{ return v; }}
 
-// 初始化：恢复完成态，跳到第一个未保存窗（已标的不再重复标）
-pairs.forEach(p => {{ if (isDone(p)) p.classList.add('done'); }});
-syncGrid(); upd();
-show(pairs.findIndex(p => !isDone(p)) === -1 ? 0 : pairs.findIndex(p => !isDone(p)));
+// 初始化：载入已存标注 → 恢复完成态 → 跳到第一个未保存窗（已标的不再重复标）
+(async function init() {{
+  await loadStore();
+  pairs.forEach(p => {{ if (isDone(p)) p.classList.add('done'); }});
+  syncGrid(); upd();
+  const firstUnsaved = pairs.findIndex(p => !isDone(p));
+  show(firstUnsaved === -1 ? 0 : firstUnsaved);
+}})();
 </script></body></html>"""
 
 

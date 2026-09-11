@@ -98,15 +98,17 @@ def chapter_line_counts(windows_path: Path) -> dict[int, int]:
 	return {no: len(indexes) for no, indexes in lines.items()}
 
 
-def ai_windows_from_text(text: str, chapter_no: int, book_id: str = "ywjs-ai") -> list[dict]:
-	"""AI 扩写文本 → 窗口记录（source="ai-expanded"，含特征，与原文记录同构）。"""
+def ai_windows_from_text(
+	text: str, chapter_no: int, book_id: str = "ywjs-ai", source: str = "ai-expanded"
+) -> list[dict]:
+	"""AI 生成文本 → 窗口记录（source：ai-expanded=配对仿写 / ai-generated=独立注入）。"""
 	units = re_split_paragraphs(text)
 	return [
 		{
 			"windowId": w.window_id,
 			"bookId": book_id,
 			"chapterNo": w.chapter_no,
-			"source": "ai-expanded",
+			"source": source,
 			"lineIndexes": [u.line_index for u in w.units],
 			"texts": list(w.texts),
 			"features": paragraph_features(w.texts),

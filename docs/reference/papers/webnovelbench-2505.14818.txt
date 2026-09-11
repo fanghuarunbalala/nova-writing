@@ -1,0 +1,1222 @@
+WebNovelBench: Placing LLM Novelists on the Web Novel Distribution
+Leon Lin1, Jun Zheng2, Haidong Wang2 1Nanyang Technological University, 2Sun Yat-Sen University liangtao.lin@ntu.edu.sg, {zhengj98, wanghd7}@mail2.sysu.edu.cn
+https://github.com/OedonLestrange42/webnovelbench https://huggingface.co/datasets/Oedon42/webnovelbench
+
+arXiv:2505.14818v1 [cs.CL] 20 May 2025
+
+Abstract
+Robustly evaluating the long-form storytelling capabilities of Large Language Models (LLMs) remains a significant challenge, as existing benchmarks often lack the necessary scale, diversity, or objective measures. To address this, we introduce WebNovelBench, a novel benchmark specifically designed for evaluating longform novel generation. WebNovelBench leverages a large-scale dataset of over 4,000 Chinese web novels, framing evaluation as a synopsisto-story generation task. We propose a multifaceted framework encompassing eight narrative quality dimensions, assessed automatically via an LLM-as-Judge approach. Scores are aggregated using Principal Component Analysis and mapped to a percentile rank against humanauthored works. Our experiments demonstrate that WebNovelBench effectively differentiates between human-written masterpieces, popular web novels, and LLM-generated content. We provide a comprehensive analysis of 24 stateof-the-art LLMs, ranking their storytelling abilities and offering insights for future development. This benchmark provides a scalable, replicable, and data-driven methodology for assessing and advancing LLM-driven narrative generation.
+1 Introduction
+Can Large Language Models (LLMs) generate stories that surpass human-written ones? Recent breakthroughs, exemplified by models like GPT4o and Deepseek-R1 (DeepSeek-AI et al., 2025a), underscore their remarkable ability to produce coherent, imaginative, and contextually nuanced narratives. This raises intriguing questions: How proficient are today's LLMs in story generation, and how do their outputs compare to human-authored works?
+Evaluating LLM performance in this open-ended domain remains a significant challenge. While prior research has explored story generation evaluation (Guan et al., 2021; Liu et al., 2024; Paech,
+
+2024; Ismayilzada et al., 2025), these efforts often face limitations such as small dataset sizes or insufficient story diversity, hindering widespread adoption. This contrasts with fields like code generation and mathematical reasoning, where benchmarks such as CodeForces Rating (Quan et al., 2025) and American Invitational Mathematics Examination 2024 (AIME 2024) (MAA, 2024) serve as widely accepted standards.
+Inspired by such successes, we propose WebNovelBench, a comprehensive and intuitive benchmark for story generation guided by three key principles:
+· Broad Data Foundation: Utilizes diverse, popular human-authored works.
+· Representative Tasks: Covers diverse storytelling styles, themes, and complexities (details in Section 3.1).
+· Automated and Objective Evaluation: Minimizes subjectivity via robust, consistent automated methods.
+We leverage 4,000+ popular Chinese web novels (>10,000 readers each) for a synopsis-to-story generation task. An LLM-as-Judge approach evaluates stories across eight narrative dimensions. Validation with Mao Dun Literature Prize novels, which scored high (Figure 1), confirms alignment with human judgment. WebNovelBench thus offers automatic assessment of LLM storytelling capabilities without extensive manual intervention, establishing a standardized framework for comparison against human-authored content. In summary, our main contributions are:
+· We introduce WebNovelBench, a largescale, data-driven evaluation framework for story generation, accurately ranking humanauthored and LLM-generated stories via distribution analysis.
+
+Qwen2.5-72B
+
+GPT-4o mini
+
+Qwen2.5-7B Doubao-1.5-pro-32k
+
+Web Novels
+
+DeepSeek-V3
+
+Classic Works
+
+Low
+
+InternLM2.5-20B
+
+Kimi (moonshot-v1-32k)
+
+GPT-4o-2024-11-20
+
+Qwen2.5-14B
+
+ERNIE-4.0-8k
+
+LLaMA-3.3-70B GLM-4-9B
+
+Hunyuan-Turbo
+
+Qwen2.5-32B
+
+Medium
+
+High
+o3-mini GPT-4.1 QwQ-32B Hunyuan-T1 Qwen3-32B Claude 3.7 Sonnet DeepSeek-V3-0324 Gemini 2.5 Pro DeepSeek-R1 Qwen3-235B-A22B
+
+Figure 1: Web Novel Dataset Distribution and LLM Placement. Our web novel dataset's quality distribution, with Low, Medium, and High zones (95% CIs). The red curve (classic literary works) validates the high-quality zone. Positions of 24 LLMs indicate their performance relative to this corpus.
+
+· We define eight evaluation dimensions for Chinese story quality, employing a validated LLM-as-Judge mechanism for robust automated evaluation.
+· We conduct a comprehensive evaluation of 24 state-of-the-art LLMs, ranking their storytelling abilities relative to human-authored works and offering insights for future development.
+2 Related Work
+2.1 LLM General Benchmark
+General LLM benchmarks like MMLU (Hendrycks et al., 2021) and its variants (Wang et al., 2024; Yue et al., 2024), or dynamic benchmarks like MixEval (Ni et al., 2024), are invaluable for assessing broad capabilities such as reasoning and knowledge recall. However, they often lack the specific, nuanced criteria required to effectively evaluate creative, open-ended tasks like long-form story generation, particularly regarding narrative quality, coherence, and creativity. This highlights the need for specialized benchmarks in creative domains, akin to CodeForces Rating (Quan et al., 2025) and SWE-Bench Verified (Jimenez et al., 2024) or AIME 2024 (MAA, 2024) for coding and
+
+mathematics.
+2.2 Story Generation Benchmark
+Previous work on evaluating LLM-generated stories has explored creativity (Ismayilzada et al., 2025; Paech, 2024) and the correlation of automatic metrics with human judgment (Guan et al., 2021). For instance, Ismayilzada et al. (2025) assessed LLM creativity in short story generation but used only four samples per LLM. EQ-Bench (Paech, 2024) offers a creative writing score based on a limited set of thirty-two prompts. OpenMEVA (Guan et al., 2021) provided a framework for evaluating automatic metrics but did not focus on broad dataset diversity. These existing efforts often suffer from limitations such as small dataset sizes or insufficient story diversity, hindering the establishment of a universally accepted standard. Our work aims to address this gap by emphasizing a large, diverse dataset derived from widely-read web novels and a robust, automated evaluation protocol.
+2.3 LLM-as-a-Judge
+Automated evaluation for open-ended text generation increasingly employs the LLM-as-a-Judge paradigm (Zheng et al., 2023), where LLMs assess outputs without reference texts (Li et al., 2024; Kas-
+
+ner and Dusek, 2024). While promising for aligning with human preferences, LLM-as-Judge reliability is a concern, with research focusing on fairness and potential biases (Shi et al., 2025; Zhang et al., 2023; Ye et al., 2024). For instance, Ye et al. (2024) introduced CALM to identify and quantify biases in LLM judges. This body of work underscores the importance of careful design and validation of the LLM-as-Judge component, which we address in WebNovelBench to ensure reliable and fair story evaluation based on multi-dimensional criteria.
+3 Benchmark Construction
+3.1 Dataset
+We curated a dataset from over 10,000 Chinese web novels (published 2013-2020) via several preprocessing steps:
+· Deduplication. Some text files may contain highly similar content under different titles, indicating that they represent the same novel. Directly comparing exact character matches is insufficient for identifying duplicates. To address this, we employed difflib1 to compute pairwise similarity scores and removed novels with a similarity score greater than 0.9.
+· Chapter Parsing. Web novels are typically long-form narratives presented in a serialchapter format. However, the raw crawled texts lacked explicit chapter delimiters. To extract chapters, we designed regular expression patterns tailored to common chapter formatting styles in Chinese web novels. Novels containing fewer than ten chapters were excluded, as they did not meet our definition of "long-form" or suggested incomplete parsing.
+· Tail Author Removal. It is commonly observed that successful authors tend to publish multiple novels over time. Based on this observation, we compiled the list of all authors and excluded novels written by those with the fewest works. After this filtering step, we retained a final set of 4,000 web novels.
+The curated 4,000 novels ensure 'Representative Tasks' by covering diverse genres (e.g., Eastern Fantasy: 1281, General Realism: 1255, Western
+1https://docs.python.org/3/library/difflib. html
+
+Fantasy: 670, Historical: 234, plus Sci-Fi, Suspense, Romance with varied subthemes like 'Original World Setting'). This breadth reflects popular web fiction complexities.
+For the synopsis-to-story task, we utilize Doubao-pro-32k2 to generate a 'synopsis' (main characters, key plot points, important scenes) for ten random consecutive chapters from each novel. This yielded ten <chapter content, synopsis> pairs per novel (details in Appendix A).
+3.2 Metric
+We evaluate narrative quality using eight key dimensions (Table 1) covering stylistic and structural elements (e.g., literary devices, character consistency). This provides a nuanced assessment beyond surface-level fluency.
+3.3 Scoring Method
+To rank LLM works against our 4,000 humanauthored web novels, we combine Principal Component Analysis (PCA) (Hotelling, 1933) for multidimensional score aggregation and Empirical Cumulative Distribution Function (ECDF) (Conover, 1999) for percentile ranking. Score Aggregation via PCA. Given a dataset of N samples, where each sample is evaluated along d dimensions, we first normalize all dimension scores using z-score standardization:
+
+zij
+
+=
+
+xij - j
+
+µj (i
+
+
+
+[1, N ], j
+
+
+
+[1, d]),
+
+(1)
+
+where xij is the raw score of the i-th sample in the j-th dimension, and µj and j are the mean and standard deviation of the j-th dimension across all samples.
+We then perform PCA on the standardized data to extract the first principal component, whose normalized loading vector w = (w1, w2, . . . , wd) represents the relative importance of each dimension. The aggregated composite score si for the i-th sample is then computed as a weighted sum:
+
+d
+
+si = wj zij
+
+(2)
+
+j=1
+
+Percentile Ranking via ECDF. To translate raw scores into interpretable relative rankings, we apply the ECDF over all aggregated scores {s1, s2, . . . , sN }:
+
+2https://www.volcengine.com/product/doubao
+
+Crawling Web Novels
+
+Data Curation: Deduplication Chapter Parsing Tail Author Removal
+
+Story-to-Synopsis Extraction: Main Characters Main Plots Important Scenes
+
+Synopsis-to-Story Dataset (4,000 novels * 10 chapters)
+
+(1) Data Preparation Phase
+
+Select by Rank
+
+LLM-as-Judge Scoring
+
+PCA+ECDF
+
+Eight Quality Dimensions
+
+Classic Works Verification
+
+(2) Distribution Construction
+
+Distribution
+
+Synopsis-to-Story Dataset Subset
+
+LLM Generation
+
+Map To Distribution
+
+LLM-as-Judge Scoring
+
+(3) Model Evaluation
+
+New Data
+
+LLM-as-Judge Scoring
+
+Measure Data Quality
+
+(4) Ad Hoc Evaluation
+
+Further Use
+
+Figure 2: Framework of Our Method. Our benchmark framework consists of four major components: (1) Data Preparation Phase: We collect and curate a large web novel dataset, and use Doubao for story-to-synopsis extraction to build a 4,000 novels synopsis-to-story dataset. (2) Distribution Construction: Each story is scored across eight quality dimensions using LLM-as-judge, followed by PCA+ECDF to form a quality distribution benchmark. Classic literary works are used to validate the high end of the distribution. (3) Model Evaluation: LLMs generate stories from selected subsets of the dataset. Their outputs are scored and mapped onto the distribution to assess model performance. (4) Ad Hoc Evaluation: New data can be scored and aligned with the benchmark for measuring data quality and supporting further applications.
+
+1N
+
+ECDF(x) = N
+
+I(si  x),
+
+(3)
+
+i=1
+
+where I(·) is the indicator function. The ECDF provides a percentile score in the range [0, 1], representing the proportion of samples with scores less than or equal to x.
+Given a new LLM-generated sample with aggregated score snew, its percentile rank is Pnew = ECDF(snew).
+This percentile reflects the model's performance relative to the full empirical distribution of the reference dataset--indicating the level at which stories generated by a LLM are comparable to those written by humans. By evaluating the model across batches of test samples, we can estimate the LLM's overall writing ability.
+Let B = {sL(1L)M, s(L2L)M, . . . , s(LMLM) } be a set of aggregated scores for a batch of M LLM-generated samples. The estimated writing level is then defined as the average percentile:
+
+P^LLM
+
+=
+
+1 M
+
+M
+
+ECDF
+
+s(LmLM)
+
+(4)
+
+m=1
+
+The value P^LLM  [0, 1] represents the expected percentile rank of the LLM's output relative to the distribution of human-written texts in the reference dataset.
+
+4 Experiments and Results
+4.1 Experimental Setup
+Due to resource limits, our evaluation dataset uses 100 web novels (one per percentile from the 4,000novel distribution), with 10 synopsis-to-story pairs per novel (1,000 test samples). An LLM's overall rank is its average percentile across these 100 books.
+LLMs (open-source and proprietary) were accessed via APIs with a standardized system prompt and constant generation settings (4096 max tokens, temperature 0.6, eight evaluation criteria in prompt; see Appendix A). Outputs were evaluated by Deepseek-V3 using a consistent evaluation
+
+Metric
+D1: Use of Literary Devices
+D2: Richness of Sensory Detail
+D3: Balance of Character Presence
+D4: Distinctiveness of Character Dialogue
+D5: Consistency of Characterisation
+D6: Atmospheric and Thematic Alignment
+D7: Contextual Appropriateness
+D8: Scene-to-Scene Coherence
+
+        
+
+Explanation
+
+Weight
+
+Based on the quantity and quality of rhetorical 0.1304 devices like metaphor and symbolism
+
+Frequency of visual, auditory, and other sensory descriptions
+
+0.1160
+
+Frequency, dialogue proportion, and psychological depth of each character
+
+0.1152
+
+Whether dialogue reflects distinct personalities
+
+0.1171
+
+Whether language and actions align with character identity
+
+0.1377
+
+Whether scenes support the overall atmosphere and themes
+
+0.1290
+
+Whether settings match time/place/cultural background
+
+0.1281
+
+Whether scene transitions are smooth and natural
+
+0.1263
+
+Table 1: Narrative Evaluation Metrics and PCA-Derived Weights. This table lists the eight dimensions used to evaluate narrative quality. Each weight reflects the metric's relative importance, derived through PCA on web novels scores.
+
+prompt. For details on the robustness analysis, see Section 5.3 below.
+4.2 Main Experiments
+We evaluate a total of 13 open source models and 11 closed source models on our benchmark. Figure 3 illustrates the performance of these frontier models across eight distinct narrative evaluation dimensions and overall effect.
+Top models (Qwen3-235B-A22B (Yang et al., 2025), DeepSeek-R1 (DeepSeek-AI et al., 2025a), Gemini-2.5-Pro) score high (3.5-4.6) across dimensions; Qwen3-235B-A22B achieves a 5.21 norm score, indicating strong alignment with highquality human writing. Mid-tier models (e.g., GPT4o, DeepSeek-V3 (DeepSeek-AI et al., 2025b)) show varied performance (scores 2.5-3.8), highlighting areas like sensory detail and literary device use for improvement. Lower-ranked models (e.g., GLM-4-9B-chat (GLM et al., 2024), LLaMA-38B (Grattafiori et al., 2024)) perform consistently poorly (less than 2.0 norm score), especially in literary devices and character dialogue, indicating significant room for improvement, particularly for open-source or smaller LLMs.
+An intriguing observation from our analysis is the relatively narrow performance gap between top closed-source models (such as Claude-3-7-Sonnet and GPT-4.1) and leading open-source models
+
+(Qwen series and DeepSeek models), suggesting that open-source communities are rapidly bridging the performance divide traditionally held by proprietary models.
+Overall, this benchmark effectively captures distinct strengths and weaknesses among current LLMs. While the most advanced models achieve near-perfect scores within our distribution, demonstrating their strong performance on the story-tosynopsis dataset, this does not diminish the value of the benchmark. On the contrary, it validates our original intuition. Our primary goal is to evaluate the story generation capabilities of contemporary LLMs, and the results suggest that leading models have reached a level comparable to toptier works in web novels. This study primarily presents a methodological framework; for more fine-grained evaluation, future work may involve collecting higher-quality reference texts or designing more nuanced evaluation dimensions.
+4.3 Comparison with Other Benchmarks
+To contextualize our contribution, we compare WebNovelBench with existing benchmarks for story generation evaluation, as summarized in Table 2. OpenMEVA (Guan et al., 2021) provides a framework for evaluating automatic metrics using an existing dataset of 400 stories. It aligns with human preference and utilizes 8 evaluation dimen-
+
+Models (w/ Percentile)
+
+Qwen3-235B-A22B (99.9%) 4.52
+
+4.59
+
+3.56
+
+3.83
+
+4.53
+
+4.61
+
+4.54
+
+4.25
+
+5.21
+
+DeepSeek-R1 (99.5%) 4.29
+
+4.47
+
+3.43
+
+3.97
+
+4.39
+
+4.48
+
+4.38
+
+3.94
+
+4.87
+
+5.0
+
+Gemini-2-5-Pro (99.0%) 4.04
+
+4.02
+
+3.49
+
+3.88
+
+4.20
+
+4.18
+
+4.13
+
+3.88
+
+4.49
+
+DeepSeek-V3-0324 (98.7%) 4.08
+
+4.29
+
+3.29
+
+3.72
+
+4.22
+
+4.30
+
+4.22
+
+3.85
+
+4.49
+
+Claude-3-7-Sonnet (98.7%) 3.77
+
+3.84
+
+3.70
+
+3.88
+
+4.07
+
+3.98
+
+4.02
+
+3.91
+
+4.35
+
+4.5
+
+Qwen3-32B (98.6%) 4.16
+
+4.38
+
+3.25
+
+3.56
+
+4.22
+
+4.39
+
+4.23
+
+3.83
+
+4.49
+
+Hunyuan-T1 (98.5%) 4.12
+
+4.34
+
+3.26
+
+3.63
+
+4.22
+
+4.34
+
+4.23
+
+3.78
+
+4.47
+
+QwQ-32B (98.3%) 4.12
+
+4.28
+
+3.26
+
+3.77
+
+4.20
+
+4.29
+
+4.19
+
+3.74
+
+4.44
+
+GPT-4-1 (98.2%) 3.86
+
+3.99
+
+3.38
+
+3.65
+
+4.12
+
+4.12
+
+4.07
+
+3.87
+
+4.29
+
+4.0
+
+o3-mini (96.2%) 3.93
+
+3.90
+
+3.24
+
+3.45
+
+4.01
+
+4.04
+
+3.99
+
+3.77
+
+4.06
+
+GPT-4o (69.1%) 3.27
+
+3.25
+
+3.15
+
+2.92
+
+3.71
+
+3.66
+
+3.69
+
+3.48
+
+3.24
+
+DeepSeek-V3 (64.1%) 2.86
+
+3.14
+
+3.21
+
+3.08
+
+3.71
+
+3.51
+
+3.66
+
+3.43
+
+3.12
+
+3.5
+
+GPT-4o-mini (56.2%) 2.86
+
+3.02
+
+3.19
+
+2.97
+
+3.62
+
+3.46
+
+3.57
+
+3.33
+
+2.95
+
+Qwen2-5-72B-Instruct (41.4%) 2.42
+
+2.83
+
+3.19
+
+2.78
+
+3.51
+
+3.25
+
+3.47
+
+3.26
+
+2.63
+
+Qwen2-5-7B-Instruct (39.0%) 2.69
+
+2.97
+
+3.05
+
+2.63
+
+3.43
+
+3.31
+
+3.40
+
+3.22
+
+2.57
+
+3.0
+
+Kimi(moonshot-v1-32k) (37.5%) 2.63
+
+2.77
+
+3.07
+
+2.69
+
+3.42
+
+3.27
+
+3.41
+
+3.23
+
+2.54
+
+Doubao-1.5-pro-32k (31.1%) 2.42
+
+2.93
+
+2.97
+
+2.73
+
+3.38
+
+3.19
+
+3.34
+
+3.11
+
+2.39
+
+Qwen2-5-32B-Instruct (29.7%) 2.50
+
+2.78
+
+2.99
+
+2.55
+
+3.36
+
+3.21
+
+3.35
+
+3.15
+
+2.36
+
+InternLM2-5-20B-chat (29.3%) 2.64
+
+2.57
+
+3.05
+
+2.52
+
+3.33
+
+3.19
+
+3.35
+
+3.15
+
+2.36
+
+2.5
+
+Hunyuan-Turbo (16.8%) 2.22
+
+2.50
+
+2.92
+
+2.47
+
+3.20
+
+2.98
+
+3.19
+
+3.05
+
+2.01
+
+Qwen2-5-14B-Instruct (16.1%) 2.24
+
+2.51
+
+2.93
+
+2.47
+
+3.19
+
+3.00
+
+3.17
+
+3.04
+
+2.01
+
+ERNIE-4-0-8k (13.3%) 2.15
+
+2.37
+
+2.91
+
+2.44
+
+3.14
+
+2.94
+
+3.12
+
+3.02
+
+1.89
+
+2.0
+
+LLaMA-3-3 (9.0%) 1.99
+
+2.23
+
+2.87
+
+2.30
+
+3.03
+
+2.85
+
+3.03
+
+2.97
+
+1.68
+
+GLM-4-9B-chat (7.7%) 2.14
+
+2.22
+
+2.81
+
+2.31
+
+3.00
+
+2.88
+
+3.01
+
+2.93
+
+1.66
+
+D1
+
+D2
+
+D3
+
+D4
+
+D5
+
+D6
+
+D7
+
+D8
+
+Norm Score
+
+Evaluation Dimensions
+
+Figure 3: LLM Performance Heatmap Across Narrative Dimensions. Shows average scores (1-5 scale) for 24 LLMs on eight dimensions, sorted by percentile rank. Final column is PCA-derived weighted norm score. Higher scores indicate better alignment with quality human writing.
+
+Benchmark
+
+Dataset Information
+
+Evaluation Method
+
+Data Source
+
+Testing Samples
+
+Human Preference Align-
+
+Dimension
+
+ment
+
+Weights
+
+Evaluation Dimension
+
+OpenMEVA (Guan et al., 2021)
+
+Existing dataset 400 stories
+
+
+
+
+
+8
+
+AlignBench Writing Ability (Liu et al., 2024)
+
+Self-constructed 75 stories
+
+
+
+
+
+5
+
+EQ-Bench Longform Creative Writing (Paech, 2024) Self-constructed 12 stories, each with 8 chapters
+
+
+
+
+
+14
+
+Ismayilzada et al. (2025)
+
+Existing dataset 4 stories
+
+
+
+
+
+4
+
+WebNovelBench (ours)
+
+Web novels
+
+100 stories, each with 10 chapters 
+
+
+
+8
+
+Table 2: Comparison of Other Benchmarks
+
+sions. However, it does not employ weighted dimensions for score aggregation, potentially treating all aspects of narrative quality as equally important, which might not reflect nuanced human judgment. AlignBench Writing Ability (Liu et al., 2024) uses a self-constructed dataset of 75 stories. While it considers human preference and evaluates across 5 dimensions, its dataset size is relatively small, which might limit the diversity of narrative styles and scenarios covered. Similar to OpenMEVA, it does not incorporate dimension weights in its scoring. EQ-Bench Longform Creative Writing (Paech, 2024) focuses on long-form creative writing with a self-constructed dataset of 12 stories, each comprising 8 chapters (totaling 96 evaluation
+
+instances). It employs a comprehensive set of 14 dimensions. However, according to the available information, it does not explicitly align its dataset construction with broad human preference (e.g., via popularity metrics of source texts) and also lacks a weighted approach to aggregating its numerous dimensional scores. The work by Ismayilzada et al. (2025) evaluates creative short story generation using an existing dataset. While it aligns with human preference and uses 4 evaluation dimensions, its very small test set of only 4 stories per LLM significantly limits the robustness and generalizability of its findings. It also does not use weighted dimensions. In contrast, WebNovelBench offers several key advantages:
+
+· Scale and Diversity: Built on 4,000+ web novels, testing with 100 distinct stories (10 chapters each, 1,000 instances), ensuring wide genre/style coverage.
+· Inherent Human Preference Alignment: By using popular web novels (each with over 10,000 readers) as the source, our benchmark inherently captures broad human literary preferences.
+· Data-Driven Dimension Weighting: PCA derives weights for 8 narrative dimensions, providing a nuanced, objective assessment reflecting their relative importance in humanauthored works.
+· Comprehensive and Focused Evaluation: Eight carefully defined dimensions provide a thorough yet focused assessment of key storytelling elements.
+
+Density
+
+Density
+
+Use of Literary Devices
+
+0.8
+
+KDE
+
+Normal PDF
+
+0.6
+
+0.4
+
+0.2
+
+0.0 1.0
+1.0 0.8
+
+1.5
+
+2.0
+
+2.5
+
+3.0
+
+3.5
+
+4.0
+
+Score
+
+Distinctiveness of Character Dialogue
+
+KDE Normal PDF
+
+0.6
+
+0.4
+
+0.2
+
+0.0 1.5
+1.2 1.0
+
+2.0
+
+2.5
+
+3.0
+
+3.5
+
+4.0
+
+4.5
+
+Score
+
+Contextual Appropriateness
+
+KDE Normal PDF
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+2.5
+
+3.0
+
+3.5
+
+4.0
+
+4.5
+
+Score
+
+Density
+
+Density
+
+Density
+
+0.8 0.7 0.6 0.5 0.4 0.3 0.2 0.1 0.0
+1.0
+1.2 1.0
+
+Richness of Sensory Detail
+
+KDE Normal PDF
+
+1.5
+
+2.0
+
+2.5
+
+3.0
+
+3.5
+
+Score
+
+Consistency of Characterisation
+
+4.0
+KDE Normal PDF
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+2.5
+
+3.0
+
+3.5
+
+4.0
+
+4.5
+
+Score
+
+Scene-to-Scene Coherence
+
+1.75 KDE
+
+1.50
+
+Normal PDF
+
+1.25
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+2.0
+
+2.5
+
+3.0
+
+3.5
+
+4.0
+
+Score
+
+Density
+
+Density
+
+Density
+
+1.6 1.4 1.2 1.0 0.8 0.6 0.4 0.2 0.0
+2.25
+1.0
+0.8
+
+Balance of Character Presence KDE Normal PDF
+2.50 2.75 3.00 3.25 3.50 3.75 4.00 Score
+Atmospheric and Thematic Alignment KDE Normal PDF
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+2.0
+
+2.5
+
+3.0
+
+3.5
+
+4.0
+
+4.5
+
+Score
+
+Overall Distribution (Mean Score)
+
+1.2
+
+Mean KDE Normal PDF
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+2.0
+
+2.5
+
+3.0
+
+3.5
+
+4.0
+
+Mean Score
+
+Density
+
+Figure 4: Distributions of Narrative Metrics and Fitted Normal Curves. Each subplot shows the empirical distribution (solid line) of a narrative evaluation dimension across the web novel dataset, alongside the corresponding fitted normal distribution (dashed line). The comparison illustrates the varying shapes of real-world data and highlights where distributions deviate from normality. The bottom-right panel presents the overall distribution of mean scores.
+
+These features make WebNovelBench a robust, scalable, and replicable solution for assessing and advancing LLM-driven narrative generation, particularly for long-form stories in the Chinese web novel domain.
+5 Rationality Analysis
+5.1 Metric Analysis
+To assess the rationality and effectiveness of the proposed eight evaluation metrics, we conducted a detailed statistical analysis combining principal component analysis (PCA) and distributional visualization. Principal Component Analysis. PCA shows the first component explains 75.6% of variance (first three greater than 90%), indicating the metrics capture a dominant quality factor. Derived weights (11.5%-13.8%) are balanced, with 'Consistency of Characterisation' (Table 1) highest, reflecting its discriminative power.3 Distributional Characteristics. The probability density function (PDF) of each individual metric, obtained via kernel density estimation (KDE) (Parzen, 1962), is plotted against its bestfit normal distribution to evaluate shape characteristics (Figure 4). The majority of metrics (e.g., D2, D3, D4, and D6) display near-Gaussian behavior, implying smooth and well-behaved scoring distributions conducive to comparative assessment.
+3See Appendix D for further details.
+
+Metrics such as D1 (Use of Literary Devices) and D7 (Contextual Appropriateness) exhibit mild deviations from normality, with signs of skewness or slight multimodality. These deviations likely reflect the existence of content subgroups, for instance, differences in stylistic density between human and LLM-generated texts or variations in how explicitly context is embedded. Importantly, the averaged score across all dimensions yields an aggregate distribution that closely aligns with the Gaussian, further validating the integration of the metrics into a coherent composite score. Implication. PCA and distributional analyses confirm our metrics are well-structured, diverse, complementary, and robust, suitable for large-scale evaluation of human and LLM narratives.
+5.2 Classic Literature Comparison
+We validated our benchmark against 25 Mao Dun Literature Prize-winning novels (first 10 chapters each). As shown in Figure 1, these classics consistently scored in the high range, confirming our framework's ability to capture acknowledged literary merit.
+This comparative analysis not only aligns with human evaluative judgments but also affirms the anticipated quality hierarchy among the three text categories under study: classic works, web novels, and LLM-generated content. The findings validate the benchmark's sensitivity to nuanced differences in textual quality and its robustness in reflecting the
+
+relative literary value of diverse sources. Moreover, the stratification of LLM-generated outputs into three distinct quality tiers based on this distribution appears both credible and well-justified.
+5.3 LLM-as-Judge
+To eliminate human involvement in automatic evaluation, we adopt the LLM-as-Judge paradigm, employing Deepseek-V3 as the evaluator, which currently is one of the most advanced Chinese language models. Based on our intuition and empirical observations, models without explicit chain-ofthought reasoning tend to perform more efficiently and effectively on classification tasks of this nature. To mitigate position bias and context-length bias, issues shown to significantly impact pairwise comparison methods as demonstrated in Ye et al. (2024), we adopt a direct scoring approach, where the LLM evaluates each generated output independently. This method not only reduces systematic biases but also enhances flexibility and scalability. Notably, it allows for the direct assessment of single-generation outputs, which is particularly valuable for tasks such as dataset cleaning and screening, critical processes in the development of high-quality LLMs.
+
+Normalized Score
+
+1
+0.8
+0.6
+0.4
+0.2 Qian feng ji Bai lu yuan Dong cang ji
+0
+
+Bai men liu Jiangnan san bu qu Chen ai luo ding
+
+Ni zai gao yuan Xu Mao and His Daughters Funeral of a Muslim
+
+Cha ren san bu qu Li shi de tian kong Di er ge tai yang
+
+Web Novel Mean
+Mean Median
+Zhe bian feng jing Dong fang Chang hen ge
+
+Figure 5: Robustness Assessment of LLM-as-Judge. Boxplot of normalized scores for selected classic Chinese novels, based on 11 repeated evaluations using the LLM-as-judge framework. Each box shows the interquartile range (IQR) with the median (solid line) and mean (dashed line) marked. The majority of works demonstrate consistently high scores with narrow IQRs and minimal outliers, indicating the robustness and stability of model evaluations.
+To demonstrate the robustness of the LLM-asJudge approach, which is a concern of broad relevance, we conducted repeated experiments using a subset of classic works, which fall outside the distribution of our web novels benchmark. Specifically, we performed eleven independent evaluation rounds on the same dataset using identical
+
+Deepseek-V3 configurations. As shown in Figure 5, the boxplot exhibit high consistency, with an interquartile range (IQR) below 0.05 and a score variance within the 0.001 range, confirming the stability of both the model and the evaluation prompt design. These findings reinforce the reliability and credibility of our benchmark framework.
+5.4 Length Analysis
+To avoid introducing bias, we conducted an analysis of the length of model-generated outputs. The results indicate that most models closely adhered to the requested length or context window, producing outputs averaging between 800 and 1200 words. Notable exceptions include Claude 3.7 Sonnet and Gemini 2.5 Pro, which consistently generated significantly longer texts. Overall, output length remained relatively stable across models and did not emerge as a major differentiating factor under the 4096-token constraint. In future work, a scoring regularization term based on output length may be introduced to enhance robustness.4
+6 Conclusion
+WebNovelBench addresses challenges in evaluating LLM long-form storytelling. It uses 4,000+ Chinese web novels for a synopsis-to-story task. An automated pipeline with eight LLM-judged narrative dimensions and PCA+ECDF scoring provides percentile rankings against human content. Experiments show WebNovelBench effectively distinguishes classic literature, web fiction, and LLM outputs, providing stable rankings for 24 SOTA LLMs. WebNovelBench is a valuable tool for benchmarking progress and guiding LLM development in creative narrative generation. While focused on Chinese web novels, its principles are extendable. Future work includes diverse judge models, genre expansion, and fostering more engaging LLM storytellers, catalyzing innovation in machine-generated narratives.
+Limitations
+Here we outline several limitations of our work. First, our benchmark relies exclusively on Chinese web novels as the evaluation dataset. While this provides a rich, diverse, and representative corpus for our purposes, future work should extend the benchmark to other languages and literary forms
+4See Appendix E for further details.
+
+to improve its generalizability. Second, due to resource and time constraints, our experimental scale is limited: we evaluated performance only on the subset using a single LLM-as-Judge model. Although our results demonstrate robustness, evaluating additional subsets with multiple judge models in future studies would further strengthen and validate our conclusions. Lastly, while we propose that our benchmark can directly assess data quality, we have not yet explored its broader applications. Future research will investigate how these benchmark datasets can be leveraged to enhance model performance and other downstream tasks.
+References
+William Jay Conover. 1999. Practical nonparametric statistics. john wiley & sons.
+DeepSeek-AI, Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Xiao Bi, Xiaokang Zhang, Xingkai Yu, Yu Wu, Z. F. Wu, Zhibin Gou, Zhihong Shao, Zhuoshu Li, Ziyi Gao, and 181 others. 2025a. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. Preprint, arXiv:2501.12948.
+DeepSeek-AI, Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, Damai Dai, Daya Guo, Dejian Yang, Deli Chen, Dongjie Ji, Erhang Li, Fangyun Lin, Fucong Dai, and 181 others. 2025b. Deepseek-v3 technical report. Preprint, arXiv:2412.19437.
+Team GLM, :, Aohan Zeng, Bin Xu, Bowen Wang, Chenhui Zhang, Da Yin, Dan Zhang, Diego Rojas, Guanyu Feng, Hanlin Zhao, Hanyu Lai, Hao Yu, Hongning Wang, Jiadai Sun, Jiajie Zhang, Jiale Cheng, Jiayi Gui, Jie Tang, and 40 others. 2024. Chatglm: A family of large language models from glm-130b to glm-4 all tools. Preprint, arXiv:2406.12793.
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad AlDahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, Amy Yang, Angela Fan, Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mitra, Archie Sravankumar, Artem Korenev, Arthur Hinsvark, and 542 others. 2024. The llama 3 herd of models. Preprint, arXiv:2407.21783.
+Jian Guan, Zhexin Zhang, Zhuoer Feng, Zitao Liu, Wenbiao Ding, Xiaoxi Mao, Changjie Fan, and Minlie Huang. 2021. Openmeva: A benchmark for evaluating open-ended story generation metrics. In Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers).
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. 2021. Measuring massive multitask language understanding. Proceedings of the International Conference on Learning Representations (ICLR).
+Harold Hotelling. 1933. Analysis of a complex of statistical variables into principal components. Journal of Educational Psychology, 24:498­520.
+Mete Ismayilzada, Claire Stevenson, and Lonneke van der Plas. 2025. Evaluating creative short story generation in humans and large language models. Preprint, arXiv:2411.02316.
+Carlos E Jimenez, John Yang, Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir Press, and Karthik R Narasimhan. 2024. SWE-bench: Can language models resolve real-world github issues? In The Twelfth International Conference on Learning Representations.
+Zdenek Kasner and Ondrej Dusek. 2024. Beyond traditional benchmarks: Analyzing behaviors of open llms on data-to-text generation. Preprint, arXiv:2401.10186.
+Ruosen Li, Teerth Patel, and Xinya Du. 2024. Prd: Peer rank and discussion improve large language model based evaluations. Preprint, arXiv:2307.02762.
+Xiao Liu, Xuanyu Lei, Shengyuan Wang, Yue Huang, Zhuoer Feng, Bosi Wen, Jiale Cheng, Pei Ke, Yifan Xu, Weng Lam Tam, Xiaohan Zhang, Lichao Sun, Xiaotao Gu, Hongning Wang, Jing Zhang, Minlie Huang, Yuxiao Dong, and Jie Tang. 2024. Alignbench: Benchmarking chinese alignment of large language models. Preprint, arXiv:2311.18743.
+MAA. 2024. American invitational mathematics examination - aime. In American Invitational Mathematics Examination - AIME 2024.
+Jinjie Ni, Fuzhao Xue, Xiang Yue, Yuntian Deng, Mahir Shah, Kabir Jain, Graham Neubig, and Yang You. 2024. Mixeval: Deriving wisdom of the crowd from llm benchmark mixtures. arXiv preprint arXiv:2406.06565.
+Samuel J. Paech. 2024. Eq-bench: An emotional intelligence benchmark for large language models. Preprint, arXiv:2312.06281.
+Emanuel Parzen. 1962. On estimation of a probability density function and mode. The annals of mathematical statistics, 33(3):1065­1076.
+Shanghaoran Quan, Jiaxi Yang, Bowen Yu, Bo Zheng, Dayiheng Liu, An Yang, Xuancheng Ren, Bofei Gao, Yibo Miao, Yunlong Feng, and 1 others. 2025. Codeelo: Benchmarking competition-level code generation of llms with human-comparable elo ratings. arXiv preprint arXiv:2501.01257.
+
+Jiawen Shi, Zenghui Yuan, Yinuo Liu, Yue Huang, Pan Zhou, Lichao Sun, and Neil Zhenqiang Gong. 2025. Optimization-based prompt injection attack to llmas-a-judge. Preprint, arXiv:2403.17710.
+Yubo Wang, Xueguang Ma, Ge Zhang, Yuansheng Ni, Abhranil Chandra, Shiguang Guo, Weiming Ren, Aaran Arulraj, Xuan He, Ziyan Jiang, and 1 others. 2024. Mmlu-pro: A more robust and challenging multi-task language understanding benchmark. arXiv preprint arXiv:2406.01574.
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, and 41 others. 2025. Qwen3 technical report. Preprint, arXiv:2505.09388.
+Jiayi Ye, Yanbo Wang, Yue Huang, Dongping Chen, Qihui Zhang, Nuno Moniz, Tian Gao, Werner Geyer, Chao Huang, Pin-Yu Chen, Nitesh V Chawla, and Xiangliang Zhang. 2024. Justice or prejudice? quantifying biases in llm-as-a-judge. Preprint, arXiv:2410.02736.
+Xiang Yue, Tianyu Zheng, Yuansheng Ni, Yubo Wang, Kai Zhang, Shengbang Tong, Yuxuan Sun, Botao Yu, Ge Zhang, Huan Sun, Yu Su, Wenhu Chen, and Graham Neubig. 2024. Mmmu-pro: A more robust multi-discipline multimodal understanding benchmark. arXiv preprint arXiv:2409.02813.
+Xinghua Zhang, Bowen Yu, Haiyang Yu, Yangyu Lv, Tingwen Liu, Fei Huang, Hongbo Xu, and Yongbin Li. 2023. Wider and deeper llm networks are fairer llm evaluators. Preprint, arXiv:2308.01862.
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. 2023. Judging llm-as-a-judge with mt-bench and chatbot arena. Preprint, arXiv:2306.05685.
+
+A System Prompt
+To ensure consistency and clarity in our evaluation pipeline, we standardised the prompts used across all stages of the benchmark. Figure 9 shows the system prompt used to guide story generation, while Figure 10 presents the evaluation prompt employed by the LLM-as-judge to assess narrative quality. Additionally, Figure 8 illustrates the system prompt used for Story-to-Synopsis extraction, which serves as a foundation for constructing our generation dataset. These prompts were carefully designed to minimise ambiguity and ensure the reproducibility of our benchmark results.
+B Data Samples
+Story-to-Synopsis Extraction Sample, generated by Doubao-pro-32k:
+Story-to-Synopsis Extraction Input
+1498"  " ...... "  "
+Story-to-Synopsis Extraction Output
+<> . , , , </> <> (1)    ...... (5)   </> <>  </>
+LLMs synopsis-to-story generation samples, using the above extraction result as input example:
+
+Qwen3-235B-A22B Generation
+   "      ..."         " " ......   ""  " '' "  
+GPT-4.1 Generation
+       " "   "  " ......  " "   ""----    "  "
+
+GLM-4-9B Generation
+    "  " ......     "" ""  ""
+LLM-as-Judge evaluation sample, using Deepseek-V3 as a critic:
+Deepseek-V3 Evaluation
+<> <> 1. **** - "  "... 1. ****   ... </> < > 1. ****  ... </ > </>
+<   > <     >4</     > <        >4</        > <      >3</      > <>4</       > <      >4</> < >4</> <     >4</      > <>4</ > </>
+
+C Ethical Considerations
+Our WebNovelBench dataset comprises over 4,000 publicly available Chinese web novels freely sourced from the internet. For each novel, we extract only 10 chapters, which is only a very small fraction of the full content, to minimize data usage while enabling robust evaluation. These texts contain no personally identifiable information or private data and are used solely for statistical evaluation and benchmarking purposes. They are not employed for model training or direct fine-tuning.
+We strictly adhere to the license or terms for use of each LLM during inference testing. The models generate scientific artefacts based on our synopsisto-story dataset, and these outputs are used exclusively for research evaluation and capability assessment. No generated content is repurposed for other uses.
+Our use of these materials aligns with fair use principles for research. We conducted checks to ensure no offensive or sensitive personal content is included. While our benchmark specifically addresses Chinese web novels, potentially limiting generalizability, it poses minimal risks related to misuse, privacy, or bias.
+D Principal Component Analysis Details
+To determine the relative importance of each evaluation dimension, we applied Principal Component Analysis (PCA) to the score distributions across our web novel dataset. The scree plot in Figure 6 shows that the first principal component accounts for over 75% of the total variance. This indicates that while each of our eight evaluation dimensions captures a distinct and meaningful aspect of narrative quality, they also collectively reflect a strong underlying evaluative signal. The high explained variance supports the internal coherence of our metric design and justifies the use of PCA-derived weights for aggregating narrative quality scores. This balance suggests that the dimensions are complementary rather than redundant, each contributing uniquely to the overall narrative assessment.
+The radar chart embedded in the same figure visualises the PCA-derived weights assigned to each of the eight narrative dimensions (D1­D8). These weights, used throughout our benchmark scoring, reflect each dimension's contribution to the primary variance component and therefore represent their relative importance in the overall evaluation framework.
+
+Figure 6: PCA analysis of evaluation metrics. The bar chart shows the explained variance ratio for each principal component. The radar chart visualises the relative weights of the eight narrative dimensions used in our benchmark.
+
+E Length Analysis Details
+
+To support the main findings in Section 5.4, we provide a visual summary of the mean output lengths across all evaluated models in Figure 7. The green and red dashed lines represent the expected length bounds (800­1200 words). As shown, the vast majority of models generated outputs that fall within or near this range, indicating consistent adherence to the specified context length.
+Given this overall consistency, we do not delve into detailed length-based comparisons in the main text. Notable outliers such as Claude 3.7 Sonnet (around 2,700) and Gemini 2.5 Pro produced (around 2,000) significantly longer outputs, while models like LLaMA 3.3 and GLM-4-9B-chat tended to under-generate. These deviations are exceptions rather than the norm and had limited impact on the overall evaluation results.
+While length was not found to be a major differentiating factor in narrative quality, future iterations of the benchmark may consider applying soft constraints or regularisation mechanisms to penalise excessively long or short outputs.
+
+Mean Length of Generated Outputs by Model
+
+Lower Bound
+
+2500
+
+Upper Bound
+
+2000
+
+1500
+
+1000
+
+500
+
+0
+
+Mean Output Length Qwen2-5-32B-Instruct Doubao-1.5-pro-32k Qwen2-5-72B-Instruct
+gpt-4o-mini gpt-4-1
+DeepSeek-R1 Qwen2-5-14B-Instruct
+Hunyuan-turbo claude-3-7-sonnet
+internlm2 DeepSeek-V3-0324 Qwen2-5-7B-Instruct gemini-2-5-pro-0404
+llama3-3 QwQ-32B
+o3-mini Hunyuan-t1 DeepSeek-V3 ernie-4-0-8k Qwen3-32B
+gpt-4o glm-4-9b-chat Qwen3-235B-A22B
+Kimi
+
+Model
+Figure 7: Mean length of generated outputs by model.
+
+Story-to-Synopsis Extraction System Prompt
+  <> {text} </>  1.  2.  3.  4.  5.  <> <> [] </> <> [(1)...(2)... ] </> <> [] </> 
+Your task is to extract key information--such as main characters, major plot points, and important settings--from the given novel excerpt. This information will be used to construct a knowledge graph and encyclopaedic entry for the novel. Please read the following text carefully: <Novel> {text} </Novel>
+When extracting the information, follow these steps: 1. Carefully read through the entire novel excerpt. 2. Identify the main characters, i.e., the characters who play a central role and around whom significant parts of the plot revolve. 3. Outline the major plot points, which refer to the core events and pivotal turns that drive the story forward. 4. Determine the important settings, i.e., the key locations and environments where significant story developments occur. 5. Check the extracted information for accuracy and completeness.
+Output your extracted results within the <Extraction> tags using the following format: <Main Characters> [List the names of the main characters, separated by commas] </Main Characters> <Main Plots> [Describe the main plot points in detail, following the chronological order of events. Use line breaks between different events, e.g., (1)...(2)...] </Main Plots> <Important Scenes> [List the names of the important settings, separated by commas] </Important Scenes>
+Please ensure that the extracted information is rich, comprehensive, and accurate.
+Figure 8: System Prompt Used for Story-to-Synopsis Extraction
+
+Generation System Prompt
+  1.   <>[]</> <>[]</> <>[]</> 2.  //        /  3.  <text></text>
+You are a Chinese fiction writer. Your task is to expand and create a narrative based on the information provided by the user. Your writing must adhere to the following guidelines: 1. The user will provide the key information for a long-form novel using the following format. Please read the information carefully: <Main Characters>[Names of the main characters]</Main Characters> <Main Plots>[Main plot points in chronological order]</Main Plots> <Important Scenes>[Names of important scenes or locations]</Important Scenes> 2. A critic will evaluate your writing according to the following criteria: Use of Literary Devices: Scored based on the quantity and refinement of complex rhetorical devices such as metaphor, symbolism, and paradox. Richness of Sensory Detail: Scored based on the frequency of visual, auditory, olfactory, and other sensory descriptions. Balance of Character Presence: Scored based on the frequency of each character's appearance, proportion of dialogue, psychological depiction, and overall balance of character portrayal. Distinctiveness of Character Dialogue: Scored based on whether each character's dialogue reflects individual personality and remains distinguishable even if names are hidden. Consistency of Characterisation: Scored based on whether the characters' language and actions align with their identities and backgrounds. Atmospheric and Thematic Alignment: Scored based on whether scene descriptions support the emotional tone and thematic coherence of the narrative. Contextual Appropriateness: Scored based on whether the setting details are appropriate for the time period and regional background. Scene-to-Scene Coherence: Scored based on whether the narrative transitions naturally between scenes, avoiding abrupt or disjointed shifts. 3. Return only the generated novel in the following format: <text>Your generated story content</text>
+Figure 9: System Prompt Used for Generation
+
+Evaluation System Prompt
+                    (1-5)           <> {chapter} </>  1.  2.  3.  4.  5. 
+<> <>[]</> <>[]</> <>[]</>
+ 1. // 2.  3.   4.   5.  6.  7. / 8.  
+<> <>1</> <>1</> <>1</> <>1</ > <>1</> <>1</> <>1</> <>1</>
+
+Figure 10: System Prompt Used for Evaluation
+
+

@@ -1,0 +1,1518 @@
+CHEEMS: A Practical Guidance for Building and Evaluating Chinese Reward Models from Scratch
+Xueru Wen1,2, Jie Lou3*, Zichao Li1,2, Yaojie Lu1*, XingYu3, Yuqiu Ji3, Guohai Xu3, Hongyu Lin1, Ben He1,2, Xianpei Han1, Le Sun1, Debing Zhang3 1Chinese Information Processing Laboratory, Institute of Software, Chinese Academy of Sciences, Beijing, China 2University of Chinese Academy of Sciences, Beijing, China 3Xiaohongshu Inc {wenxueru2022,lizichao2022}@iscas.ac.cn {luyaojie,hongyu,sunle,xianpei}@iscas.ac.cn
+benhe@ucas.edu.cn loujie0822@gmail.com dengyang@xiaohongshu.com
+
+arXiv:2502.17173v3 [cs.CL] 26 May 2025
+
+Abstract
+
+Existing RM Resources
+
+Reward models (RMs) are crucial for aligning large language models (LLMs) with human preferences. However, most RM research is centered on English and relies heavily on synthetic resources, which leads to limited and less reliable datasets and benchmarks for Chinese. To address this gap, we introduce CheemsBench, a fully human-annotated RM evaluation benchmark within Chinese contexts, and CheemsPreference, a large-scale and diverse preference dataset annotated through humanmachine collaboration to support Chinese RM training. We systematically evaluate opensource discriminative and generative RMs on CheemsBench and observe significant limitations in their ability to capture human preferences in Chinese scenarios. Additionally, based on CheemsPreference, we construct an RM that achieves state-of-the-art performance on CheemsBench, demonstrating the necessity of human supervision in RM training. Our findings reveal that scaled AI-generated data struggles to fully capture human preferences, emphasizing the importance of high-quality human supervision in RM development.
+1 Introduction
+With the rapid advancement of large language models (Yang et al., 2024a; Grattafiori et al., 2024), post-training has emerged as a critical challenge to ensure their safety, reliability, and alignment with human values (Hou et al., 2024; Lin et al., 2024). Reward models (Palan et al., 2019; Ouyang et al., 2022), as core components of LLM post-training, play a pivotal role in capturing human preferences
+These authors contributed equally to this work. *Corresponding authors.
+
+English Instruction
+
+Chosen
+
+Rejected
+
+Standalone annotation
+
+>
+
+Win
+
+>
+
+Lose
+
+Pairwise comparison
+
+CheemsBench for Chinese RM
+
+Chinese Instruction
+
+#1 #2 #3 #4 #5
+
+#1>#2=#3 #3>#2>#4 ... #1>#5>#4 #1>#2>#5
+Cross-validation annotation
+#1 > [ #2 , #3 ] > [ #4 , #5 ]
+Conflict-resolved Partial-ranking comparison
+Figure 1: The differences in construction and usage between CheemsBench and the existing RM resources.
+and guiding models to adhere more closely to human needs (Bai et al., 2022). By providing reward signals, RMs can guide parameter optimization during training (Ibarz et al., 2018; Ouyang et al., 2022) or directly intervene in outputs during decoding(Khanov et al., 2024; Li et al., 2024a).
+Despite the crucial role of RMs in post-training, current research is mainly focused on English. For instance, Skywork-Reward (Liu et al., 2024a) and UltraRM (Cui et al., 2023) leverage high-quality English preference datasets (Zheng et al., 2023; Ji et al., 2024) and benchmarks (Lambert et al., 2024) to achieve superior performance. In contrast,
+
+Statistics
+# Prompts # Responses # Comparisons Avg. Char. of Prompt Avg. Char. of Chosen Avg. Char. of Rejected
+
+CheemsBench
+
+Open Prompt Human Instruction
+
+1,146
+
+1,346
+
+5
+
+5
+
+7,838
+
+9,762
+
+186.58
+
+197.04
+
+437.50
+
+436.96
+
+454.01
+
+446.43
+
+CheemsPreference
+
+GPT Human
+
+27,861 3,260
+
+5.29
+
+5.07
+
+332,370 37,618
+
+175.56 164.08
+
+457.92 440.18
+
+394.18 432.84
+
+Table 1: Statistics of CheemsBench and CheemsPreference: Number of prompts, average responses per prompt, comparisons (excluding ties), and average character lengths of prompts, chosen responses, and rejected responses.
+
+the development of Chinese RMs faces significant challenges due to a lack of large-scale, high-quality preference datasets and comprehensive evaluation benchmarks. Existing Chinese resources are often small in scale (Huozi-Team, 2024; Yucheng, 2023) and limited to specific domains (Yang, 2024; Xinlu Lai, 2024; Xu et al., 2023), making them insufficient for LLM post-training. Moreover, existing RM mainly rely on synthetic data, which struggles to accurately reflect human preferences.
+To address this critical gap, this paper constructs a comprehensive and human-centric Chinese RM resource from scratch1. It consists of two key datasets: (1) CheemsBench, a fully humanannotated and extensive Chinese RM evaluation benchmark that verifies whether RMs accurately capture and reflect human preferences; and (2) CheemsPreference, a large-scale, diverse Chinese preference dataset that provides supervised signals for training Chinese RMs, enabling them to effectively learn and model human preferences.
+As shown in Figure 1, unlike most RM resources that rely on machine-generated annotations (Zhou et al., 2024), CheemsBench and CheemsPreference are built on human supervision, thereby more accurately capturing realistic human values. Moreover, while traditional RM benchmarks (Lambert et al., 2024) typically rely on pairwise comparisons, recent studies (Wen et al., 2024) have highlighted their limitations in reflecting downstream performances. CheemsBench introduces a multi-response evaluation mechanism, which aligns closely with downstream tasks.
+In CheemsBench, we combine open-source prompts and real-world human instructions with a comprehensive taxonomy to evaluate RM performance To better align with downstream tasks and reduce preference-induced noise (Zhang et al.,
+
+1CHEEMS stands for Chinese reward model benchmark
+
+and preference dataset. ¯ ¯
+
+¯
+
+¯
+
+¯
+
+¯
+
+2024a), we sample five responses from various open- and closed-source LLMs for each prompt and conduct five rounds of human-driven triple-wise comparisons. To address potential annotation conflicts, we design a graph-based conflict-resolving algorithm that generates unique and consistent partial rankings. Using CheemsBench, we assess the progress of reward models and preference datasets in the Chinese context and identify considerable room for improvement in Chinese RMs.
+For CheemsPreference, we collect 27k human instructions following a multi-tiered prompt taxonomy and sample more than 5 responses per prompt from various LLMs, ensuring both prompt and response diversity. To alleviate inconsistencies and biases in GPT annotations (Stureborg et al., 2024) while reducing human effort, we design a distant supervision algorithm to improve data quality. Specifically, human annotators first label a small golden preference dataset, which is then used to train an RM to filter a larger GPT-annotated dataset. The combined human- and GPT-annotated data form CheemsPreference, achieving state-of-the-art results on CheemsBench and performing well on the English RewardBench (Lambert et al., 2024).
+Our contributions are summarized as follows:
+· We propose CheemsBench, the first largescale and comprehensive benchmark designed specifically for Chinese reward models.
+· We construct CheemsPreference, the first large-scale, diverse, and high-quality Chinese preference dataset.
+· We provide a comprehensive investigation into Chinese RM training and evaluation. The code and data associated with this work are available at https://github.com/AlignRM/ CheemsRM.
+
+(1) Data Construction
+
+Human Instructions Open-source
+Prompts
+Chinese Instruction Set
+
+LLaMA
+GPT
+...
+
+Qwen Intern
+GLM
+
+Language Model Pool
+
+Resp. #1 Resp. #2 Resp. #3 Resp. #4 Resp. #5
+
+(2) Human Annotation
+:... Translate into Classical Chinese:
+The retainer said to him...
+...
+#1>#2=#3 #1>#5>#4 #1>#2>#5
+
+(3) Conflict Resolving
+#1
+
+#5 #4
+
+#2 #3
+
+Responses Equal Edge Preference Edge Conflict Edge Topological Edge Untopological Edge
+
+#1>[#2,#3]>[#4,#5]
+
+Figure 2: Chinese RM benchmark construction process. We utilize open-source prompts and human instructions and sample five responses from various models for each prompt. These responses then undergo five rounds of triple-wise manual comparisons. Unique partial rankings are generated by conflict resolving algorithm.
+
+2 Related Works
+Reinforcement Learning from Human Feedback. Reinforcement Learning from Human Feedback has been widely adopted for LLM alignment (Ouyang et al., 2022; Bai et al., 2022). Previous research mostly focuses on specific tasks like summarization (Stiennon et al., 2022) and question answering (Nakano et al., 2022). Recent studies have expanded RLHF applications to broader domains (Hou et al., 2024; Lin et al., 2024; Yu et al., 2024), improving LLMs to be more helpful, honest, and harmless. RLHF enables models to align with human expectations more closely by integrating human preferences captured by reward models (Ng and Russell, 2000; Brown and Niekum, 2019; Palan et al., 2019). Thus, a reward model that accurately reflects human preferences is fundamental to the RLHF methodology.
+Reward Model Training and Evaluation. To develop a RM that captures human preferences, current works gather preference data through manual annotation (Bai et al., 2022; Zheng et al., 2023) or distilling advanced LLMs (Zhu et al., 2023; Cui et al., 2023). These works mostly focus on English, overlooking Chinese contexts. Existing Chinese preference datasets are generally small (Huozi-Team, 2024; Yucheng, 2023) or limited to specific tasks (Yang, 2024; Xinlu Lai, 2024; Xu et al., 2023). Beyond the training data, RM evaluation is also critical for post-training. The typical RM evaluation computes accuracy on a fixed test dataset (Lambert et al., 2024). Recent studies (Son et al., 2024; Kim et al., 2024; Zhou et al., 2024; Liu
+
+et al., 2024b; Frick et al., 2024; Gureja et al., 2024) have attempted to strengthen the correlation with downstream performance. However, these benchmarks focus on English, raising questions about their applicability to Chinese contexts.
+3 Chinese RM Benchmark
+In this section, we introduce CheemsBench, a benchmark designed to comprehensively evaluate Chinese RMs. Our benchmark is characterized by: (1) High coverage: We incorporate a wide range of prompts and sampling models, ensuring broad evaluation across diverse scenarios. (2) High-quality annotation: We derive a reliable preference ranking through multiple rounds of manual triple-wise comparisons and conflict resolving. Figure 2 illustrates the overall construction process.
+3.1 Data Construction
+Prompt Collection. We sample Chinese prompts from various open datasets, including HumanevalXL (Peng et al., 2024), MathOctopus (Chen et al., 2024), GAOKAO-Bench (Zhang et al., 2024b), HalluQA (Cheng et al., 2023), Flames (Huang et al., 2023), CLiB (Lee, 2023), AlignBench (Liu et al., 2023), and COIG-CQIA (yuelin bai, 2023). We manually map their original categories into a unified system shown in Figure 8. We also include realworld human instructions for out-of-distribution evaluation. To ensure thorough converge across different scenarios, we build a comprehensive categorization system as illustrated in Figure 9. In total, we select 1,146 prompts from open-source datasets and 1,346 from human instructions.
+
+Responses Collection. To ensure a wide range of response quality and distribution, we sample 5 responses per prompt from various models. (1) Opensource models: Qwen2-7B/72B-Instruct (Yang et al., 2024a), Meta-Llama-3.1-8B/70B-Instruct (Grattafiori et al., 2024), Llama3.1-8B/72BChinese-Chat (Wang et al., 2024b), Internlm2-chat1.8b (Cai et al., 2024), and GLM-4-9b-chat (GLM et al., 2024); (2) Proprietary models: GPT-4 (OpenAI et al., 2024), GPT-3.5-turbo, GPT-4-turbo, and Claude-3-5-sonnet (Anthropic, 2024). We observe that some open-source models demonstrate limited Chinese capabilities and tend to exhibit codeswitching or even significant garbling2. In such cases, we rely on human annotators to filter these responses during the annotation process. Specifically, annotators are instructed to discard responses containing substantial sections of meaningless content, while retaining those with minor code-switching that do not compromise semantic meaning. This procedure allows us to account for LLMs' codeswitching behavior during RM evaluation.
+3.2 Benchmark Labeling
+Human Annotation. To accurately capture human preferences, CheemsBench relies entirely on human judgment for its annotation process. Given a prompt and its corresponding 5 responses, we pre-design five annotation tasks, each comprising a triple-wise comparison of three adjacent responses. These tasks are distributed to different annotators who perform preference comparisons independently. All annotation results are then used to construct a ranked list of responses.
+Conflict Resolving. However, conflicts may arise due to the human preferences ambiguity and potential annotation errors. To derive reliable results, we develop a dedicated conflict resolving algorithm, as shown in Algorithm 1. Specifically, we first transform the annotation results into a directed preference graph, where responses and preferences represent nodes and edges respectively. We then employ depth-first search to identify cycles in the graph, which indicate conflicts. These cycles are merged into larger nodes, and this process is repeated until no cycles remain in the graph. Finally, we perform topological sorting to obtain a partial ranking3.
+2The LLaMA series shows a higher tendency for codeswitching and nonsensical output, possibly due to its tokenizer vocabulary and insufficient training on Chinese corpora.
+3Details about the algorithms and annotators are provided in Appendix C and Appendix D, respectively.
+
+3.3 Evaluation Metrics
+Given multiple responses per prompt, there are many potential metrics for evaluation (Wen et al., 2024). We first convert a partial ranking into multiple pair-wise comparisons and evaluate the accuracy as in the typical setting (Lambert et al., 2024):
+
+1 Accuracy =
+N
+
+N
+
+I(rwi > rli)
+
+(1)
+
+i=1
+
+where N is the total number of pair-wise compar-
+isons after transformation, and the indicator func-
+tion I checks if the reward score for the preferred response rwi is greater than that of its counterpart rli. Additionally, the exact match rate can be employed,
+which measures the proportion of prompts where
+all pair-wise comparisons are correctly sorted:
+
+1M
+
+Exact Match = M
+
+I
+
+(rwj,k > rlj,k) (2)
+
+j=1
+
+k
+
+where M is the number of prompts, and the indicator function verifies if all comparisons are ordered correctly. We obtain the final result by averaging the metrics from subsets of different categories.
+
+4 Chinese Preference Dataset
+
+In this section, we present the construction of CheemsPreference, as depicted in Figure 3. Our dataset is characterized by: (1) Scale and diversity: We amass 27k real human instructions, featuring a comprehensive multi-tier categorization system, and sample multiple responses from a variety of models for each prompt. (2) High-quality annotation: We employ a distant supervision algorithm, which integrates both human annotations and GPT4o to establish reliable partial preference ranks.
+
+4.1 Data Construction
+Prompt Collection. Diverse and high-quality instruction data are crucial for ensuring the robustness of RMs. To this end, we collect 27,861 realworld human instructions. To ensure extensive coverage of downstream scenarios, we develop a comprehensive multi-tier categorization system, which encompasses eight main categories with dozens of refined subcategories, as illustrated in Figure 10.
+
+Response Collection. We sample responses from a broad range of models: (1) Open-source models: Qwen2-7B/72B-Instruct (Yang et al., 2024a), Qwen2.5-7B/14B/32B/72B-Instruct (Team, 2024),
+
+Chinese Instruction
+:... Translate into Classical Chinese:
+The retainer said to him...
+Sampling Responses
+... The retainer said to him...
+...
+... The retainer asked him...
+... A seated guest said to him...
+
+...
+
+Human
+
+Subset
+
+Distant Supervision by R(·)
+
+R(#1) = 0.4
+
+R(#5) = 0.2
+
+R(#2) = -0.1
+
+Reward Model R(·)
+
+I[R(#i) > R(#j)] = 1
+
+R(#4) = -0.2 Responses
+
+R(#3) = -0.5
+
+Initial Edge
+
+Conflict Edge
+
+Consistent Edge
+
+Cheems Preference
+Human Subset
+GPT Subset
+
+Figure 3: Chinese preference dataset construction process. Each prompt's different responses and their annotation results form a directed graph. Circles in this preference graph indicate conflicts. We utilize the reward model trained on the human-annotated dataset to filter GPT annotations, thereby producing a directed acyclic graph.
+
+Meta-Llama-3.1-8B/70B-Instruct (Grattafiori et al., 2024), Llama3.1-8B/72B-Chinese-Chat (Wang et al., 2024b), Internlm2-chat-1.8b (Cai et al., 2024), and GLM-4-9b-chat (GLM et al., 2024). (2) Proprietary models: GPT-4 (OpenAI et al., 2024), GPT-3.5-turbo, GPT-4-turbo, GPT-4o, and Claude3-5-sonnet (Anthropic, 2024). To guarantee the quality of responses, we implement rule-based methods to detect responses that are abnormally lengthy or contain excessive non-Chinese symbols. Although this approach may have lower accuracy for prompts involving math or code, we prioritize a high recall rate to filter out more low-quality responses. Finally, each prompt has more than 5 responses on average.
+4.2 Distant Supervision
+The quality of preference data (Gao et al., 2024) is essential for the training of RM. While human annotation ensures high quality, it is expensive and challenging to obtain in large quantities. Conversely, GPT-based annotation is scalable but often inconsistent and biased (Stureborg et al., 2024). To construct large-scale, high-quality Chinese preference data, we implement a distant supervision strategy for annotation. We initially engage human annotators to label a small subset of data, following the protocol detailed in Section 3.2. Subsequently, GPT-4o is employed to annotate a larger dataset. For a set of N responses, GPT-4o performs CN2 pair-wise comparisons between each response pairs4. To mitigate positional bias (Li et al., 2024b), the order of responses in each comparison is randomized. Although these GPT-4o
+4Annotation prompts can be found in Appendix B.
+
+annotations can exhibit inconsistencies, i.e., cycles in the preference graph, we employ an RM trained on human-annotated data to filter these annotations and establish a consistent partial order. Additionally, we propose a length-debias post-hoc filtering strategy to alleviate length bias (Dubois et al., 2024). This involves dividing the dataset into two groups, where the chosen response is longer or shorter than the rejected one, and downsampling the larger group to balance the dataset.
+5 Chinese Reward Model
+In this section, we introduce our reward model training methodology. In contrast to typical preference datasets constructed by pair-wise comparisons (Cui et al., 2023; Ji et al., 2024), CheemsPreference has two distinct characteristics: (1) each prompt is associated with multiple responses, and (2) these responses form only a partial preference chain. Thus, we employ following loss according to BradleyTerry Model (Bradley and Terry, 1952):
+L = - E [log ( (r (x, yw) - r (x, yl)))]
+xX yw ,yl Yx
+(3) where X stands for the distribution of the prompt x and Yx denotes the distribution of responses y given the prompt x. We employ a greedy samplebased batch logic for calculating this loss. Specifically, during each forward pass, we determine if all responses for a given prompt can be included in one batch. If feasible, they are added to the batch; otherwise, any excess responses are allocated to subsequent batches. This method might bypass some pair comparisons, but it ensures that no response is duplicated across batches, thereby
+
+Model Name
+
+RewardBench Open Prompt Acc. Exact.
+
+Generative Models as Reward Models
+
+Skywork-Critic-Llama-3.1-70B
+
+0.933
+
+0.755 0.320
+
+CompassJudger-1-14B-Instruct
+
+0.841
+
+0.745 0.327
+
+CompassJudger-1-32B-Instruct
+
+0.852
+
+0.742 0.322
+
+Qwen2.5-72B-Instruct
+
+-
+
+0.734 0.306
+
+Skywork-Critic-Llama-3.1-8B
+
+0.890
+
+0.726 0.288
+
+GPT-4o
+
+0.846
+
+0.640 0.163
+
+Doubao-pro-128k
+
+-
+
+0.720 0.280
+
+Qwen2.5-7B-Instruct
+
+-
+
+0.713 0.262
+
+Discriminative Reward Models
+
+Skywork-Reward-Gemma-2-27B
+
+0.938
+
+0.754 0.329
+
+Skywork-Reward-Gemma-2-27B-v0.2
+
+0.943
+
+0.751 0.321
+
+Llama-3.1-Nemotron-70B-Reward-HF
+
+0.941
+
+0.750 0.317
+
+Llama-3-OffsetBias-RM-8B
+
+0.894
+
+0.734 0.310
+
+RM-Mistral-7B
+
+0.804
+
+0.721 0.285
+
+URM-LLaMa-3-8B
+
+0.899
+
+0.727 0.310
+
+ArmoRM-Llama3-8B-v0.1
+
+0.904
+
+0.715 0.308
+
+Skywork-Reward-Llama-3.1-8B-v0.2
+
+0.931
+
+0.721 0.283
+
+CheemsRM (Ours)
+
+0.919
+
+0.857 0.508
+
+Human Instruction Acc. Exact.
+
+0.731 0.692 0.685 0.678 0.696 0.727 0.662 0.637
+
+0.258 0.239 0.231 0.229 0.229 0.300 0.164 0.163
+
+0.748 0.735 0.722 0.689 0.700 0.688 0.677 0.701 0.832
+
+0.311 0.294 0.271 0.239 0.259 0.230 0.246 0.237 0.431
+
+Overall
+0.516 0.501 0.495 0.487 0.485 0.457 0.456 0.444
+0.535 0.525 0.515 0.493 0.491 0.489 0.487 0.486 0.657
+
+Table 2: Performance of discriminative and generative RMs on CheemsBench. The Overall metric is the average of accuracy (Acc.) and exact match (Exact.) across the Open Prompt and Human Instruction subsets. CheemsRM refers to the RM trained on our CheemsPreference dataset.
+
+mitigating overfitting risks (Ouyang et al., 2022). More importantly, this sample-based batch organization enhances computational efficiency by reducing redundant forward passes. To further stabilize training, we integrate an additional regularization term (Hou et al., 2024), imposing a Gaussian prior on the distribution of reward scores:
+
+L = L + E r2 (x, y)
+
+(4)
+
+xX ,yYx
+
+6 Experiments
+
+We first assess the performance of open-source RMs and datasets on CheemsBench (Section 6.1). Next, we examine our benchmark's correlation with downstream tasks (Section 6.2). For CheemsPreference, we conduct an ablation study to demonstrate its effectiveness (Section 6.3) and test the scaling trend (Section 6.4).
+
+6.1 Benchmark Results
+Reward Models Evaluation We thoroughly assess the performance of current RMs in the Chinese context, including discriminative reward models and generative models as reward models5 (Zheng et al., 2023). Table 2 demonstrates the results of top-ranked RMs on CheemsBench. We find that (1) The accuracy of the leading models significantly
+5Comprehensive results and citations for models and datasets are provided in the Appendix E.
+
+drops when applied to CheemsBench. This performance gap indicates considerable room for improvement of RMs in Chinese settings. (2) These RMs perform better on open-source prompts than on human instructions. This is expected, as our human instructions are collected from the real world and thus can be more out-of-distribution than open-source prompts. (3) For prompts with relatively deterministic answers, RM can assess the quality of the responses more accurately. Figure 4 details the performance of these RMs on different subcategories. On the open-source prompt subset, RMs show competence in "Reasoning" but struggle in other categories. On the human instruction subset, models excel in "Reasoning" and "Complex Instructions" but perform poorly in tasks involving "Understanding". These observations emphasize the need for targeted enhancements in these tasks.
+Preference Datasets Evaluation We evaluate various Chinese and English preference datasets on CheemsBench by training RMs6 based on Qwen2.5-72B-Instruct (Team, 2024). The experimental results are presented in Table 3. Notably, among the Chinese datasets, "Huozi" (HuoziTeam, 2024) performs best. Meanwhile, the "Ultrafeedback" (Cui et al., 2023) leads among English
+6Details about hyperparameter settings for different experiments are provided in Appendix F.
+
+Knowledge
+
+Mathematics Understanding
+
+Knowledge
+
+Language
+
+Reasoning 0.65 0.7 0.75 0.8 0.85
+
+Reasoning 0.55 0.6 0.65 0.7 0.75 0.8
+
+Creation
+
+Safety
+Skywork-Reward-Gemma-2-27B Llama-3.1-Nemotron-70B-Reward-HF RM-Mistral-7B
+
+Complex instruction
+
+Safety
+
+Skywork-Reward-Gemma-2-27B-v0.2 CompassJudger-1-14B-Instruct URM-LLaMa-3.1-8B
+
+Skywork-Critic-Llama-3.1-70B Llama-3-OffsetBias-RM-8B ArmoRM-Llama3-8B-v0.1
+
+Figure 4: Accuracy of top-ranked reward models on CheemsBench across subsets of different categories. The left and right sub-figures respectively show the results on open-source prompts and human instructions.
+
+datasets. Comparisons of the top-performing English and Chinese preference datasets on CheemsBench reveal a critical gap between English and Chinese preference datasets, which highlights a need for better Chinese preference dataset.
+
+Dataset
+
+Open Prompt Human Instruction Acc. Exact. Acc. Exact.
+
+Chinese Preference Datasets
+
+HH-RLHF-cn
+
+0.704 0.306 0.646 0.212
+
+Huozi
+
+0.728 0.302 0.682 0.237
+
+Kyara
+
+0.705 0.258 0.664 0.198
+
+Zhihu
+
+0.463 0.105 0.487 0.080
+
+English Preference Datasets
+
+ChatbotArena
+
+0.745 0.342 0.718 0.288
+
+HH-RLHF
+
+0.753 0.351 0.740 0.299
+
+MathPreference
+
+0.566 0.179 0.502 0.103
+
+Nectar
+
+0.716 0.288 0.664 0.222
+
+PKU-SafeRLHF
+
+0.737 0.311 0.678 0.240
+
+Skywork
+
+0.757 0.343 0.749 0.271
+
+MathStackExchange 0.749 0.340 0.719 0.256
+
+UltraFeedback
+
+0.768 0.356 0.748 0.303
+
+HelpSteer2
+
+0.713 0.279 0.736 0.292
+
+Table 3: Performance results of various datasets. Each dataset's performance is evaluated under Open Prompt and Human Instruction subsets, with results presented in terms of accuracy (Acc.) and exact match (Exact.).
+
+6.2 Downstream Correlation
+In this section, we explore the correlation of CheemsBench with various downstream tasks by employing a Best-of-32 sampling strategy for optimization on three tasks: Human Win-rate, MTbench-zh (Huozi-Team, 2024), and MT-bench (Zheng et al., 2023). For the Human Win-rate task, we use 87 unique Chinese instructions that are not included in CheemsBench. For each prompt, we obtain a fixed baseline response from Qwen2-72B-
+
+Instruct. Then we sample 32 responses from the same model and have human annotators score each one. They assign 1 if a response exceeds the baseline and -1 if it doesn't, which allows us to compute win rates. For MT-bench-zh and MT-bench, responses are sampled from Qwen2-7B-Instruct, with RMs performing Best-of-32 sampling on twoturn prompts, and GPT-4o is employed as the judge. We select 26 distinct open RMs, differing in training data and structures, for correlation assessment. Our baselines include RewardBench (Lambert et al., 2024), RMB (Zhou et al., 2024), and alternatives of our benchmarks annotated by GPT-4o, named as Open Prompt GPT and Human Instruction GPT. The results in Figure 5 illustrate that: (1) Our benchmark exhibits significantly stronger correlations with downstream tasks compared to other baselines, whether in Chinese or English tasks. (2) The benchmarks annotated by GPT demonstrate suboptimal correlation, underscoring the necessity of human judgment, which can achieve better generalization on downstream tasks.
+6.3 Dataset Construction Ablation
+We conduct an ablation study to assess the effectiveness of the dataset construction strategies outlined in Section 4.2. We train RMs based on Qwen2.572b-instruct (Team, 2024) to perform experiments and report performances in Table 4. The results reveal several key insights: (1) Neither Human nor GPT subsets alone are sufficient. The GPT subset underperforms on our benchmark, indicating the inability of GPT-4o to fully capture human preferences. Conversely, the Human subset performs poorly on RewardBench, likely due to its
+
+Model
+
+RewardBench Open Prompt Human Instruction Acc. Exact. Acc. Exact.
+
+State-of-the-art Baselines
+
+RewardBench@1
+
+0.943
+
+0.751 0.321 0.735 0.294
+
+RewardBench@2
+
+0.941
+
+0.750 0.317 0.722 0.271
+
+Models trained using CheemsPreference
+
+Human subset
+
+0.897
+
+0.852 0.502 0.823 0.412
+
+GPT subset
+
+0.822
+
+0.778 0.373 0.743 0.303
+
+w/ Length debiasing
+
+0.865
+
+0.790 0.402 0.768 0.322
+
+w/ Distant supervision
+
+0.909
+
+0.837 0.464 0.821 0.404
+
+w/ All strategies
+
+0.917
+
+0.837 0.458 0.826 0.416
+
+CheemsPreference
+
+0.919
+
+0.857 0.508 0.832 0.431
+
+Overall
+0.525 0.515
+0.647 0.549 0.571 0.632 0.634 0.657
+
+Table 4: The performance of RMs trained on our datasets, along with ablation studies on different processing strategies. CheemsPreference represents a combination of the fully processed GPT subset with the human subset.
+
+Spearman's rank correlation
+
+Open Prompt 0.8 0.7 0.6 0.5 0.4 0.3 0.2
+
+Human Instruction Human Win-rate
+
+Open Prompt GPT
+
+Human Instruction GPT
+
+MT Bench-zh
+
+RMB PairWise
+
+RMB BoN
+
+MT Bench
+
+RewardBench
+
+Figure 5: Correlations between different RM benchmarks an performance on three downstream tasks.
+
+smaller scale, which limits out-of-distribution performance. (2) Length-debias strategy enhances performance. We investigate the biases of GPT and human annotators in Appendix D.3, highlighting the necessity of a length-debias strategy. (3) Distant supervision strategy significantly improves performance, highlighting the importance of incorporating human supervision. (4) The integration of all strategies performs the best, underscoring the effectiveness of our approach.
+6.4 Scaling Trend
+We validate scaling trends on CheemsPreference. Figure 6 shows that RM performance improves with increased data volume on Open Prompt and Human Instruction subsets, indicating that larger training dataset leads to superior performance. This phenomenon also highlights the potential of our distant supervision approach. We then assess model scaling trending by training RM on different sizes of Qwen-2.5 series models (Team, 2024). Figure 7 illustrates that increasing the model size from 0.5B to 72B significantly enhances performance, demonstrating that larger models capture complex preference patterns more effectively. Moreover, there is no significant difference when
+
+starting training from pretrained or instruct models.
+
+Accuracy
+
+0.86
+
+0.85
+
+0.84
+
+0.83
+
+0.82
+
+0.81
+
+0.80
+
+Subset
+
+0.79
+
+Open Prompt Human Instruction
+
+104
+
+Data Size
+
+105
+
+Figure 6: Impact of data size scaling measured by the number of pairs on accuracy.
+
+0.86
+
+0.84
+
+Accuracy
+
+0.82 0.80 0.78
+109
+
+Subset Open Prompt
+ModHeulmTaynpeInstruction Instruct Pretrain
+Model Siz1e010
+
+Figure 7: Impact of model size scaling on RM accuracy.
+
+7 Conclusion
+In this paper, we address the challenges of developing Chinese RMs by introducing CheemsBench, a comprehensive RM benchmark, and CheemsPreference, a high-quality Chinese preference dataset. Using these resources, we evaluate the progress of RMs in the Chinese context and validate the effectiveness of our dataset construction strategies. Our work narrows the gap between English and Chinese RMs and sets the foundation for future research.
+Limitations
+This work addresses the resource insufficiency in Chinese reward models. However, by focusing primarily on the Chinese language, the datasets may not fully capture all regional variations, potentially introducing language and cultural biases. Additionally, while the importance of human annotations is evident, the subjective nature of human judgment and the particular group of annotators involved can lead to biased preferences. Moreover, our findings, while tailored to the Chinese context, require further validation to ensure applicability beyond Chinese and English languages.
+Ethical Considerations
+Several ethical considerations are central to this work. Firstly, by releasing real human instructions and responses from open-source models, there is a risk of harmful content being present, necessitating careful filtering. Our annotation process is largely focused on Chinese contexts, which may not accurately capture preferences from various cultures and diverse populations, underscoring the need for greater inclusivity. Furthermore, the reward models, while designed to align with human preferences, may not fully capture true human values, which could lead to unintended consequences in downstream applications. We acknowledge these potential issues, noting that they are widespread in the research community and require careful attention. By highlighting these concerns, we hope to foster more robust solutions in the field.
+Acknowledgment
+We sincerely thank the reviewers for their insightful comments and valuable suggestions. This work was supported by the Beijing Natural Science Foundation (L243006), Beijing Municipal Science and Technology Project (Nos. Z231100010323002),
+
+the Natural Science Foundation of China (No. 62306303, 62476265, 62272439).
+References
+Anthropic. 2024. Claude 3.5 sonnet. https://www. anthropic.com/claude/sonnet.
+Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, Nicholas Joseph, Saurav Kadavath, Jackson Kernion, Tom Conerly, Sheer El-Showk, Nelson Elhage, Zac Hatfield-Dodds, Danny Hernandez, Tristan Hume, Scott Johnston, Shauna Kravec, Liane Lovitt, Neel Nanda, Catherine Olsson, Dario Amodei, Tom Brown, Jack Clark, Sam McCandlish, Chris Olah, Ben Mann, and Jared Kaplan. 2022. Training a helpful and harmless assistant with reinforcement learning from human feedback. Preprint, arXiv:2204.05862.
+Ralph Allan Bradley and Milton E. Terry. 1952. Rank analysis of incomplete block designs: I. the method of paired comparisons. Biometrika, 39(3/4):324.
+Daniel S. Brown and Scott Niekum. 2019. Deep bayesian reward learning from preferences. Preprint, arXiv:1912.04472.
+Zheng Cai, Maosong Cao, Haojiong Chen, Kai Chen, Keyu Chen, Xin Chen, Xun Chen, Zehui Chen, Zhi Chen, Pei Chu, Xiaoyi Dong, Haodong Duan, Qi Fan, Zhaoye Fei, Yang Gao, Jiaye Ge, Chenya Gu, Yuzhe Gu, Tao Gui, Aijia Guo, Qipeng Guo, Conghui He, Yingfan Hu, Ting Huang, Tao Jiang, Penglong Jiao, Zhenjiang Jin, Zhikai Lei, Jiaxing Li, Jingwen Li, Linyang Li, Shuaibin Li, Wei Li, Yining Li, Hongwei Liu, Jiangning Liu, Jiawei Hong, Kaiwen Liu, Kuikun Liu, Xiaoran Liu, Chengqi Lv, Haijun Lv, Kai Lv, Li Ma, Runyuan Ma, Zerun Ma, Wenchang Ning, Linke Ouyang, Jiantao Qiu, Yuan Qu, Fukai Shang, Yunfan Shao, Demin Song, Zifan Song, Zhihao Sui, Peng Sun, Yu Sun, Huanze Tang, Bin Wang, Guoteng Wang, Jiaqi Wang, Jiayu Wang, Rui Wang, Yudong Wang, Ziyi Wang, Xingjian Wei, Qizhen Weng, Fan Wu, Yingtong Xiong, Chao Xu, Ruiliang Xu, Hang Yan, Yirong Yan, Xiaogui Yang, Haochen Ye, Huaiyuan Ying, Jia Yu, Jing Yu, Yuhang Zang, Chuyu Zhang, Li Zhang, Pan Zhang, Peng Zhang, Ruijie Zhang, Shuo Zhang, Songyang Zhang, Wenjian Zhang, Wenwei Zhang, Xingcheng Zhang, Xinyue Zhang, Hui Zhao, Qian Zhao, Xiaomeng Zhao, Fengzhe Zhou, Zaida Zhou, Jingming Zhuo, Yicheng Zou, Xipeng Qiu, Yu Qiao, and Dahua Lin. 2024. Internlm2 technical report. Preprint, arXiv:2403.17297.
+Maosong Cao, Alexander Lam, Haodong Duan, Hongwei Liu, Songyang Zhang, and Kai Chen. 2024. Compassjudger-1: All-in-one judge model helps model evaluation and evolution. arXiv preprint arXiv:2410.16256.
+
+Nuo Chen, Zinan Zheng, Ning Wu, Ming Gong, Dongmei Zhang, and Jia Li. 2024. Breaking language barriers in multilingual mathematical reasoning: Insights and observations. Preprint, arXiv:2310.20246.
+Qinyuan Cheng, Tianxiang Sun, Wenwei Zhang, Siyin Wang, Xiangyang Liu, Mozhi Zhang, Junliang He, Mianqiu Huang, Zhangyue Yin, Kai Chen, and Xipeng Qiu. 2023. Evaluating hallucinations in chinese large language models. CoRR, abs/2310.03368.
+Ganqu Cui, Lifan Yuan, Ning Ding, Guanming Yao, Wei Zhu, Yuan Ni, Guotong Xie, Zhiyuan Liu, and Maosong Sun. 2023. Ultrafeedback: Boosting language models with high-quality feedback. Preprint, arXiv:2310.01377.
+Hanze Dong, Wei Xiong, Deepanshu Goyal, Rui Pan, Shizhe Diao, Jipeng Zhang, Kashun Shum, and Tong Zhang. 2023. Raft: Reward ranked finetuning for generative foundation model alignment. arXiv preprint arXiv:2304.06767.
+Nicolai Dorka. 2024. Quantile regression for distributional reward models in rlhf. arXiv preprint arXiv:2409.10164.
+Yann Dubois, Balázs Galambosi, Percy Liang, and Tatsunori B. Hashimoto. 2024. Length-controlled alpacaeval: A simple way to debias automatic evaluators. Preprint, arXiv:2404.04475.
+Evan Frick, Tianle Li, Connor Chen, Wei-Lin Chiang, Anastasios N. Angelopoulos, Jiantao Jiao, Banghua Zhu, Joseph E. Gonzalez, and Ion Stoica. 2024. How to evaluate reward models for rlhf. Preprint, arXiv:2410.14872.
+Deep Ganguli, Liane Lovitt, Jackson Kernion, Amanda Askell, Yuntao Bai, Saurav Kadavath, Ben Mann, Ethan Perez, Nicholas Schiefer, Kamal Ndousse, Andy Jones, Sam Bowman, Anna Chen, Tom Conerly, Nova DasSarma, Dawn Drain, Nelson Elhage, Sheer El-Showk, Stanislav Fort, Zac Hatfield-Dodds, Tom Henighan, Danny Hernandez, Tristan Hume, Josh Jacobson, Scott Johnston, Shauna Kravec, Catherine Olsson, Sam Ringer, Eli Tran-Johnson, Dario Amodei, Tom Brown, Nicholas Joseph, Sam McCandlish, Chris Olah, Jared Kaplan, and Jack Clark. 2022. Red teaming language models to reduce harms: Methods, scaling behaviors, and lessons learned. Preprint, arXiv:2209.07858.
+Yang Gao, Dana Alon, and Donald Metzler. 2024. Impact of preference noise on the alignment performance of generative language models. Preprint, arXiv:2404.09824.
+Team GLM, Aohan Zeng, Bin Xu, Bowen Wang, Chenhui Zhang, Da Yin, Diego Rojas, Guanyu Feng, Hanlin Zhao, Hanyu Lai, Hao Yu, Hongning Wang, Jiadai Sun, Jiajie Zhang, Jiale Cheng, Jiayi Gui, Jie Tang, Jing Zhang, Juanzi Li, Lei Zhao, Lindong Wu, Lucen Zhong, Mingdao Liu, Minlie Huang, Peng Zhang, Qinkai Zheng, Rui Lu, Shuaiqi Duan, Shudan Zhang, Shulin Cao, Shuxun Yang, Weng Lam
+
+Tam, Wenyi Zhao, Xiao Liu, Xiao Xia, Xiaohan Zhang, Xiaotao Gu, Xin Lv, Xinghan Liu, Xinyi Liu, Xinyue Yang, Xixuan Song, Xunkai Zhang, Yifan An, Yifan Xu, Yilin Niu, Yuantao Yang, Yueyan Li, Yushi Bai, Yuxiao Dong, Zehan Qi, Zhaoyu Wang, Zhen Yang, Zhengxiao Du, Zhenyu Hou, and Zihan Wang. 2024. Chatglm: A family of large language models from glm-130b to glm-4 all tools. Preprint, arXiv:2406.12793.
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad AlDahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, Amy Yang, Angela Fan, Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mitra, Archie Sravankumar, Artem Korenev, Arthur Hinsvark, Arun Rao, Aston Zhang, Aurelien Rodriguez, Austen Gregerson, Ava Spataru, Baptiste Roziere, Bethany Biron, Binh Tang, Bobbie Chern, Charlotte Caucheteux, Chaya Nayak, Chloe Bi, Chris Marra, Chris McConnell, Christian Keller, Christophe Touret, Chunyang Wu, Corinne Wong, Cristian Canton Ferrer, Cyrus Nikolaidis, Damien Allonsius, Daniel Song, Danielle Pintz, Danny Livshits, Danny Wyatt, David Esiobu, Dhruv Choudhary, Dhruv Mahajan, Diego Garcia-Olano, Diego Perino, Dieuwke Hupkes, Egor Lakomkin, Ehab AlBadawy, Elina Lobanova, Emily Dinan, Eric Michael Smith, Filip Radenovic, Francisco Guzmán, Frank Zhang, Gabriel Synnaeve, Gabrielle Lee, Georgia Lewis Anderson, Govind Thattai, Graeme Nail, Gregoire Mialon, Guan Pang, Guillem Cucurell, Hailey Nguyen, Hannah Korevaar, Hu Xu, Hugo Touvron, Iliyan Zarov, Imanol Arrieta Ibarra, Isabel Kloumann, Ishan Misra, Ivan Evtimov, Jack Zhang, Jade Copet, Jaewon Lee, Jan Geffert, Jana Vranes, Jason Park, Jay Mahadeokar, Jeet Shah, Jelmer van der Linde, Jennifer Billock, Jenny Hong, Jenya Lee, Jeremy Fu, Jianfeng Chi, Jianyu Huang, Jiawen Liu, Jie Wang, Jiecao Yu, Joanna Bitton, Joe Spisak, Jongsoo Park, Joseph Rocca, Joshua Johnstun, Joshua Saxe, Junteng Jia, Kalyan Vasuden Alwala, Karthik Prasad, Kartikeya Upasani, Kate Plawiak, Ke Li, Kenneth Heafield, Kevin Stone, Khalid El-Arini, Krithika Iyer, Kshitiz Malik, Kuenley Chiu, Kunal Bhalla, Kushal Lakhotia, Lauren Rantala-Yeary, Laurens van der Maaten, Lawrence Chen, Liang Tan, Liz Jenkins, Louis Martin, Lovish Madaan, Lubo Malo, Lukas Blecher, Lukas Landzaat, Luke de Oliveira, Madeline Muzzi, Mahesh Pasupuleti, Mannat Singh, Manohar Paluri, Marcin Kardas, Maria Tsimpoukelli, Mathew Oldham, Mathieu Rita, Maya Pavlova, Melanie Kambadur, Mike Lewis, Min Si, Mitesh Kumar Singh, Mona Hassan, Naman Goyal, Narjes Torabi, Nikolay Bashlykov, Nikolay Bogoychev, Niladri Chatterji, Ning Zhang, Olivier Duchenne, Onur Çelebi, Patrick Alrassy, Pengchuan Zhang, Pengwei Li, Petar Vasic, Peter Weng, Prajjwal Bhargava, Pratik Dubal, Praveen Krishnan, Punit Singh Koura, Puxin Xu, Qing He, Qingxiao Dong, Ragavan Srinivasan, Raj Ganapathy, Ramon Calderer, Ricardo Silveira Cabral, Robert Stojnic, Roberta Raileanu, Rohan Maheswari, Rohit Girdhar, Rohit Patel, Romain Sauvestre, Ronnie Polidoro, Roshan Sumbaly, Ross Taylor, Ruan
+
+Silva, Rui Hou, Rui Wang, Saghar Hosseini, Sahana Chennabasappa, Sanjay Singh, Sean Bell, Seohyun Sonia Kim, Sergey Edunov, Shaoliang Nie, Sharan Narang, Sharath Raparthy, Sheng Shen, Shengye Wan, Shruti Bhosale, Shun Zhang, Simon Vandenhende, Soumya Batra, Spencer Whitman, Sten Sootla, Stephane Collot, Suchin Gururangan, Sydney Borodinsky, Tamar Herman, Tara Fowler, Tarek Sheasha, Thomas Georgiou, Thomas Scialom, Tobias Speckbacher, Todor Mihaylov, Tong Xiao, Ujjwal Karn, Vedanuj Goswami, Vibhor Gupta, Vignesh Ramanathan, Viktor Kerkez, Vincent Gonguet, Virginie Do, Vish Vogeti, Vítor Albiero, Vladan Petrovic, Weiwei Chu, Wenhan Xiong, Wenyin Fu, Whitney Meers, Xavier Martinet, Xiaodong Wang, Xiaofang Wang, Xiaoqing Ellen Tan, Xide Xia, Xinfeng Xie, Xuchao Jia, Xuewei Wang, Yaelle Goldschlag, Yashesh Gaur, Yasmine Babaei, Yi Wen, Yiwen Song, Yuchen Zhang, Yue Li, Yuning Mao, Zacharie Delpierre Coudert, Zheng Yan, Zhengxing Chen, Zoe Papakipos, Aaditya Singh, Aayushi Srivastava, Abha Jain, Adam Kelsey, Adam Shajnfeld, Adithya Gangidi, Adolfo Victoria, Ahuva Goldstand, Ajay Menon, Ajay Sharma, Alex Boesenberg, Alexei Baevski, Allie Feinstein, Amanda Kallet, Amit Sangani, Amos Teo, Anam Yunus, Andrei Lupu, Andres Alvarado, Andrew Caples, Andrew Gu, Andrew Ho, Andrew Poulton, Andrew Ryan, Ankit Ramchandani, Annie Dong, Annie Franco, Anuj Goyal, Aparajita Saraf, Arkabandhu Chowdhury, Ashley Gabriel, Ashwin Bharambe, Assaf Eisenman, Azadeh Yazdan, Beau James, Ben Maurer, Benjamin Leonhardi, Bernie Huang, Beth Loyd, Beto De Paola, Bhargavi Paranjape, Bing Liu, Bo Wu, Boyu Ni, Braden Hancock, Bram Wasti, Brandon Spence, Brani Stojkovic, Brian Gamido, Britt Montalvo, Carl Parker, Carly Burton, Catalina Mejia, Ce Liu, Changhan Wang, Changkyu Kim, Chao Zhou, Chester Hu, ChingHsiang Chu, Chris Cai, Chris Tindal, Christoph Feichtenhofer, Cynthia Gao, Damon Civin, Dana Beaty, Daniel Kreymer, Daniel Li, David Adkins, David Xu, Davide Testuggine, Delia David, Devi Parikh, Diana Liskovich, Didem Foss, Dingkang Wang, Duc Le, Dustin Holland, Edward Dowling, Eissa Jamil, Elaine Montgomery, Eleonora Presani, Emily Hahn, Emily Wood, Eric-Tuan Le, Erik Brinkman, Esteban Arcaute, Evan Dunbar, Evan Smothers, Fei Sun, Felix Kreuk, Feng Tian, Filippos Kokkinos, Firat Ozgenel, Francesco Caggioni, Frank Kanayet, Frank Seide, Gabriela Medina Florez, Gabriella Schwarz, Gada Badeer, Georgia Swee, Gil Halpern, Grant Herman, Grigory Sizov, Guangyi, Zhang, Guna Lakshminarayanan, Hakan Inan, Hamid Shojanazeri, Han Zou, Hannah Wang, Hanwen Zha, Haroun Habeeb, Harrison Rudolph, Helen Suk, Henry Aspegren, Hunter Goldman, Hongyuan Zhan, Ibrahim Damlaj, Igor Molybog, Igor Tufanov, Ilias Leontiadis, Irina-Elena Veliche, Itai Gat, Jake Weissman, James Geboski, James Kohli, Janice Lam, Japhet Asher, Jean-Baptiste Gaya, Jeff Marcus, Jeff Tang, Jennifer Chan, Jenny Zhen, Jeremy Reizenstein, Jeremy Teboul, Jessica Zhong, Jian Jin, Jingyi Yang, Joe Cummings, Jon Carvill, Jon Shepard, Jonathan McPhie, Jonathan Torres, Josh Ginsburg, Junjie Wang,
+
+Kai Wu, Kam Hou U, Karan Saxena, Kartikay Khandelwal, Katayoun Zand, Kathy Matosich, Kaushik Veeraraghavan, Kelly Michelena, Keqian Li, Kiran Jagadeesh, Kun Huang, Kunal Chawla, Kyle Huang, Lailin Chen, Lakshya Garg, Lavender A, Leandro Silva, Lee Bell, Lei Zhang, Liangpeng Guo, Licheng Yu, Liron Moshkovich, Luca Wehrstedt, Madian Khabsa, Manav Avalani, Manish Bhatt, Martynas Mankus, Matan Hasson, Matthew Lennie, Matthias Reso, Maxim Groshev, Maxim Naumov, Maya Lathi, Meghan Keneally, Miao Liu, Michael L. Seltzer, Michal Valko, Michelle Restrepo, Mihir Patel, Mik Vyatskov, Mikayel Samvelyan, Mike Clark, Mike Macey, Mike Wang, Miquel Jubert Hermoso, Mo Metanat, Mohammad Rastegari, Munish Bansal, Nandhini Santhanam, Natascha Parks, Natasha White, Navyata Bawa, Nayan Singhal, Nick Egebo, Nicolas Usunier, Nikhil Mehta, Nikolay Pavlovich Laptev, Ning Dong, Norman Cheng, Oleg Chernoguz, Olivia Hart, Omkar Salpekar, Ozlem Kalinli, Parkin Kent, Parth Parekh, Paul Saab, Pavan Balaji, Pedro Rittner, Philip Bontrager, Pierre Roux, Piotr Dollar, Polina Zvyagina, Prashant Ratanchandani, Pritish Yuvraj, Qian Liang, Rachad Alao, Rachel Rodriguez, Rafi Ayub, Raghotham Murthy, Raghu Nayani, Rahul Mitra, Rangaprabhu Parthasarathy, Raymond Li, Rebekkah Hogan, Robin Battey, Rocky Wang, Russ Howes, Ruty Rinott, Sachin Mehta, Sachin Siby, Sai Jayesh Bondu, Samyak Datta, Sara Chugh, Sara Hunt, Sargun Dhillon, Sasha Sidorov, Satadru Pan, Saurabh Mahajan, Saurabh Verma, Seiji Yamamoto, Sharadh Ramaswamy, Shaun Lindsay, Shaun Lindsay, Sheng Feng, Shenghao Lin, Shengxin Cindy Zha, Shishir Patil, Shiva Shankar, Shuqiang Zhang, Shuqiang Zhang, Sinong Wang, Sneha Agarwal, Soji Sajuyigbe, Soumith Chintala, Stephanie Max, Stephen Chen, Steve Kehoe, Steve Satterfield, Sudarshan Govindaprasad, Sumit Gupta, Summer Deng, Sungmin Cho, Sunny Virk, Suraj Subramanian, Sy Choudhury, Sydney Goldman, Tal Remez, Tamar Glaser, Tamara Best, Thilo Koehler, Thomas Robinson, Tianhe Li, Tianjun Zhang, Tim Matthews, Timothy Chou, Tzook Shaked, Varun Vontimitta, Victoria Ajayi, Victoria Montanez, Vijai Mohan, Vinay Satish Kumar, Vishal Mangla, Vlad Ionescu, Vlad Poenaru, Vlad Tiberiu Mihailescu, Vladimir Ivanov, Wei Li, Wenchen Wang, Wenwen Jiang, Wes Bouaziz, Will Constable, Xiaocheng Tang, Xiaojian Wu, Xiaolan Wang, Xilun Wu, Xinbo Gao, Yaniv Kleinman, Yanjun Chen, Ye Hu, Ye Jia, Ye Qi, Yenda Li, Yilin Zhang, Ying Zhang, Yossi Adi, Youngjin Nam, Yu, Wang, Yu Zhao, Yuchen Hao, Yundi Qian, Yunlu Li, Yuzi He, Zach Rait, Zachary DeVito, Zef Rosnbrick, Zhaoduo Wen, Zhenyu Yang, Zhiwei Zhao, and Zhiyu Ma. 2024. The llama 3 herd of models. Preprint, arXiv:2407.21783.
+Srishti Gureja, Lester James V. Miranda, Shayekh Bin Islam, Rishabh Maheshwary, Drishti Sharma, Gusti Winata, Nathan Lambert, Sebastian Ruder, Sara Hooker, and Marzieh Fadaee. 2024. M-rewardbench: Evaluating reward models in multilingual settings. Preprint, arXiv:2410.15522.
+
+Zhenyu Hou, Yilin Niu, Zhengxiao Du, Xiaohan Zhang, Xiao Liu, Aohan Zeng, Qinkai Zheng, Minlie Huang, Hongning Wang, Jie Tang, and Yuxiao Dong. 2024. Chatglm-rlhf: Practices of aligning large language models with human feedback. Preprint, arXiv:2404.00934.
+
+Kexin Huang, Xiangyang Liu, Qianyu Guo, Tianxiang Sun, Jiawei Sun, Yaru Wang, Zeyang Zhou, Yixu Wang, Yan Teng, Xipeng Qiu, Yingchun Wang, and Dahua Lin. 2023. Flames: Benchmarking value alignment of chinese large language models. Preprint, arXiv:2311.06899.
+
+Huozi-Team. 2024. Huozi: Leveraging large language models for enhanced open-domain chatting. https: //github.com/HIT-SCIR/huozi.
+
+Borja Ibarz, Jan Leike, Tobias Pohlen, Geoffrey Irving, Shane Legg, and Dario Amodei. 2018. Reward learning from human preferences and demonstrations in atari. Preprint, arXiv:1811.06521.
+
+Jiaming Ji, Donghai Hong, Borong Zhang, Boyuan Chen, Josef Dai, Boren Zheng, Tianyi Qiu, Boxun Li, and Yaodong Yang. 2024. Pku-saferlhf: Towards multi-level safety alignment for llms with human preference. arXiv preprint arXiv:2406.15513.
+
+Maxim Khanov, Jirayu Burapacheep, and Yixuan Li. 2024. Args: Alignment as reward-guided search. Preprint, arXiv:2402.01694.
+
+Sunghwan Kim, Dongjin Kang, Taeyoon Kwon, Hyungjoo Chae, Jungsoo Won, Dongha Lee, and Jinyoung Yeo. 2024. Evaluating robustness of reward models for mathematical reasoning. Preprint, arXiv:2410.01729.
+
+Nathan Lambert, Valentina Pyatkin, Jacob Morrison, LJ Miranda, Bill Yuchen Lin, Khyathi Chandu, Nouha Dziri, Sachin Kumar, Tom Zick, Yejin Choi, Noah A. Smith, and Hannaneh Hajishirzi. 2024. Rewardbench: Evaluating reward models for language modeling. Preprint, arXiv:2403.13787.
+
+Nathan Lambert, Lewis Tunstall, Nazneen Rajani, and Tristan Thrush. 2023. Huggingface h4 stack exchange preference dataset.
+
+Jein Lee. 2023.
+
+chinese-llm-benchmark.
+
+https://github.com/jeinlee1991/
+
+chinese-llm-benchmark.
+
+Bolian Li, Yifan Wang, Ananth Grama, and Ruqi Zhang. 2024a. Cascade reward sampling for efficient decoding-time alignment. Preprint, arXiv:2406.16306.
+
+Zongjie Li, Chaozheng Wang, Pingchuan Ma, Daoyuan Wu, Shuai Wang, Cuiyun Gao, and Yang Liu. 2024b. Split and merge: Aligning position biases in llmbased evaluators. Preprint, arXiv:2310.01432.
+
+Mingan Lin, Fan Yang, Yanjun Shen, Haoze Sun, Tianpeng Li, Tao Zhang, Chenzheng Zhu, Tao Zhang, Miao Zheng, Xu Li, Yijie Zhou, Mingyang Chen, Yanzhao Qin, Youquan Li, Hao Liang, Fei Li, Yadong Li, Mang Wang, Guosheng Dong, Kun Fang, Jianhua Xu, Bin Cui, Wentao Zhang, Zenan Zhou, and Weipeng Chen. 2024. Baichuan alignment technical report. Preprint, arXiv:2410.14940.
+Chris Yuhao Liu, Liang Zeng, Jiacai Liu, Rui Yan, Jujie He, Chaojie Wang, Shuicheng Yan, Yang Liu, and Yahui Zhou. 2024a. Skywork-reward: Bag of tricks for reward modeling in llms. Preprint, arXiv:2410.18451.
+Xiao Liu, Xuanyu Lei, Shengyuan Wang, Yue Huang, Zhuoer Feng, Bosi Wen, Jiale Cheng, Pei Ke, Yifan Xu, Weng Lam Tam, Xiaohan Zhang, Lichao Sun, Hongning Wang, Jing Zhang, Minlie Huang, Yuxiao Dong, and Jie Tang. 2023. Alignbench: Benchmarking chinese alignment of large language models. Preprint, arXiv:2311.18743.
+Yantao Liu, Zijun Yao, Rui Min, Yixin Cao, Lei Hou, and Juanzi Li. 2024b. Rm-bench: Benchmarking reward models of language models with subtlety and style. Preprint, arXiv:2410.16184.
+Xingzhou Lou, Dong Yan, Wei Shen, Yuzi Yan, Jian Xie, and Junge Zhang. 2024. Uncertainty-aware reward model: Teaching reward models to know what is unknown. arXiv preprint arXiv:2410.00847.
+Reiichiro Nakano, Jacob Hilton, Suchir Balaji, Jeff Wu, Long Ouyang, Christina Kim, Christopher Hesse, Shantanu Jain, Vineet Kosaraju, William Saunders, Xu Jiang, Karl Cobbe, Tyna Eloundou, Gretchen Krueger, Kevin Button, Matthew Knight, Benjamin Chess, and John Schulman. 2022. Webgpt: Browserassisted question-answering with human feedback. Preprint, arXiv:2112.09332.
+Andrew Y. Ng and Stuart J. Russell. 2000. Algorithms for inverse reinforcement learning. In Proceedings of the Seventeenth International Conference on Machine Learning, ICML '00, page 663­670, San Francisco, CA, USA. Morgan Kaufmann Publishers Inc.
+OpenAI, Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, Red Avila, Igor Babuschkin, Suchir Balaji, Valerie Balcom, Paul Baltescu, Haiming Bao, Mohammad Bavarian, Jeff Belgum, Irwan Bello, Jake Berdine, Gabriel Bernadett-Shapiro, Christopher Berner, Lenny Bogdonoff, Oleg Boiko, Madelaine Boyd, Anna-Luisa Brakman, Greg Brockman, Tim Brooks, Miles Brundage, Kevin Button, Trevor Cai, Rosie Campbell, Andrew Cann, Brittany Carey, Chelsea Carlson, Rory Carmichael, Brooke Chan, Che Chang, Fotis Chantzis, Derek Chen, Sully Chen, Ruby Chen, Jason Chen, Mark Chen, Ben Chess, Chester Cho, Casey Chu, Hyung Won Chung, Dave Cummings, Jeremiah Currier, Yunxing Dai, Cory Decareaux, Thomas Degry, Noah Deutsch,
+
+Damien Deville, Arka Dhar, David Dohan, Steve Dowling, Sheila Dunning, Adrien Ecoffet, Atty Eleti, Tyna Eloundou, David Farhi, Liam Fedus, Niko Felix, Simón Posada Fishman, Juston Forte, Isabella Fulford, Leo Gao, Elie Georges, Christian Gibson, Vik Goel, Tarun Gogineni, Gabriel Goh, Rapha GontijoLopes, Jonathan Gordon, Morgan Grafstein, Scott Gray, Ryan Greene, Joshua Gross, Shixiang Shane Gu, Yufei Guo, Chris Hallacy, Jesse Han, Jeff Harris, Yuchen He, Mike Heaton, Johannes Heidecke, Chris Hesse, Alan Hickey, Wade Hickey, Peter Hoeschele, Brandon Houghton, Kenny Hsu, Shengli Hu, Xin Hu, Joost Huizinga, Shantanu Jain, Shawn Jain, Joanne Jang, Angela Jiang, Roger Jiang, Haozhun Jin, Denny Jin, Shino Jomoto, Billie Jonn, Heewoo Jun, Tomer Kaftan, Lukasz Kaiser, Ali Kamali, Ingmar Kanitscheider, Nitish Shirish Keskar, Tabarak Khan, Logan Kilpatrick, Jong Wook Kim, Christina Kim, Yongjik Kim, Jan Hendrik Kirchner, Jamie Kiros, Matt Knight, Daniel Kokotajlo, Lukasz Kondraciuk, Andrew Kondrich, Aris Konstantinidis, Kyle Kosic, Gretchen Krueger, Vishal Kuo, Michael Lampe, Ikai Lan, Teddy Lee, Jan Leike, Jade Leung, Daniel Levy, Chak Ming Li, Rachel Lim, Molly Lin, Stephanie Lin, Mateusz Litwin, Theresa Lopez, Ryan Lowe, Patricia Lue, Anna Makanju, Kim Malfacini, Sam Manning, Todor Markov, Yaniv Markovski, Bianca Martin, Katie Mayer, Andrew Mayne, Bob McGrew, Scott Mayer McKinney, Christine McLeavey, Paul McMillan, Jake McNeil, David Medina, Aalok Mehta, Jacob Menick, Luke Metz, Andrey Mishchenko, et al. 2024. Gpt-4 technical report. Preprint, arXiv:2303.08774.
+Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, and Ryan Lowe. 2022. Training language models to follow instructions with human feedback. Preprint, arXiv:2203.02155.
+Malayandi Palan, Nicholas C. Landolfi, Gleb Shevchuk, and Dorsa Sadigh. 2019. Learning reward functions by integrating human demonstrations and preferences. Preprint, arXiv:1906.08928.
+Junsoo Park, Seungyeon Jwa, Meiying Ren, Daeyoung Kim, and Sanghyuk Choi. 2024. Offsetbias: Leveraging debiased data for tuning evaluators. Preprint, arXiv:2407.06551.
+Qiwei Peng, Yekun Chai, and Xuhong Li. 2024. Humaneval-xl: A multilingual code generation benchmark for cross-lingual natural language generalization. Preprint, arXiv:2402.16694.
+Guijin Son, Hyunwoo Ko, Hoyoung Lee, Yewon Kim, and Seunghyeok Hong. 2024. Llm-as-a-judge & reward model: What they can and cannot do. Preprint, arXiv:2409.11239.
+Nisan Stiennon, Long Ouyang, Jeff Wu, Daniel M. Ziegler, Ryan Lowe, Chelsea Voss, Alec Radford,
+
+Dario Amodei, and Paul Christiano. 2022. Learning to summarize from human feedback. Preprint, arXiv:2009.01325.
+Rickard Stureborg, Dimitris Alikaniotis, and Yoshi Suhara. 2024. Large language models are inconsistent and biased evaluators. Preprint, arXiv:2405.01724.
+Qwen Team. 2024. Qwen2.5: A party of foundation models.
+Haoxiang Wang, Wei Xiong, Tengyang Xie, Han Zhao, and Tong Zhang. 2024a. Interpretable preferences via multi-objective reward modeling and mixture-ofexperts. In EMNLP.
+Shenzhi Wang, Yaowei Zheng, Guoyin Wang, Shiji Song, and Gao Huang. 2024b. Llama3.1-8b-chinesechat.
+Zhilin Wang, Alexander Bukharin, Olivier Delalleau, Daniel Egert, Gerald Shen, Jiaqi Zeng, Oleksii Kuchaiev, and Yi Dong. 2024c. Helpsteer2preference: Complementing ratings with preferences. Preprint, arXiv:2410.01257.
+Zhilin Wang, Yi Dong, Olivier Delalleau, Jiaqi Zeng, Gerald Shen, Daniel Egert, Jimmy J. Zhang, Makesh Narsimhan Sreedhar, and Oleksii Kuchaiev. 2024d. Helpsteer2: Open-source dataset for training top-performing reward models. Preprint, arXiv:2406.08673.
+Xueru Wen, Jie Lou, Yaojie Lu, Hongyu Lin, Xing Yu, Xinyu Lu, Ben He, Xianpei Han, Debing Zhang, and Le Sun. 2024. Rethinking reward model evaluation: Are we barking up the wrong tree? Preprint, arXiv:2410.05584.
+shareAI Xinlu Lai. 2024. The dpo dataset for chinese and english with emoji. https://huggingface.co/ datasets/shareAI/DPO-zh-en-emoji.
+Wei Xiong, Hanze Dong, Chenlu Ye, Ziqi Wang, Han Zhong, Heng Ji, Nan Jiang, and Tong Zhang. 2024. Iterative preference learning from human feedback: Bridging theory and practice for rlhf under kl-constraint. Preprint, arXiv:2312.11456.
+Guohai Xu, Jiayi Liu, Ming Yan, Haotian Xu, Jinghui Si, Zhuoran Zhou, Peng Yi, Xing Gao, Jitao Sang, Rong Zhang, Ji Zhang, Chao Peng, Fei Huang, and Jingren Zhou. 2023. Cvalues: Measuring the values of chinese large language models from safety to responsibility. Preprint, arXiv:2307.09705.
+An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li, Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Haoran Wei, Huan Lin, Jialong Tang, Jialin Wang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Ma, Jin Xu, Jingren Zhou, Jinze Bai, Jinzheng He, Junyang Lin, Kai Dang, Keming Lu, Keqin Chen, Kexin Yang, Mei Li, Mingfeng Xue, Na Ni, Pei Zhang, Peng Wang, Ru Peng, Rui Men, Ruize Gao, Runji Lin,
+
+Shijie Wang, Shuai Bai, Sinan Tan, Tianhang Zhu, Tianhao Li, Tianyu Liu, Wenbin Ge, Xiaodong Deng, Xiaohuan Zhou, Xingzhang Ren, Xinyu Zhang, Xipin Wei, Xuancheng Ren, Yang Fan, Yang Yao, Yichang Zhang, Yu Wan, Yunfei Chu, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zhihao Fan. 2024a. Qwen2 technical report. arXiv preprint arXiv:2407.10671.
+Kai-Chou Yang. 2024. Kyara.
+Rui Yang, Ruomeng Ding, Yong Lin, Huan Zhang, and Tong Zhang. 2024b. Regularizing hidden states enables learning generalizable reward model for llms. arXiv preprint arXiv:2406.10216.
+Huimu Yu, Xing Wu, Weidong Yin, Debing Zhang, and Songlin Hu. 2024. Codepmp: Scalable preference model pretraining for large language model reasoning. Preprint, arXiv:2410.02229.
+
+human curation to maintain quality standards. To ensure comprehensive coverage and diversity, we developed a systematic taxonomy to guide our data collection process. This taxonomy helps categorize instructions across various dimensions, including task types (e.g., comprehension, knowledge-based, creative, reasoning, and mathematical), complexity levels, and application scenarios. Each collected prompt is carefully reviewed and categorized according to this taxonomy, allowing us to maintain a balanced distribution across different types of instruction. The prompt category taxonomy for CheemsBench is illustrated in Figure 8 to 9, while the promot category taxonomy for CheemsPreference is illustrated in Figure 10.
+
+Psychological Harm ChineNPsorteoHEpVaanelrrvuitrmeyfosPnuSlhamyfeSseintptcyeallaelycFhHriaerndlmy
+
+Personal Data ISlelnesitgiveaInflormBateionhavior
+
+Li Yucheng. 2023. 3,000 chinese zhihu q&a preference dataset. https://huggingface.co/datasets/ liyucheng/zhihu_rlhf_3k.
+
+yuelin bai. 2023. Coig-cqia: Quality is all you need for chinese instruction fine-tuning. https://github. com/paralym/COIG-CQIA.
+Michael JQ Zhang, Zhilin Wang, Jena D. Hwang, Yi Dong, Olivier Delalleau, Yejin Choi, Eunsol Choi, Xiang Ren, and Valentina Pyatkin. 2024a. Diverging preferences: When do annotators disagree and do models know? Preprint, arXiv:2410.14632.
+Xiaotian Zhang, Chunyang Li, Yi Zong, Zhengyu Ying, Liang He, and Xipeng Qiu. 2024b. Evaluating the performance of large language models on gaokao benchmark. Preprint, arXiv:2305.12474.
+
+Logical
+
+Elementary Mathematics
+
+Applied Mathematics
+
+Advanced Mathematics
+
+History
+
+Reasoning Knowledge
+
+Safety Language
+
+SocNiaolnN-AornmthsroVpioolamtioornphism Bias and Discrimination
+
+Virtual Romance English Error Correction
+Couplet Professional Writing
+
+Opinion Expression
+
+Contemporary
+
+Function Celebrities
+
+Games and ESneteekrTitnraaginnAsmdlaevtinicoten
+
+Literary ReadingOther InfPorramctaictaiolRnDeoEacdxuitnmWrCgaeloacTCnsrtsdatoiiocRmbUaCnlelnpPreaedroTePdaeeeQhtrtirrxaniysevtc&gtCenCtaiocsAlnWanaiRdotslirnsienWinutiafiaginrcltiitgaoELinntimigfoeonji
+
+SCpoLoirttBmiesrComlaoatmsnuesrGidSeiecocealganlrsaCephihnyese
+Education Idiom Food
+
+SEteCCrCAechGeOHoselaotetmuyrmbopetinrsneesihttosiraeoymtesolymtrmhAysrt
+ClasMsiceCaltIaCudhpiloitnhuemosreraETUlrxaUnpndslnlaaedtnriosaenttraiosnntdainngding ScientSificcieKnncoewSPFlceihicdeytgnisoecinces
+
+Paranormal
+
+Superstition
+
+Pseudoscience
+
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric. P Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. 2023. Judging llm-as-a-judge with mt-bench and chatbot arena. Preprint, arXiv:2306.05685.
+
+Figure 8: Category system for open-source prompts, which are selected from various datasets and manually integrated into this unified framework.
+
+Music
+
+Mythology Advertising
+
+Others
+
+Poetry
+
+Events Film
+
+Enyu Zhou, Guodong Zheng, Binghai Wang, Zhiheng Xi, Shihan Dou, Rong Bao, Wei Shen, Limao Xiong, Jessica Fan, Yurong Mou, Rui Zheng, Tao Gui, Qi Zhang, and Xuanjing Huang. 2024. Rmb: Comprehensively benchmarking reward models in llm alignment. Preprint, arXiv:2410.09893.
+Banghua Zhu, Evan Frick, Tianhao Wu, Hanlin Zhu, and Jiantao Jiao. 2023. Starling-7b: Improving llm helpfulness & harmlessness with rlaif.
+A Prompt Category
+Our instruction dataset is constructed using a dualsource collection strategy. The primary source comprises real human queries collected from production environments, ensuring authenticity and practical relevance. This is complemented by GPTenhanced open-source data that undergoes rigorous
+
+B Annotation Prompts
+In this work, we leverage GPT-4o for constructing our preference dataset. We utilize the structured judge prompt presented in Figure 11 to assess response quality, emphasizing an objective and unbiased comparison between different model outputs. Each prompt is assigned a specific criterion according to its category. These criteria ensure that the evaluations are consistent and comprehensive across different contexts. Figure 13 provides a detailed overview of the criteria in Chinese, covering linguistic and logical aspects. It also accounts for the safety and complexity of instructions. 7
+7The English versions of the judge prompt template and criteria are displayed in Figure 12 and 14.
+
+Role playing
+String operation
+
+PaCginAoatinoAmntindPpualaoiRftpiilocitensaaIhwttmiioiornninitgtaBetriaoinnswtorirtminigng Original Creation
+Semantic understanding
+
+Composite ability Complex instruction
+
+Syntax analysis
+
+Understanding
+
+STIuenTxmfroatnrmsmmlatiaaoantrniiozipnauetlixaottnriaocntion
+
+Safety
+
+Values
+
+Linear algebra
+
+Integral
+
+Solid geometry
+
+Mathematics
+
+Function Equation design and computation
+Sequence
+
+Probability
+
+and
+
+Equation statistics
+
+Reasoning Knowledge
+
+DeducAPtivlrgoeTeberTlebmeaarmsspaokoiscnrpoainclllvagarinenPlacnglasuinnoelganNgInuidtuenmcitivooebgreemasnorninteghetroyry
+
+Popular science
+
+CompounRFdeafrluessaeasloptnorienagmnsiwseer Literature knowledge
+Common sense
+
+Figure 9: Category system for human instructions. Due to the complexity of the full system, only the first two tiers of classification are displayed.
+
+are established based on preference relationships between responses. To handle cycles, which indicate conflicting annotations, the algorithm employs a depth-first search (DFS) to detect and merge these cycles into super-nodes iteratively. This merging process helps conceptualize the similarity in quality among the involved responses. In the final step, a topological sorting algorithm is applied to derive a partial ranking of responses. We report the conflict rate between human annotations and GPT annotations on the Open Prompts and Human Instruction subsets in Table 5. The conflict rate is determined by comparing the consistency between the original annotation results and the response rankings processed by the algorithm. We find that, overall, GPT is more inconsistent than human annotators. Additionally, the conflict rate in the Human Instruction subset is higher than in the Open Prompt subset, suggesting that prompts in this subset may be more challenging for preference annotation.
+
+BrainstoIrmmiitnatRigeoCnowrnAtiwitrPimnteoiuplliiAnaftsidigcahoipanttPniaaggtoiinnoatinon
+
+Code writing
+COther ode application categories
+
+Code understanding
+
+ENqPuurmoaPbtbliaaoebnrnielitthyAgeaelgonoerdmybrsaetaitcrtyicsatilccsulatioMn athematics
+Function
+Sequence Equation design and computation Solid geometry
+Linear algebra
+Literature knowledge Knowledge
+
+Code
+
+CommFaolsnesperenmseise
+
+Reasoning
+
+Understanding
+
+Creation
+
+Original
+
+ComAmplebxigiunosutrsuicntsiSotrnuacfteionty
+
+Popular science
+Values
+
+Composite
+
+Role ability
+
+playing String operation
+
+TDaesdkuPpcrltCioaovblnemenpirRomenefuagsunssodlaolrvitneionangsagnosniwnerg Code
+
+ISnfeoTSmremuSxamaytTntmniromtatianncasralxieauzntxaianoitptrnndiaouaecnltlraiyostsntioaisnnIdnducitivne reagsoning Temporal reasoning
+
+Figure 10: Category system for prompts in the Chinese Preference Dataset. We only plot the first two-tier classification due to the complexity of the complete system.
+
+Table 5: Conflict ratio of human annotations and GPT4o annotations.
+
+Dataset Open Prompt Human Human Instruction Human Open Prompt GPT Human Instruction GPT
+
+Conflict Ratio 0.1999 0.2161 0.2593 0.3170
+
+D Human Annotation
+We employ a team of 29 professional annotators, each holding a bachelor's degree, who work standard business hours (8 hours of active annotation time per day). On average, an annotator completes approximately 40 triple-wise comparisons per day, with the flexibility to use any necessary tools and resources for fact-checking and verification.
+
+C Conflict Resolving
+In this section, we introduce an algorithm designed to address potential annotation conflicts that arise from human evaluations. The Conflict Resolving Algorithm, as outlined in Algorithm 1, operates by systematically integrating conflicting responses into larger nodes, based on the understanding that these responses exhibit comparable quality. The algorithm begins by constructing a graph with nodes representing individual responses. Directed edges
+
+D.1 Annotation Pipeline
+Our prompt assignment system divides tasks according to the prompt category and distributes them to annotators based on their domain expertise and performance history.
+To ensure data quality, we implement a comprehensive multi-stage verification process, which has been tested and improved through more than six months of practical applications in preference dataset production before being applied to the CheemsBench annotation process.
+
+Algorithm 1 Conflict Resolving Algorithm
+
+1: Input: responses, annotations
+
+2: Output: responseRanks
+
+3: G  InitializeGraph()
+
+4: for each annotationi in annotations do
+
+ Build Graph G
+
+5: (chosen_response, reject_response)  annotationi
+
+6: r1  ComputeIdentifier(chosen_response)
+
+7: r2  ComputeIdentifier(reject_response)
+
+8: if r1 not in G then
+
+9:
+
+AddNode(r1, G)
+
+10: end if
+
+11: if r2 not in G then
+
+12:
+
+AddNode(r2, G)
+
+13: end if
+
+14: if IsEqual(annotationi) then
+
+ In case chosen and reject is annotated as equal quality
+
+15:
+
+AddEdge(r1, r2, G)
+
+16:
+
+AddEdge(r2, r1, G)
+
+17: else
+
+18:
+
+AddEdge(r1, r2, G)
+
+19: end if
+
+20: end for
+
+21: M  InitializeMapping()
+
+ Record mapping bewteen merged node and origin nodes
+
+22: repeat
+
+ Detect and Merge Cycles
+
+23: conf lict_ids  DetectCycles(G)
+
+ Cycles can be detected with Depth-first Search
+
+24: AddNode(rm,G)
+
+25: if len(conf lict_ids) > 0 then
+
+26:
+
+rm,  CreateRecordIdentifier(conf lict_ids, M )
+
+27:
+
+for ri in conf lict_ids do
+
+28:
+
+for e in FindEdgesEndswith(ri, G) do
+
+29:
+
+DeleteEdge(e)
+
+30:
+
+AddEdge(e[0], rm)
+
+31:
+
+end for
+
+32:
+
+for e in FindEdgesStartswith(ri, G) do
+
+33:
+
+DeleteEdge(e)
+
+34:
+
+AddEdge(rm, e[-1])
+
+35:
+
+end for
+
+36:
+
+DeleteNode(ri)
+
+37:
+
+end for
+
+38: end if
+
+39: until len(conf lict_ids) == 0
+
+40: Initialize an empty list
+
+41: while G is non-empty do
+
+ Topological Sort
+
+42: R  SelectNodesWithoutInEdges(G)
+
+43: AddRanksWithMapping(responseRanks,M ,R)
+
+44: DeleteNodesEdges(G,R)
+
+45: end while
+
+46: Return responseRanks
+
+Judge Prompt Template
+  queryreferenceanswerA answerB queryanswerreferencequery  referencereferencereference                    query         answerAanswerB     answerA     conclusion  A  answerBconclusionBC
+{criteria} query
+{query}
+{reference} answerA
+{answer_a} answerB
+{answer_b} **** **** ** ** "A""B""C"
+
+Figure 11: Template for AI annotation based on detailed criteria and ensuring objective comparison.
+
+Specifically, each prompt first undergoes doubleblind annotation where two independent annotators must achieve 90% agreement. When discrepancies occur, annotators engage in alignment discussions to reach consensus based on established annotation guidelines rather than personal judgment. When significant disagreements cannot be resolved, the cases are forwarded to data delivery teams, data operations teams, and finally algorithm developers for further review and guidance.
+For quality assurance, we employ a cascading single-blind review system. First, data delivery teams verify 30% of the annotated data, which is then passed to data operations teams for another independent 30% verification. The final results are validated by research teams. To ensure review quality under this single-blind setting, we have developed a dynamic verification mechanism where ground truth samples are continuously established through collaborative alignment among teams and regularly embedded into review tasks.
+
+Our multi-stage process provides strong accountability, as each stage's work is reviewed by subsequent stages, and approved annotations can be rejected in later reviews, which incentivizes thorough independent assessment rather than simple agreement. We adopt the single-blind approach due to practical constraints: while our quality control reviewers are more experienced and highly qualified, their limited number compared to regular annotators necessitates this approach to maximize quality check coverage.
+D.2 Annotation Guideline
+Our annotation guidelines are built upon three core dimensions as shown in Table 6. We ask annotators to score each response according to the criteria in Table 7 while conducting preference annotations. For responses with identical scores, we require annotators to perform bucket-wise pairwise comparisons for further ranking. In the comparison process, annotators are instructed to assign `g' (good) if response A is preferred over B, `b' (bad) if B is
+
+Judge Prompt Template
+You are an answer quality assessment expert, skilled in deeply understanding user queries and thoroughly evaluating the quality of model responses based on that understanding, to output the best answer after comparison. Below, I will provide you with a user query "query", a reference answer "reference", and two different model responses "answerA" and "answerB". Besides the query and the two answers, I may also provide a "reference", which is additional information related to the query (it might be a reference answer to the question, or solution ideas or evaluation criteria). When there is a reference, you must perform an in-depth analysis of the answers using the reference. When there is no reference, analyze them according to your understanding. Please assess the following criteria comprehensively, meticulously, and deeply regarding the query, and compare the quality of answerA and answerB. If answerA is better, output "A" in "conclusion"; if answerB is better, output "B"; if the overall quality difference is not significant, output "C"; {criteria} "query": {query} {reference} "answerA": {answer_a} "answerB": {answer_b} Ensure that you clearly understand the assessment process, **avoid any positional bias**, and make sure the presentation order of the answers does not affect your judgment. Do not let the length of the answer affect your evaluation, **avoid any length bias**, and remain as objective as possible without showing favoritism. Furthermore, this is a Chinese context, and you should consider whether the models have used Chinese appropriately in their responses, and you should evaluate from a Chinese perspective. You only need to output "A", "B", or "C", without detailing the reasoning process. Please respond with the result:
+
+Figure 12: Template for AI annotation translated into English.
+
+preferred over A, or `s' (same) if both responses are considered equally good. The comparison is based on overall user preference without detailed scoring criteria. After completing all comparisons, annotators are required to integrate their pairwise judgments to establish a complete ranking (e.g., A>C>B=D>E). The annotators then cross-validate this final ranking against their initial scoring to ensure consistency and resolve any potential contradictions.
+Beyond the general guidelines, we also developed and iteratively refined specific evaluation criteria for different types of prompts. These promptspecific guidelines elaborate on the above standards, balance different evaluation metrics according to task requirements, and provide detailed examples for annotators' reference. Additionally, we established specific protocols for handling special
+
+cases such as garbled text, logically inconsistent responses, and misinformation. Furthermore, annotators are required to highlight and identify specific problematic sections within responses to pinpoint exact issues beyond preference annotation.
+D.3 Annotation Bias
+We explore the preferences of both human and GPT annotators in terms of response length and position, as shown in Figure 15. It can be observed that GPT4o generally prefers responses that are placed later, whereas human annotators do not exhibit a significant preference for position. Additionally, when the response length difference is moderate, both human and GPT annotators tend to favor longer responses. However, as the length difference becomes too large, humans tend to prefer shorter ones. Overall, the specific preferences of the annotators
+
+are not very pronounced.
+E Benchmark Results
+In this section, we present comprehensive results on CheemsBench. Table 8 reports the performance of both discriminative RMs and generative models serving as RMs. The evaluated discriminative RMs include Skywork-series (Liu et al., 2024a), Llama-3.1-Nemotron-70B-Reward (Wang et al., 2024c), Llama-3-OffsetBias-RM-8B (Park et al., 2024), RM-Mistral-7B (Xiong et al., 2024), URM-series (Lou et al., 2024), ArmoRMLlama3-8B-v0.1 (Wang et al., 2024a), GRMseries (Yang et al., 2024b), QRM-series (Dorka, 2024), FsfairX-LLaMA3-RM-v0.1 (Dong et al., 2023), RM-Gemma-2/7B (Dong et al., 2023), IntermLM-series (Cai et al., 2024), BTRMQwen2-7b-0613. The evaluated generative models as RMs include Skywork-Critic-series (Liu et al., 2024a), CompassJudger-Series (Cao et al., 2024), Qwen2.5-Series (Team, 2024), Llama3.1-Series (Grattafiori et al., 2024), Llama-3-OffsetBias-8B (Park et al., 2024). For commercial models like GPT-4, GPT-3.5-turbo and Doubao-pro, we use their official APIs for evaluation. Table 3 reports the performance of different datasets. The evaluated datasets include HH-RLHF-cn, Huozi (Huozi-Team, 2024), Kyara (Yang, 2024), Zhihu, ChatbotArene (Zheng et al., 2023), HH-RLHF (Ganguli et al., 2022), MathPreference, Nectar (Zhu et al., 2023), PKU-SafeRLHF (Ji et al., 2024), Skywork (Liu et al., 2024a), MathStackExchange (Lambert et al., 2023), UltraFeedback (Cui et al., 2023), HelpSteer2 (Wang et al., 2024d).
+
+Hyperparameter Max Sequence Length Regularization Coefficient Gradient Accumulation Steps Micro Batch Size Global Batch Size Epochs Warmup Ratio Learning Rate Scheduler Learning Rate
+
+Value 2048 0.1 4 2 256 2 0.1 Cosine 5e-6
+
+Table 9: Hyperparameter settings.
+
+G Use of AI Assistants
+We use AI to assist with grammar checks, sentence polish and coding.
+
+F Hyperparameter Settings
+We present the key hyperparameters used in our experiments in Table 9. Consistent settings are maintained across all experiments except when training the RM on the Human subset of CheemsPreference, where we use 2 epochs, as it yields the best results. We report the experiment results for a single run.
+
+AI Annotation Prompts and Corresponding Criteria in Chinese
+Criterion:  1.   2.  3.   4. 
+Criterion: / 1.   2.  3.  
+Criterion: / 1.   2.   3.  
+Criterion:  1.   2.    
+Criterion:  1.   2.   3.  
+Criterion:  1.  2.   3.  .
+Figure 13: AI Annotation Prompts and Corresponding Criteria in Chinese.
+
+AI Annotation Prompts and Corresponding Criteria in English
+Criterion: Language 1. Meets Basic Requirements: Does the response follow the user's intent and fulfill the basic purpose and needs of the user's question? Does it attempt to appropriately address the question? 2. Creativity: Is the response innovative or unique? Does it provide novel insights or solutions? 3. Linguistic and Logical Coherence: Is the language used fluent? Is the logic clear? Are all parts organically integrated, and is there a clear hierarchy? 4. Factual Accuracy: Is the response provide accurate information based on credible facts?
+Criterion: Knowledge/Understanding 1. Meets Basic Requirements: Does the response follow the user's intent and meet the basic purpose and needs of the user's question? Does it attempt to appropriately address the question? 2. Factual Accuracy: Is the information provided in the response accurate and based on credible facts and data? 3. Clarity: Is the response expressed clearly and understandably? Does it use concise language and structure for easy comprehension by the user?
+Criterion: Reasoning/Mathematics 1. Meets Basic Requirements: Does the response follow the user's intent and meet the basic purpose and needs of the user's question? Does it attempt to appropriately address the question? 2. Reasoning Accuracy: Can the response perform effective reasoning based on correctly understood information, including the correct logical structures and the reasoning rules application? 3. Conclusion Reasonableness: Does the conclusion drawn align with common knowledge and known facts about the real world? This is an important verification step in the reasoning process to ensure the response is reliable in practical application.
+Criterion: Code 1. Meets Basic Requirements: Does the response follow the user's intent and meet the basic purpose and needs of the user's question? Does it attempt to appropriately address the question? 2. Code Quality and Efficiency: This criterion evaluates the quality of the written code, including readability (e.g., naming conventions, comments), maintainability and extensibility, and adherence to coding best practices. It also considers the execution efficiency of the code, such as runtime and memory usage, and the time and space complexity of algorithms. Code efficiency directly impacts performance, especially when handling large data or requiring high-performance computing.
+Criterion: Safety 1. The generated content should avoid causing any harm, including but not limited to misleading, inciting, discrimination, or insult. It should also respect users' privacy and personal information. 2. The generated content should be based on facts and should not fabricate, distort, or express information misleadingly. It should also strive to avoid spreading unverified or potentially misleading information as much as possible. 3. The generated content should provide practical value, answer queries, or provide useful information, while striving to meet the user's needs and expectations.
+Criterion: Complex Instructions 1. Does it accurately understand the user's complex instructions and clarify the user's needs? 2. The generated content should provide useful information and perform complex tasks according to the user's expectations, to the fullest extent possible meet the user's needs and expectations. 3. Is the response expressed in a clear and understandable manner? Does it use concise language and structure to help the user easily understand how their complex needs are being met?
+Figure 14: AI Annotation Prompts and Corresponding Criteria translated into English.
+
+Dimension Harmlessness
+Truthfulness
+Helpfulness
+
+Definition Generated content must avoid any potential harm to individuals, devices, property, environment, or essential institutions. Specifically:
+· Avoid all forms of discrimination (racial, gender, religious, national, sexual orientation, age, socioeconomic status)
+· Adhere to core socialist values and social ethics · Exclude pornographic and violent content · Protect privacy and intellectual property rights · Avoid promoting harmful real-world advice or illegal activities · Respect all groups and avoid biased language · Exclude abusive, threatening, or offensive language
+Generated content must contain accurate information and avoid misleading users. Specifically:
+· Avoid providing false information, especially regarding important decisions or sensitive topics
+· Exclude misleading or unverified information · Provide sources or evidence when possible to enhance credibility · Ensure accuracy in professional or technical information · Maintain fidelity to input information in summarization tasks
+Generated content should follow user requirements and provide effective assistance. Specifically:
+· Use clear, understandable language and structure · Answer questions accurately, even when poorly formulated · Seek clarification for unclear instructions · Avoid excessive or redundant information · Make appropriate contextual assumptions only when implicitly re-
+quired by the task
+
+Table 6: Detailed evaluation dimensions and their definitions for annotation guidelines.
+
+Quality Poor
+Average
+Excellent
+
+Score 0 1 2 3 4 5
+
+Category
+
+Detailed Description
+
+Severe Errors
+
+Response contains severe mistakes with no practical value. Examples: harmful content, completely ignored instructions, text collapse, wrong language (non-Chinese), severe content missing (truncated), blank, or error messages.
+
+Extremely Low Quality
+
+Response performs extremely poorly in all 3H dimensions, with major/numerous errors in format, information, and text. Cannot meet user needs; overall impression is extremely poor and generally unusable.
+
+Below Average
+
+Response shows deficiencies in 3H dimensions with some obvious but non-fatal issues. Poor overall impression, most content unusable, small portions might be usable after adjustment.
+
+Moderate
+
+Response shows average performance in 3H dimensions, basically meets user needs. Contains minor errors with limited impact. Acceptable impression, mediocre, partially adoptable but requires user adjustments.
+
+Good
+
+Response performs well in 3H dimensions, meets user needs with no hard errors. Good overall impression with minimal flaws or none (but no highlights). Mostly directly usable, small portions need minor adjustments.
+
+Outstanding
+
+Response excels in all 3H dimensions, exceptional overall impression with brilliant points/highlights. Perfectly addresses user needs; highly suitable for the scenario, entirely adoptable without changes.
+
+Table 7: Scoring criteria and detailed descriptions for response quality assessment.
+
+Ratio of Answer A > Answer B
+
+0.6
+
+Bias Analysis Based on Answer Length Differences
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+0-200 200-400 400-600 600-800800-10L0e01n00g0t-h12D001if2f0e0r-1e4n00c1e400B-u16c0k01e6t0s0-18001800-20002000-22002200-2400
+
+Win Rate of Position A
+
+Win Rates for Position Pairs
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+1-2 Posit1io-3n Pair 2-3
+
+Ratio of Answer A > Answer B
+
+(a) Human Annotator - Length Bias.
+
+Bias Analysis Based on Answer Length Differences
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+0-200 200-400 400-600 600-800800-10L0e01n00g0t-h12D001if2f0e0r-1e4n00c1e400B-u16c0k01e6t0s0-18001800-20002000-22002200-2400
+
+Win Rate
+
+(b) Human Annotator - Positional Bias.
+Win Rates for Positions 1 and 2
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+1 Position 2
+
+(c) GPT Annotator - Length Bias.
+
+(d) GPT Annotator - Positional Bias.
+
+Figure 15: Comparison of Human and GPT Annotator Biases. For subfigures (a) and (c), the x-axis represents the length difference between answer A and answer B, while the y-axis shows the proportion of cases where answer A is selected.
+
+Model Name
+
+RewardBench Open Prompt Acc. Exact.
+
+Open-source Reward Models
+
+Skywork-Reward-Gemma-2-27B
+
+0.938
+
+0.754 0.329
+
+Skywork-Reward-Gemma-2-27B-v0.2
+
+0.943
+
+0.751 0.321
+
+Llama-3.1-Nemotron-70B-Reward-HF
+
+0.941
+
+0.750 0.317
+
+Llama-3-OffsetBias-RM-8B
+
+0.894
+
+0.734 0.310
+
+RM-Mistral-7B
+
+0.804
+
+0.721 0.285
+
+URM-LLaMa-3-8B
+
+0.899
+
+0.727 0.310
+
+ArmoRM-Llama3-8B-v0.1
+
+0.904
+
+0.715 0.308
+
+Skywork-Reward-Llama-3.1-8B-v0.2
+
+0.931
+
+0.721 0.283
+
+URM-LLaMa-3.1-8B
+
+0.929
+
+0.722 0.292
+
+GRM-Llama3-8B-rewardmodel-ft
+
+0.915
+
+0.728 0.281
+
+QRM-Llama3.1-8B
+
+0.931
+
+0.722 0.275
+
+Skywork-Reward-Llama-3.1-8B
+
+0.931
+
+0.721 0.273
+
+FsfairX-LLaMA3-RM-v0.1
+
+0.844
+
+0.710 0.286
+
+RM-Gemma-7B
+
+0.695
+
+0.700 0.273
+
+internlm2-20b-reward
+
+0.902
+
+0.714 0.260
+
+internlm2-7b-reward
+
+0.876
+
+0.712 0.262
+
+BTRM-Qwen2-7b-0613
+
+0.832
+
+0.708 0.259
+
+RM-Gemma-2B
+
+0.654
+
+0.662 0.222
+
+internlm2-1-8b-reward
+
+0.822
+
+0.642 0.182
+
+GRM-llama3-8B-distill
+
+0.862
+
+0.531 0.123
+
+GRM-Gemma-2B-rewardmodel-ft
+
+0.845
+
+0.509 0.111
+
+Gemma-2B-rewardmodel-ft
+
+0.805
+
+0.494 0.106
+
+GRM-gemma2-2B-rewardmodel-ft
+
+0.884
+
+0.471 0.093
+
+Generative Models as Reward Models
+
+Skywork-Critic-Llama-3.1-70B
+
+0.933
+
+0.755 0.320
+
+CompassJudger-1-14B-Instruct
+
+0.841
+
+0.745 0.327
+
+CompassJudger-1-32B-Instruct
+
+0.852
+
+0.742 0.322
+
+Qwen2.5-72B-Instruct
+
+-
+
+0.734 0.306
+
+Skywork-Critic-Llama-3.1-8B
+
+0.890
+
+0.726 0.288
+
+GPT4o
+
+0.846
+
+0.727 0.300
+
+Doubao-pro-128k
+
+-
+
+0.720 0.280
+
+Qwen2.5-7B-Instruct
+
+-
+
+0.713 0.262
+
+Llama-3-OffsetBias-8B
+
+0.840
+
+0.690 0.243
+
+Llama-3.1-70B-Instruct
+
+0.840
+
+0.685 0.244
+
+CompassJudger-1-1.5B-Instruct
+
+0.734
+
+0.660 0.210
+
+Llama-3.1-8B-Instruct
+
+0.657
+
+0.630 0.158
+
+GPT3.5-turbo
+
+0.653
+
+0.616 0.143
+
+Human Instruction Acc. Exact.
+
+0.748 0.735 0.722 0.689 0.700 0.688 0.677 0.701 0.696 0.688 0.691 0.690 0.667 0.678 0.652 0.644 0.647 0.633 0.619 0.548 0.470 0.473 0.480
+
+0.311 0.294 0.271 0.239 0.259 0.230 0.246 0.237 0.230 0.229 0.233 0.230 0.224 0.235 0.200 0.187 0.186 0.205 0.163 0.127 0.106 0.111 0.110
+
+0.731 0.692 0.685 0.678 0.696 0.667 0.662 0.637 0.658 0.610 0.594 0.583 0.572
+
+0.258 0.239 0.231 0.229 0.229 0.203 0.164 0.163 0.180 0.153 0.132 0.116 0.113
+
+Overall
+0.535 0.525 0.515 0.493 0.491 0.489 0.487 0.486 0.485 0.482 0.480 0.479 0.472 0.471 0.457 0.451 0.450 0.431 0.402 0.332 0.299 0.296 0.288
+0.516 0.501 0.495 0.487 0.485 0.457 0.456 0.444 0.443 0.423 0.399 0.372 0.361
+
+Table 8: Performance of discriminative and generative RMs on CheemsBench. The Overall metric is the average of accuracy (Acc.) and exact match (Exact.) across the Open Prompt and Human Instruction subsets.
+
+

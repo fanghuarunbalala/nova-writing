@@ -1,6 +1,7 @@
-# Android 接入-数据通道 server 化 PRD —— v0.1
+# Android 接入-数据通道 server 化 PRD —— v0.2
 
-> 状态：⏳ 待敲定（定稿后改 ✅ 已定稿）
+> 状态：v0.2 修订（2026-09-11：对齐纯云端化 + v5 导航决议 + 会话列表纯客户端决策；M4 实施中）
+> v0.1 遗留：本文档成稿早于「纯云端化」改造，双模式叙事已被取代，修订见 §1 关键决策。
 > 关联：[`端云架构-数据层server化.md`](./端云架构-数据层server化.md)；[`桌面接入-数据通道server化.md`](./桌面接入-数据通道server化.md)（M3 已实施，REST/SSE 契约经桌面端 + 契约测试验证）；[`定义包-agent策略统一.md`](./定义包-agent策略统一.md)（Kotlin `DefinitionAssembler` 已就绪）
 > 里程碑：M4（Android 端接入）。后续：M5 MCP 迁 server、M6 跨端续跑向导。
 
@@ -14,8 +15,10 @@
   3. M3 遗留两件小事顺路清偿：桌面「只读模式」最小 UI（数据通道已通，只差呈现）；`AgentSession` 恢复路径在 server 模式下的上下文来源切换。
 - 目标（一句话，可验收）：手机配置 server 并登录后，能**看到桌面会话的实时进度（SSE → Room 缓存）并申请租约接续写作**；断网时本地照常写作、恢复后 sidecar 按序补推；未配置 server 时行为与现状完全一致。
 - 关键决策（与桌面 M3 对齐处 / 差异处）：
-  - 对齐：本地模式缺省、server 模式 opt-in；租约**会话粒度**（与桌面一致，避免两端语义分叉）；断线积压 sidecar 顺序补推 + 冲突 409 人工裁决；审批本地超时 120s 与 server 懒过期一致。
-  - 差异：令牌加密用 **Android Keystore**（桌面 safeStorage 的对应物）；网络栈复用 **OkHttp**（:core:provider 已验证的手写 SSE 解析经验直接平移）；测试用 **MockWebServer** 单测 + Gradle 集成任务起真 server 跑契约（桌面是同进程真起，Android 编译单元不同）。
+  - 修订（v0.2，纯云端化取代双模式叙事）：**登录强制、无本地模式出口**（对齐 main 纯云端化与 `android-app-demo.html`）；离线 = 只读缓存（journal 镜像 + 域快照）+ 待发队列，无本地项目可切。对齐点保留：租约**会话粒度**（与桌面一致，避免两端语义分叉）；断线积压 sidecar 顺序补推 + 冲突 409 人工裁决；审批本地超时 120s 与 server 懒过期一致。
+  - 导航框架（2026-09-04 决议 v5，论证见 `android-frame-demo.html`，定稿见 `android-app-demo.html`）：**无底部导航**——ChatScreen 为基座（Activity 直载，非 Fragment）；内容 = 底部 persistent bottom sheet（peek 卡入口）；审批中心/书库/设置/设备管理/项目切换/登出全部经侧边抽屉（☰）。
+  - 会话列表（纯客户端，v0.2 决策）：server 契约无「按项目列举会话」端点（`journal_events` 无 project_id 列），Android 对齐桌面「本地镜像目录扫描」约定（`conversations/<cid>/journal.jsonl`，mtime 降序；标题 = meta.json 显式名或首条 user 消息截 30 字）；**conversationId 用 `conv-<uuid>` 全局唯一**（不复刻桌面 `conv_<n>` 每设备自增，防跨端/跨项目撞账本）；他端新建会话暂不可见，跨端列表留待契约 v1.2。
+  - 差异：令牌加密用 **Android Keystore**（桌面 safeStorage 的对应物）；网络栈复用 **OkHttp**（:core:provider 已验证的手写 SSE 解析经验直接平移）；测试用 **MockWebServer** 单测（真 server 集成任务 `connectedServerContractTest` 单独立项，本轮不做）。
 
 ## 2. 用户故事
 
@@ -26,25 +29,19 @@
 
 ## 3. 流程图（必填）
 
-### 3.1 Android 端双模式数据通道
+### 3.1 Android 端数据通道（v0.2：纯云端，强制登录）
 
 ```mermaid
 flowchart TB
-    CFG{"配置：server 已登录?"}
-    subgraph LOCAL["本地模式（缺省，现状保留）"]
-        RJ[("Room journal_events<br/>（:core:data）")]
-        JJ[("JsonlJournalStore<br/>（JVM 调试）")]
-        RQ["ApprovalGate<br/>（进程内 CompletableDeferred）"]
-    end
-    subgraph SERVER["server 模式（opt-in）"]
+    AUTH["ServerAuthSession（登录门）<br/>（OkHttp + Keystore 加密落盘<br/>过期前 1min 主动轮换）"]
+    subgraph SERVER["server 通道（:core:net）"]
         direction TB
-        AUTH["ServerAuthSession<br/>（OkHttp + Keystore 加密落盘<br/>过期前 1min 主动轮换）"]
-        NET[(":core:net 新模块<br/>HttpJournalStore / LeaseClient<br/>/ ServerApprovalChannel / SseBridge")]
-        CACHE[("Room 读缓存<br/>（SSE journal 事件落库<br/>离线可看进度）")]
+        NET[("HttpJournalStore / LeaseClient<br/>/ ServerApprovalChannel / SseBridge<br/>/ CloudProjectsClient / RemoteNovelStore")]
+        CACHE[("本地缓存（离线只读）<br/>journal 镜像 + 域快照<br/>+ Room journal_cache")]
         PEND[("断线积压表<br/>pending_push（Room）<br/>10k 行上限")]
     end
-    CFG -- 否 --> LOCAL
-    CFG -- 是 --> AUTH --> NET --> CACHE --> PEND
+    AUTH --> NET --> CACHE
+    NET --> PEND
 ```
 
 ### 3.2 跨端续跑完整时序（手机视角，桌面持有 → 接管）
@@ -140,13 +137,16 @@ flowchart LR
 
 ## 5. 边界与非目标
 
+- 范围修订（v0.2）：本 PRD 原只覆盖 `:core:net`，App 壳（Activity/Compose UI、通知栏常驻）在 [`android-移动端MVP.md`](./android-移动端MVP.md) M4——2026-09-11 起两者合并为一轮实施（数据通道 + Compose 壳 + 六屏，基准 `android-app-demo.html`）。
 - 明确不做（M4）：
-  - 完整 Android App 壳（Activity/Compose UI、通知栏常驻、应用商店分发）——`:core:*` 继续 JVM 可测，App 壳另立里程碑
   - MCP 迁移与 remote MCP（M5）
   - 跨端续跑向导/冲突合并 UI（M6；M4 的 409 只提示不合并）
+  - 跨端会话列表（契约 v1.2：`journal_events` 加 project_id 列；M4 用纯客户端镜像目录扫描）
+  - 真 server 集成任务 `connectedServerContractTest`（单独立项；本轮契约验证 = MockWebServer + 三 JournalStore 实现同用例）
   - server 夜间执行者、信封加密存 key
-  - SSE 后台常驻（前台服务/WorkManager 保活策略——见开放问题，M4 只做前台订阅）
+  - SSE 后台常驻（前台服务/WorkManager 保活策略——见开放问题，M4 只做前台订阅 + FGS 存活会话）
   - 双端 definitionVersion 不一致时租约授予校验（定义包 PRD 遗留开放问题，维持现状提示）
+  - AskUserQuestion 提问卡（Kotlin 运行时暂无 asking 交互类型，标注缺口后补）
 
 ## 6. 验收标准
 

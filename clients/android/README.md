@@ -1,11 +1,14 @@
-# Nova Android —— Agent Runtime（M1+M2）
+# Nova Android —— Agent Runtime（M1+M2）+ 数据通道（M4 阶段 1）
 
 桌面端 Nova Writing（Electron + TS）的 Agent 运行时，用 **Kotlin 协程**平移的 Android 端实现。
 本目录是嵌在主仓库内的**独立 Gradle 工程**（pnpm workspace 不感知），对应 PRD：
 [`../docs/PRD/android-移动端MVP.md`](../docs/PRD/android-移动端MVP.md)。
 
-> 状态：M1（运行时核心）+ M2（Room 数据层）已完成，全部单测桌面 JVM 跑绿。
-> M4（Compose 壳 + 前台服务 + 通知审批）、M5（远程 MCP）见 PRD 里程碑。
+> 状态：M1（运行时核心）+ M2（Room 数据层）已完成；**M4 阶段 1（`:core:net` 数据通道）已交付**——
+> 认证双令牌/HttpJournalStore/租约/审批两段式/SSE 桥/云项目域/定义包 resolve 全套 REST+SSE 客户端，
+> 纯 JVM 零 Android 依赖，MockWebServer + 三实现契约套件全绿。
+> 后续：M4 阶段 2-4（`:app` Compose 壳/ChatScreen/内容 sheet，PRD `Android实施-阶段1` 系列逐阶段推进）、
+> M5（远程 MCP）见 PRD 里程碑。
 
 ## 快速开始
 
@@ -13,7 +16,7 @@
 # 本机无全局 JDK/Gradle 时：任意 JDK17 + Gradle 8.14 即可（本机工具链在 D:\workplace\tools\）
 export JAVA_HOME="D:\workplace\tools\jdk-17.0.20.1+1"
 
-./gradlew test              # 全部模块单测（model/provider/runtime/data）
+./gradlew test              # 全部模块单测（model/provider/runtime/data/net，113 用例）
 ./gradlew :core:runtime:runDemo   # 端到端演示：打字机 + 审批 + 崩溃恢复（脚本化假模型，不触网）
 ```
 
@@ -26,11 +29,16 @@ android/
 ├── core/model/     纯类型：LLMessage / ToolCall / JournalLine / StoredRun（零协程依赖）
 ├── core/provider/  Provider 接口 + OpenAICompatProvider（OkHttp 手解析 SSE，DeepSeek 兼容）+ FakeProvider
 ├── core/runtime/   AgentLoop（ReAct 循环）/ 工具三件套 / ApprovalGate / 压缩链 / JSONL journal / AgentSession
-└── core/data/      Room：journal_events 事件表 + paragraphs 表（entity_version 乐观锁）
+├── core/data/      Room v2：journal_events + paragraphs（entity_version 乐观锁）
+│                   + pending_push（断线积压 10k 上限）+ journal_cache（SSE 离线只读缓存）
+└── core/net/       数据通道（M4 阶段 1，纯 JVM）：ServerAuthSession（双令牌单飞轮换）/
+                    HttpJournalStore（implements JournalStore，断线积压+镜像写通）/ LeaseClient /
+                    ServerApprovalChannel（两段式）/ SseBridge（自写 SSE+退避重连+取消桥）/
+                    CloudProjectsClient + RemoteNovelStore（投影+oplog）/ JournalMirror / DefinitionClient
 ```
 
-依赖 DAG（无环）：`model ← provider ← runtime ← data`；M4 的 `:app`（AGP + Compose）依赖全部。
-**M1+M2 四个模块全是纯 Kotlin/JVM，不引 AGP/Android SDK**——桌面秒级单测、无 Google Maven 依赖，
+依赖 DAG（无环）：`model ← provider ← runtime ← data ← net`；M4 的 `:app`（AGP + Compose）依赖全部。
+`:core:*` 五个模块全是纯 Kotlin/JVM，不引 AGP/Android SDK——桌面秒级单测、无 Google Maven 依赖，
 `:core:*` 后续被 Android App 直接依赖时零改动。这本身就是「核心资产平台无关」论断的工程验证。
 
 ## 桌面端 → Android 端映射（面试讲解底稿）
@@ -67,7 +75,7 @@ android/
 - 压缩链 M1 版按「首个实际压缩即短路」执行（桌面是单次 compact 内 T1→T2→T3 逐级重估）；T2 摘要器为注入式，M4 换主模型实现。
 - token 估算用 字符/2 粗估（阈值信号用途足够；桌面端重估同样按字符比例）。
 
-## 测试版图（34 个用例，`gradlew test` 全绿）
+## 测试版图（113 个用例，`gradlew test` 全绿）
 
 | 套件 | 覆盖 |
 |---|---|
@@ -81,11 +89,14 @@ android/
 | OpenAICompatProviderTest（5） | MockWebServer：SSE 分片拼装/纯文本/429/超窗/401 |
 | JournalContractTest（3） | JSONL 与 Room 同契约 + 双实现崩溃恢复 |
 | ParagraphOptimisticLockTest（3） | 条件更新拒过期版本、条件删除、自增单调 |
+| DefinitionBundleTest 等定义包（13） | 能力协商/动态渲染 parity 对拍/journal 盖章 |
+| **:core:net（66）** | **auth**（轮换单飞并发只刷一次/复用检测→NeedRelogin/网络→Offline）；**HttpJournalStore**（上推字段对齐/replay 二次 parse/断线入队按序补推/10k 溢出/rewrite 409 携 currentLastSeq/镜像写通与收缩重建）；**NetJournalContract**（Http vs Jsonl vs Room 三实现同契约 + Recovery 兼容 + Room 队列保序/上限）；**JournalMirror**（尾序 gs 严格大于去重/半行容忍）；**LeaseClient**（409 携 holder/410 分类/心跳 onLost 退出/release 静默）；**ApprovalChannel**（上报体/pending calls_json 二次 parse/resolve 静默/SSE+本地先到者生效）；**SseBridge**（帧三分支/游标推进与 Rewritten 归零/退避序列与归零/重连携 since/stop 无悬挂）；**CloudProjects/RemoteNovelStore**（全端点错误码附值/投影收敛/sessionTag 自跳过/缓存命中免全量/损坏回退）；**DefinitionClient**（resolve 缓存/404 回退旧版/坏文件跳过） |
 
 ## 后续里程碑（PRD §5 非目标之外）
 
-- **M4**：`:app`（AGP + Compose）——ChatScreen 打字机（collectAsStateWithLifecycle）、审批 BottomSheet、
-  `AgentForegroundService`（dataSync 类型，会话 scope 挂服务不挂 ViewModel）、Keystore BYOK、SavedStateHandle 恢复向导。
+- **M4 阶段 2-4**：`:app`（AGP + Compose）——四主题 token/v5 导航（ChatScreen 基座+底部内容 sheet+侧边抽屉）/
+  登录门强制；ChatScreen 全量（打字机/五态/恢复向导/FGS+通知/断线降级/409）；内容 sheet 四栏+审批中心+设置 BYOK（Keystore）。
+  基准：`docs/design/android-app-demo.html`；每阶段先出 PRD（`docs/PRD/Android实施-阶段N-*.md`）后代码。
 - **M5**：远程 MCP（Streamable HTTP 传输，工具层不变）、端间同步预留（事件流 + 版本向量 + 租约）。
 
 ## v2 架构方向：数据层 server 化（已立项，见 docs/PRD/端云架构-数据层server化.md）

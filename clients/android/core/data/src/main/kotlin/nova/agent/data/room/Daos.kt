@@ -51,3 +51,30 @@ interface ParagraphDao {
     @Query("DELETE FROM paragraphs WHERE id = :id AND entity_version = :baseRevision")
     suspend fun deleteWithRevision(id: String, baseRevision: Int): Int
 }
+
+@Dao
+interface PendingPushDao {
+    @Insert
+    suspend fun insert(row: PendingPushRow): Long
+
+    @Query("SELECT * FROM pending_push WHERE conversation_id = :cid ORDER BY id")
+    suspend fun listAll(cid: String): List<PendingPushRow>
+
+    @Query("DELETE FROM pending_push WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
+    @Query("SELECT COUNT(*) FROM pending_push WHERE conversation_id = :cid")
+    suspend fun count(cid: String): Int
+}
+
+@Dao
+interface JournalCacheDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(rows: List<JournalCacheRow>)
+
+    @Query("SELECT * FROM journal_cache WHERE conversation_id = :cid ORDER BY seq")
+    suspend fun readAll(cid: String): List<JournalCacheRow>
+
+    @Query("DELETE FROM journal_cache WHERE conversation_id = :cid")
+    suspend fun clear(cid: String)
+}

@@ -1,7 +1,9 @@
-# android-移动端MVP PRD —— v0.1
+# android-移动端MVP PRD —— v0.2
 
-> 状态：⏳ 待敲定（定稿后改 ✅ 已定稿）
+> 状态：v0.2（2026-09-11：M1+M2 已交付、验收全勾；M4 定稿——壳层范围对齐 [`android-app-demo.html`](../design/android-app-demo.html) 六屏基准 + 纯云端化强制登录，与 [`Android接入-数据通道server化.md`](./Android接入-数据通道server化.md) v0.2 合并一轮实施）
 > 关联：整体产品 PRD [`产品总览.md`](./产品总览.md)；技术设计 `android/README.md`；面试设计底稿见本文档 §3 各图与 `docs/architecture.md`
+>
+> **M4 定稿要点（2026-09-11）**：App 壳 = AGP + Compose；导航按 2026-09-04 决议 v5——无底部导航，ChatScreen 为基座（Activity 直载）、内容 = 底部 persistent bottom sheet、审批中心/书库/设置/设备管理/项目切换/登出走侧边抽屉；六屏（会话/内容/审批中心/书库/设置/登录）+ 覆盖层（审批 BottomSheet/通知/崩溃恢复向导/只读接续/断线降级/409）以 `android-app-demo.html` 为唯一视觉/交互基准；强制登录门，无本地模式出口；BYOK key 落 Android Keystore。
 > 使用说明：新 PRD 从本模板复制起步，固定章节不得删减；流程图必填。
 
 ---

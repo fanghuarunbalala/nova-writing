@@ -8,6 +8,15 @@ androidx-sqlite = "2.5.1"
 ksp = "2.1.20-1.0.32"
 junit = "5.10.2"
 turbine = "1.2.0"
+agp = "8.13.0"
+compose-bom = "2025.06.00"
+activity-compose = "1.10.1"
+lifecycle = "2.9.1"
+datastore = "1.1.7"
+# 阶段5截图基线预留（本机 Robolectric RNG 渲染损坏，推迟；详见 PRD 阶段2 §6 实现备注）
+roborazzi = "1.40.0" # 与 Kotlin 2.1.20 元数据兼容（1.7x 需 Kotlin 2.3 编译器）
+robolectric = "4.16"
+androidx-test-ext-junit = "1.2.1"
 
 [libraries]
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -22,8 +31,29 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "jun
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+roborazzi-core = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
+roborazzi-junit-rule = { module = "io.github.takahirom.roborazzi:roborazzi-junit-rule", version.ref = "roborazzi" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit-ktx", version.ref = "androidx-test-ext-junit" }
+junit-vintage = { module = "org.junit.vintage:junit-vintage-engine", version.ref = "junit" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }

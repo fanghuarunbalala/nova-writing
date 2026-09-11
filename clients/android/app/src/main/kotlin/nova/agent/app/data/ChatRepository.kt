@@ -1,0 +1,35 @@
+package nova.agent.app.data
+
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import nova.agent.loop.LoopEvent
+
+/**
+ * 聊天数据仓库契约（对 AgentSession 公共面的投影）。
+ * 阶段2 = FakeChatRepository 脚本回放；阶段3 = 真实现（AgentSession + HttpJournalStore + SSE），
+ * UI/ViewModel 经 mapLoopEvent 消费 LoopEvent，换实现零 UI 改动。
+ */
+interface ChatRepository {
+    val events: SharedFlow<LoopEvent>
+    val running: StateFlow<Boolean>
+
+    /** 空闲时开新 run；运行中入队（UI 侧以 Submitted 事件即时上幽灵） */
+    fun submit(text: String)
+
+    /** 运行中插话 = 入队别名（语义显式化，对应桌面端 steer） */
+    fun steer(text: String) = submit(text)
+
+    /** 取消当前 run（RunEnd(ABORTED) 会照常上事件流） */
+    fun stop()
+
+    /** 裁决当前审批批；不在审批等待期时静默 */
+    fun resolveApproval(requestId: String, approved: Boolean, comment: String? = null)
+
+    /** 翻更旧的一页；null = 已无更旧段落 */
+    suspend fun loadOlder(): OlderPage?
+}
+
+data class OlderPage(
+    val prepend: List<ChatItem>,
+    val hasMore: Boolean,
+)

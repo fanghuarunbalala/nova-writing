@@ -1,0 +1,9 @@
+{
+  "name": "nova-android-scripts",
+  "private": true,
+  "type": "module",
+  "description": "阶段2主题/字体生成管线（gen-theme.mjs、subset-font）",
+  "dependencies": {
+    "culori": "^4.0.1"
+  }
+}

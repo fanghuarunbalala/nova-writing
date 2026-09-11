@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 全权接管内容；框架层只留一个无标题栏透明系统栏的壳，
+         状态栏图标明暗由 NovaTheme 按主题切换（WindowInsetsControllerCompat）。 -->
+    <style name="Theme.Nova" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

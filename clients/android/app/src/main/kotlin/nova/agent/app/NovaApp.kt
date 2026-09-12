@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +35,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.SheetValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,6 +68,7 @@ import nova.agent.app.ui.vm.AppViewModel
 import nova.agent.app.ui.vm.ChatViewModel
 
 /** 应用根：主题 → 登录门 → 主脚手架（v5 导航）；debug 悬演示浮条 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun NovaApp(container: AppContainer) {
     val appViewModel: AppViewModel = viewModel(factory = AppViewModel.factory(container))
@@ -72,14 +76,18 @@ fun NovaApp(container: AppContainer) {
 
     NovaTheme(theme) {
         val auth by appViewModel.auth.collectAsStateWithLifecycle()
+        // 键盘弹起时藏掉演示浮条（避免盖住输入区）
+        val imeVisible = WindowInsets.isImeVisible
         Box(Modifier.fillMaxSize()) {
             when (auth) {
                 AuthUiState.Unconfigured, AuthUiState.NeedRelogin -> LoginScreen(appViewModel)
                 else -> MainScaffold(container, appViewModel)
             }
-            if (BuildConfig.DEBUG && auth !is AuthUiState.Unconfigured && auth !is AuthUiState.NeedRelogin) {
+            if (BuildConfig.DEBUG && !imeVisible && auth !is AuthUiState.Unconfigured && auth !is AuthUiState.NeedRelogin) {
+                val leaseActive by container.demoTriggers.lease.collectAsStateWithLifecycle()
                 nova.agent.app.ui.demo.DemoReplayBar(
                     theme = theme,
+                    leaseActive = leaseActive != null,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
@@ -133,6 +141,7 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
         drawerContent = {
             AppDrawer(
                 vm = appViewModel,
+                demoTriggers = container.demoTriggers,
                 onNavigate = { screen ->
                     scope.launch { drawerState.close() }
                     nav.push(screen)
@@ -172,7 +181,7 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ChatBase(
     chatViewModel: ChatViewModel,
@@ -182,6 +191,14 @@ private fun ChatBase(
     onOpenDrawer: () -> Unit,
 ) {
     val palette = LocalNovaPalette.current
+    val scope = rememberCoroutineScope()
+
+    // 键盘弹起时整体收掉内容 sheet：否则 peek 高度 + 导航栏内边距会垫在输入法与输入条之间
+    // （真机实测的大段空白，PRD 开放问题④的落地）；键盘收起后回落 peek。
+    val imeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(imeVisible) {
+        if (imeVisible) sheetState.hide() else sheetState.partialExpand()
+    }
 
     BottomSheetScaffold(
         scaffoldState = androidx.compose.material3.rememberBottomSheetScaffoldState(bottomSheetState = sheetState),
@@ -190,7 +207,9 @@ private fun ChatBase(
         sheetPeekHeight = ContentSheetPeekHeight,
         sheetShape = RoundedCornerShape(topStart = NovaDimens.radiusSheet, topEnd = NovaDimens.radiusSheet),
         sheetDragHandle = null,
-        sheetContent = { ContentSheet(currentProject) },
+        sheetContent = {
+            ContentSheet(currentProject, onExpand = { scope.launch { sheetState.expand() } })
+        },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             // 顶栏（demo --topbar-h 56dp）

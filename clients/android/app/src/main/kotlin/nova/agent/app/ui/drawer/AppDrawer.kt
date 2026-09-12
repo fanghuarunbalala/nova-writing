@@ -39,11 +39,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import nova.agent.app.BuildConfig
 import nova.agent.app.data.CloudProject
+import nova.agent.app.di.DemoTriggers
+import nova.agent.app.ui.demo.restartApp
 import nova.agent.app.ui.nav.Screen
 import nova.agent.app.ui.theme.FwMedium
 import nova.agent.app.ui.theme.LocalNovaPalette
@@ -59,11 +63,13 @@ import nova.agent.app.ui.vm.AppViewModel
 @Composable
 fun AppDrawer(
     vm: AppViewModel,
+    demoTriggers: DemoTriggers,
     onNavigate: (Screen) -> Unit,
     onOpenContentSheet: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val palette = LocalNovaPalette.current
+    val context = LocalContext.current
     val projects by vm.projects.collectAsStateWithLifecycle()
     val currentId by vm.currentProjectId.collectAsStateWithLifecycle()
     val approvalCount by vm.approvals.collectAsStateWithLifecycle()
@@ -162,6 +168,35 @@ fun AppDrawer(
             DrawerEntry(Icons.Outlined.CollectionsBookmark, "书库") { onNavigate(Screen.Library) }
             DrawerEntry(Icons.Outlined.Settings, "设置") { onNavigate(Screen.Settings) }
 
+            // ---- 演示控制（仅 debug；覆盖层/只读租约的入口在这里最易发现） ----
+            if (BuildConfig.DEBUG) {
+                HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), color = palette.border)
+                Text(
+                    "演示控制（仅 debug 构建）",
+                    style = NovaTypography.labelSmall.copy(color = palette.faint),
+                    modifier = Modifier.padding(start = 18.dp),
+                )
+                val leaseActive by demoTriggers.lease.collectAsStateWithLifecycle()
+                Text(
+                    if (leaseActive == null) "只读租约：顶部出现他端写作横幅（接续 → 409）" else "只读态生效中：清除后恢复正常",
+                    style = NovaTypography.labelSmall.copy(color = if (leaseActive == null) palette.faint else palette.warn),
+                    modifier = Modifier.padding(start = 18.dp, top = 2.dp),
+                )
+                Row(
+                    Modifier.padding(start = 18.dp, top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    DemoTriggerChip("409 冲突") { demoTriggers.conflict() }
+                    DemoTriggerChip("SSE 断线") { demoTriggers.disconnect() }
+                    DemoTriggerChip(if (leaseActive == null) "注入只读租约" else "清除只读") {
+                        if (leaseActive == null) demoTriggers.readonlyLease() else demoTriggers.clearLease()
+                    }
+                }
+                Row(Modifier.padding(start = 18.dp, top = 6.dp)) {
+                    DemoTriggerChip("重置演示（进程重启）") { restartApp(context) }
+                }
+            }
+
             Spacer(Modifier.weight(1f))
             DrawerEntry(Icons.Outlined.Logout, "退出登录", tint = palette.danger) { onLogout() }
         }
@@ -201,6 +236,19 @@ fun AppDrawer(
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消", color = palette.muted) } },
         )
     }
+}
+
+@Composable
+private fun DemoTriggerChip(label: String, onClick: () -> Unit) {
+    val palette = LocalNovaPalette.current
+    Text(
+        label,
+        style = NovaTypography.labelSmall.copy(color = palette.muted),
+        modifier = Modifier
+            .background(palette.surface2, RoundedCornerShape(99.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
 }
 
 @Composable

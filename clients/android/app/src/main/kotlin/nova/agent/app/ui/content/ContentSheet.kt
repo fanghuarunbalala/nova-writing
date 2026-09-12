@@ -1,6 +1,7 @@
 package nova.agent.app.ui.content
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,10 +36,10 @@ import nova.agent.app.ui.theme.NovaTypography
 
 /**
  * 内容页骨架（PRD FR11）：BottomSheetScaffold 的 sheetContent。
- * 折叠时露出 peek 卡（书名 + 进度 + go）；展开后四 tab（大纲/正文/人物/地点），内容 = 阶段4占位。
+ * 折叠时露出 peek 卡（书名 + 进度 + go，点击/上拉展开）；展开后四 tab（大纲/正文/人物/地点），内容 = 阶段4占位。
  */
 @Composable
-fun ContentSheet(project: CloudProject?) {
+fun ContentSheet(project: CloudProject?, onExpand: () -> Unit = {}) {
     val palette = LocalNovaPalette.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("大纲", "正文", "人物", "地点")
@@ -49,12 +50,13 @@ fun ContentSheet(project: CloudProject?) {
             .background(palette.surface)
             .padding(bottom = 24.dp),
     ) {
-        // ---- peek 卡区域（折叠态可见高度）----
+        // ---- peek 卡区域（折叠态可见高度；点击展开） ----
         Row(
             Modifier
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .fillMaxWidth()
                 .background(palette.surface, RoundedCornerShape(18.dp))
+                .clickable { onExpand() }
                 .padding(start = 12.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

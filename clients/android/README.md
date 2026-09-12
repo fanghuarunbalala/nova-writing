@@ -1,14 +1,17 @@
-# Nova Android —— Agent Runtime（M1+M2）+ 数据通道（M4 阶段 1）
+# Nova Android —— Agent Runtime（M1+M2）+ 数据通道（M4 阶段 1）+ App 壳与六屏 UI（M4 阶段 2）
 
 桌面端 Nova Writing（Electron + TS）的 Agent 运行时，用 **Kotlin 协程**平移的 Android 端实现。
 本目录是嵌在主仓库内的**独立 Gradle 工程**（pnpm workspace 不感知），对应 PRD：
 [`../docs/PRD/android-移动端MVP.md`](../docs/PRD/android-移动端MVP.md)。
 
-> 状态：M1（运行时核心）+ M2（Room 数据层）已完成；**M4 阶段 1（`:core:net` 数据通道）已交付**——
-> 认证双令牌/HttpJournalStore/租约/审批两段式/SSE 桥/云项目域/定义包 resolve 全套 REST+SSE 客户端，
-> 纯 JVM 零 Android 依赖，MockWebServer + 三实现契约套件全绿。
-> 后续：M4 阶段 2-4（`:app` Compose 壳/ChatScreen/内容 sheet，PRD `Android实施-阶段1` 系列逐阶段推进）、
-> M5（远程 MCP）见 PRD 里程碑。
+> 状态：M1（运行时核心）+ M2（Room 数据层）+ M4 阶段 1（`:core:net` 数据通道）已交付；
+> **M4 阶段 2（`:app` Compose 壳与六屏 UI，演示数据驱动）已交付**——单 Activity + v5 导航
+> （手写路由/返回优先级 sheet>抽屉>栈）+ 四主题（脚本从 demo oklch 生成 ThemeColors.kt）+
+> 登录门强制 + ChatScreen 全量交互（打字机 delta/思考态/工具行三态/幽灵晋升/loadOlder 锚定）
+> + 审批 Sheet（120s 倒计时/三型卡）+ 设置/设备/审批中心/书库/内容页骨架 + debug 演示浮条；
+> 数据层 ChatRepository 接口按阶段3真实现设计（FakeChatRepository 脚本回放），EventReducer 纯函数
+> JVM 可测。真机目检与 Roborazzi 截图基线顺延（无设备/本机 RNG 损坏，见 PRD 阶段2 §7）。
+> 后续：M4 阶段 3-5（真实数据接线/内容 sheet 四栏/回归收尾）见 PRD 里程碑。
 
 ## 快速开始
 
@@ -16,16 +19,24 @@
 # 本机无全局 JDK/Gradle 时：任意 JDK17 + Gradle 8.14 即可（本机工具链在 D:\workplace\tools\）
 export JAVA_HOME="D:\workplace\tools\jdk-17.0.20.1+1"
 
-./gradlew test              # 全部模块单测（model/provider/runtime/data/net，113 用例）
+./gradlew test                    # 全部模块单测（core 五模块 113 + :app 28，共 141 用例）
+./gradlew :app:assembleDebug      # 阶段2 APK（adb install 即可跑演示时间轴）
 ./gradlew :core:runtime:runDemo   # 端到端演示：打字机 + 审批 + 崩溃恢复（脚本化假模型，不触网）
 ```
 
-依赖走阿里云镜像（`settings.gradle.kts`），国内网络无需代理。
+依赖走阿里云镜像（`settings.gradle.kts`），国内网络无需代理。`:app` 需本机 Android SDK
+（`local.properties` 的 `sdk.dir`，gitignore）。
 
 ## 模块结构
 
 ```
 android/
+├── app/            Compose 壳（M4 阶段 2）：单 MainActivity + 手写路由（v5：基座 ChatScreen +
+│                   持久内容 sheet + 侧抽屉 306dp + 全屏路由）；四主题（scripts/gen-theme.mjs 从
+│                   demo oklch 生成 ThemeColors.kt + 楷体子集 1.7MB）；ChatScreen 七件套（打字机/
+│                   五态条/工具行/幽灵/追问/锚定/输入条）；审批 Sheet 三型卡；登录门（纯云端无本地
+│                   出口）；EventReducer 纯函数 + FakeChatRepository（《长夜余烬》脚本时间轴）；
+│                   debug 演示浮条（重置/主题/409/断线/只读旁路）
 ├── core/model/     纯类型：LLMessage / ToolCall / JournalLine / StoredRun（零协程依赖）
 ├── core/provider/  Provider 接口 + OpenAICompatProvider（OkHttp 手解析 SSE，DeepSeek 兼容）+ FakeProvider
 ├── core/runtime/   AgentLoop（ReAct 循环）/ 工具三件套 / ApprovalGate / 压缩链 / JSONL journal / AgentSession
@@ -37,9 +48,10 @@ android/
                     CloudProjectsClient + RemoteNovelStore（投影+oplog）/ JournalMirror / DefinitionClient
 ```
 
-依赖 DAG（无环）：`model ← provider ← runtime ← data ← net`；M4 的 `:app`（AGP + Compose）依赖全部。
-`:core:*` 五个模块全是纯 Kotlin/JVM，不引 AGP/Android SDK——桌面秒级单测、无 Google Maven 依赖，
-`:core:*` 后续被 Android App 直接依赖时零改动。这本身就是「核心资产平台无关」论断的工程验证。
+依赖 DAG（无环）：`model ← provider ← runtime ← data ← net ← app`；`:app` 依赖 `:core:runtime`
+（仅 LoopEvent 等类型契约，阶段3才接线 `:core:net`）。`:core:*` 五个模块全是纯 Kotlin/JVM，
+不引 AGP/Android SDK——桌面秒级单测、无 Google Maven 依赖，`:core:*` 后续被 Android App
+直接依赖时零改动。这本身就是「核心资产平台无关」论断的工程验证。
 
 ## 桌面端 → Android 端映射（面试讲解底稿）
 
@@ -75,7 +87,7 @@ android/
 - 压缩链 M1 版按「首个实际压缩即短路」执行（桌面是单次 compact 内 T1→T2→T3 逐级重估）；T2 摘要器为注入式，M4 换主模型实现。
 - token 估算用 字符/2 粗估（阈值信号用途足够；桌面端重估同样按字符比例）。
 
-## 测试版图（113 个用例，`gradlew test` 全绿）
+## 测试版图（141 个用例，`gradlew test` 全绿）
 
 | 套件 | 覆盖 |
 |---|---|
@@ -91,11 +103,13 @@ android/
 | ParagraphOptimisticLockTest（3） | 条件更新拒过期版本、条件删除、自增单调 |
 | DefinitionBundleTest 等定义包（13） | 能力协商/动态渲染 parity 对拍/journal 盖章 |
 | **:core:net（66）** | **auth**（轮换单飞并发只刷一次/复用检测→NeedRelogin/网络→Offline）；**HttpJournalStore**（上推字段对齐/replay 二次 parse/断线入队按序补推/10k 溢出/rewrite 409 携 currentLastSeq/镜像写通与收缩重建）；**NetJournalContract**（Http vs Jsonl vs Room 三实现同契约 + Recovery 兼容 + Room 队列保序/上限）；**JournalMirror**（尾序 gs 严格大于去重/半行容忍）；**LeaseClient**（409 携 holder/410 分类/心跳 onLost 退出/release 静默）；**ApprovalChannel**（上报体/pending calls_json 二次 parse/resolve 静默/SSE+本地先到者生效）；**SseBridge**（帧三分支/游标推进与 Rewritten 归零/退避序列与归零/重连携 since/stop 无悬挂）；**CloudProjects/RemoteNovelStore**（全端点错误码附值/投影收敛/sessionTag 自跳过/缓存命中免全量/损坏回退）；**DefinitionClient**（resolve 缓存/404 回退旧版/坏文件跳过） |
+| **:app（28）** | **EventReducer（13）**：提交空闲/运行进幽灵、RunStart 晋升（id 保持）、思考→生成切换点、delta 累计幂等、收口落块与重放幂等、工具行三态、审批征询/裁决/失序幂等、五态映射、历史回放去重、前插序、折叠与输入模式、租约；**LoopEventMapping（4）**：基本映射、arguments 审批载荷三型解析、坏载荷回落、Compacted 吞掉；**FakeChatRepository（6）**：虚拟时间全时间轴（思考窗口零 delta→首 delta、完整审批通过收口、驳回 ABORTED、stop 补发 ABORTED、幽灵排队自动接续双审批、loadOlder 两段后耗尽）；**AppNavState（5）**：返回优先级 sheet>抽屉>栈>退出纯函数 |
 
 ## 后续里程碑（PRD §5 非目标之外）
 
-- **M4 阶段 2-4**：`:app`（AGP + Compose）——四主题 token/v5 导航（ChatScreen 基座+底部内容 sheet+侧边抽屉）/
-  登录门强制；ChatScreen 全量（打字机/五态/恢复向导/FGS+通知/断线降级/409）；内容 sheet 四栏+审批中心+设置 BYOK（Keystore）。
+- **M4 阶段 3-5**：阶段 3 = 真实数据接线（AgentSession/HttpJournalStore/SSE/FGS+通知/恢复向导/KeystoreTokenStore，
+  ChatRepository 换真实现零 UI 改动）；阶段 4 = 内容 sheet 四栏（大纲/正文/人物/地点投影）+ 审批中心接真实
+  pending 流 + AskCard 真实交互 + BYOK 落地；阶段 5 = 回归收尾 + 截图基线（Roborazzi 重试）。
   基准：`docs/design/android-app-demo.html`；每阶段先出 PRD（`docs/PRD/Android实施-阶段N-*.md`）后代码。
 - **M5**：远程 MCP（Streamable HTTP 传输，工具层不变）、端间同步预留（事件流 + 版本向量 + 租约）。
 

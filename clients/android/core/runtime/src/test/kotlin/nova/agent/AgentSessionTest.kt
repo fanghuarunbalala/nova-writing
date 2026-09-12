@@ -105,7 +105,7 @@ class AgentSessionTest {
         assertTrue(SessionState.Done::class in kinds)
         val done = assertIs<SessionState.Done>(session.state.value)
         assertEquals(RunEndReason.COMPLETED, done.reason)
-        assertEquals("雪落了满肩。", store.get("p-1")?.text)
+        assertEquals("雪落了满肩。", store.paragraph("p-1")?.text)
         watcher.cancel()
         session.shutdown()
     }

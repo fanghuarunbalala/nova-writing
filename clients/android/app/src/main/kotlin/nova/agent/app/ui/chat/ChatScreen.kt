@@ -196,6 +196,7 @@ fun ChatBody(
             runStartedAt = state.runStartedAt,
             draftCount = state.draftCount,
             onRetry = onRetry,
+            runError = state.runError,
         )
 
         LazyColumn(

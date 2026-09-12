@@ -26,13 +26,13 @@ class FileTokenStore(private val path: Path) : TokenStore {
     override fun save(tokens: AuthTokens) {
         Files.createDirectories(path.toAbsolutePath().parent)
         val tmp = path.resolveSibling(path.fileName.toString() + ".tmp")
-        Files.writeString(tmp, json.encodeToString(AuthTokens.serializer(), tokens))
+        Files.write(tmp, json.encodeToString(AuthTokens.serializer(), tokens).toByteArray())
         Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 
     override fun load(): AuthTokens? = try {
         if (!Files.exists(path)) null
-        else json.decodeFromString(AuthTokens.serializer(), Files.readString(path))
+        else json.decodeFromString(AuthTokens.serializer(), String(Files.readAllBytes(path)))
     } catch (_: Exception) {
         null // 损坏按未配置处理
     }
@@ -41,7 +41,7 @@ class FileTokenStore(private val path: Path) : TokenStore {
         // 对齐桌面：写入空文件（保留文件占位，不删除）
         runCatching {
             Files.createDirectories(path.toAbsolutePath().parent)
-            Files.writeString(path, "")
+            Files.write(path, ByteArray(0))
         }
     }
 }

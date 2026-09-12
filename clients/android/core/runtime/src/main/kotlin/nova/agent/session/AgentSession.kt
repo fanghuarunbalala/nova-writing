@@ -96,6 +96,11 @@ class AgentSession(
     /** 定义包（M2）：存在时压缩参数/审批覆盖由包装配，definitionVersion 落 journal。 */
     private val definition: nova.agent.definition.DefinitionBundle? = null,
     private val definitionCaps: nova.agent.definition.DefinitionAssembler.Capabilities? = null,
+    /**
+     * 崩溃恢复可见化（M4 阶段3）：start() 内 Recovery.settlePendingRun 补完非空时回调
+     * 悬挂的工具调用列表——Android 侧据此上 SysPill「已补完 N 个悬挂工具调用」。
+     */
+    val onRecovered: (List<ToolCall>) -> Unit = {},
 ) {
     val scope = CoroutineScope(
         SupervisorJob() + dispatcher + CoroutineName("agent-session-$conversationId")
@@ -160,7 +165,9 @@ class AgentSession(
             journal.open()
             runs.clear()
             runs.addAll(journal.readAll())
-            Recovery.settlePendingRun(journal, runs)
+            val pendingCalls = Recovery.findPendingToolCalls(runs)
+            val settled = Recovery.settlePendingRun(journal, runs)
+            if (settled.isNotEmpty()) onRecovered(pendingCalls)
             while (isActive) {
                 val text = inbox.receive()
                 val seq = seqCounter.incrementAndGet()

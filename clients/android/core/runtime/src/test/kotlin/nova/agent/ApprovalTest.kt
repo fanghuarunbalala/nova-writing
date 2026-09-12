@@ -55,7 +55,7 @@ class ApprovalTest {
 
         val toolMsg = assertIs<LLMessage.Tool>(runs[0].messages[2])
         assertTrue(toolMsg.content.contains("已写入段落 p-1（v2"))
-        assertEquals("林深推开门，雪落了满肩。", h.store.get("p-1")?.text)
+        assertEquals("林深推开门，雪落了满肩。", h.store.paragraph("p-1")?.text)
         val final = assertIs<LLMessage.Assistant>(runs[0].messages[3])
         assertEquals("已按批准写入", final.content)
     }
@@ -78,7 +78,7 @@ class ApprovalTest {
         assertTrue(toolMsg.isError)
         assertEquals("用户已拒绝该工具调用：这段打斗太突兀，先铺垫", toolMsg.content)
         // 拒绝 = 不执行：正文未被改写
-        assertEquals("旧段落占位", h.store.get("p-1")?.text)
+        assertEquals("旧段落占位", h.store.paragraph("p-1")?.text)
         // 拒绝文本落 journal（决策可恢复——桌面端缺陷的修复点）
         assertTrue(h.journalText().contains("用户已拒绝该工具调用"))
     }
@@ -98,6 +98,6 @@ class ApprovalTest {
 
         val toolMsg = assertIs<LLMessage.Tool>(runs[0].messages[2])
         assertTrue(toolMsg.content.contains("审批超时"))
-        assertEquals("旧段落占位", h.store.get("p-1")?.text)
+        assertEquals("旧段落占位", h.store.paragraph("p-1")?.text)
     }
 }

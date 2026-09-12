@@ -2,11 +2,13 @@ package nova.agent.app.data
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/** 云端项目（demo 3 项） */
+/** 云端项目（UI 投影；真实源自 :core:net CloudProjectsClient） */
 data class CloudProject(
     val id: String,
     val name: String,
@@ -15,7 +17,7 @@ data class CloudProject(
     val progress: String,
 )
 
-/** 已登录设备（demo 3 台） */
+/** 已登录设备（UI 投影） */
 data class DeviceUi(
     val id: String,
     val name: String,
@@ -24,7 +26,7 @@ data class DeviceUi(
     val lastActiveLabel: String,
 )
 
-/** 登录门状态（对齐阶段1 ServerAuthSession 四态语义；demo 直接通过） */
+/** 登录门状态（对齐阶段1 ServerAuthSession 四态 + LoggingIn 调用期间态） */
 sealed interface AuthUiState {
     data object Unconfigured : AuthUiState
     data object LoggingIn : AuthUiState
@@ -34,24 +36,73 @@ sealed interface AuthUiState {
 }
 
 /**
- * 应用级演示仓库：auth/项目/设备/审批中心。
- * 阶段3接 :core:net（ServerAuthSession/CloudProjectsClient/设备管理端点），接口形态保持。
+ * 应用级仓库端口（auth/项目/设备/审批中心）。
+ * 阶段3起双实现：[DemoAppRepository]（演示）与 [ServerAppRepository]（真实），
+ * UI/AppViewModel 只依赖本接口（AppContainer 按 DataSource 选型）。
  */
-class AppRepository(
-    private val scope: CoroutineScope,
-    private val sleep: suspend (Long) -> Unit = { delay(it) },
-) {
-    val auth = MutableStateFlow<AuthUiState>(AuthUiState.Unconfigured)
-    val projects = MutableStateFlow(demoProjects())
-    val devices = MutableStateFlow(demoDevices())
-    /** 审批中心待办（demo 3 项，与聊天内审批独立展示） */
-    val approvals = MutableStateFlow(demoCenterApprovals())
-    val currentProjectId = MutableStateFlow("p-1")
+interface AppRepository {
+    val auth: StateFlow<AuthUiState>
+    val projects: StateFlow<List<CloudProject>>
+    val devices: StateFlow<List<DeviceUi>>
+    val approvals: StateFlow<List<ApprovalUi>>
+    val currentProjectId: StateFlow<String>
 
     val currentProject: CloudProject?
+
+    /** 登录/注册的服务端错误文案（已按契约码映射；LoginScreen 收集展示）。 */
+    val loginErrors: SharedFlow<String>
+
+    /** 项目/设备等操作的失败提示（NovaApp snackbar 收集）。 */
+    val errors: SharedFlow<String>
+
+    fun login(username: String, password: String, deviceName: String, serverUrl: String)
+
+    fun register(username: String, password: String, deviceName: String, serverUrl: String)
+
+    fun logout()
+
+    fun kick(deviceId: String)
+
+    fun switchProject(id: String)
+
+    fun createProject(name: String)
+
+    fun deleteProject(id: String)
+
+    fun resolveCenterApproval(requestId: String)
+
+    fun resolveCenterApprovalCard(requestId: String, cardId: String, approved: Boolean)
+
+    /** 设备列表显式刷新（DevicesScreen ON_START）。 */
+    fun refreshDevices()
+
+    /** 审批中心聚合刷新（ApprovalCenterScreen ON_START / SSE 到达）。demo 无操作。 */
+    fun refreshApprovals()
+
+    /** 离线重试（设置 Hero）：真实探活一次，恢复 Online。 */
+    fun retryConnection()
+}
+
+/**
+ * 演示仓库（阶段2 交付，debug 数据源开关可切回）：任意输入直接 Online。
+ */
+class DemoAppRepository(
+    private val scope: CoroutineScope,
+    private val sleep: suspend (Long) -> Unit = { delay(it) },
+) : AppRepository {
+    override val auth = MutableStateFlow<AuthUiState>(AuthUiState.Unconfigured)
+    override val projects = MutableStateFlow<List<CloudProject>>(demoProjects())
+    override val devices = MutableStateFlow<List<DeviceUi>>(demoDevices())
+    override val approvals = MutableStateFlow<List<ApprovalUi>>(demoCenterApprovals())
+    override val currentProjectId = MutableStateFlow<String>("p-1")
+
+    override val currentProject: CloudProject?
         get() = projects.value.firstOrNull { it.id == currentProjectId.value }
 
-    fun login(username: String, password: String, deviceName: String) {
+    override val loginErrors: SharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 8)
+    override val errors: SharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 8)
+
+    override fun login(username: String, password: String, deviceName: String, serverUrl: String) {
         auth.value = AuthUiState.LoggingIn
         scope.launch {
             sleep(700)
@@ -59,47 +110,50 @@ class AppRepository(
         }
     }
 
-    fun register(username: String, password: String, deviceName: String) = login(username, password, deviceName)
+    override fun register(username: String, password: String, deviceName: String, serverUrl: String) =
+        login(username, password, deviceName, serverUrl)
 
-    fun logout() {
+    override fun logout() {
         auth.value = AuthUiState.NeedRelogin
     }
 
-    /** 踢出设备；踢自己 = 本端令牌失效 → 登录门 */
-    fun kick(deviceId: String) {
+    override fun kick(deviceId: String) {
         val target = devices.value.firstOrNull { it.id == deviceId } ?: return
         devices.value = devices.value.filterNot { it.id == deviceId }
         if (target.current) logout()
     }
 
-    fun switchProject(id: String) {
+    override fun switchProject(id: String) {
         currentProjectId.value = id
         projects.value = projects.value.map { if (it.id == id) it.copy(updatedAtLabel = "刚刚") else it }
     }
 
-    fun createProject(name: String) {
+    override fun createProject(name: String) {
         val id = "p-${System.nanoTime()}"
         projects.value = projects.value + CloudProject(id, name, "刚刚", 0, "0 / 0 卷")
     }
 
-    /** 软删确认后的本地移除（demo） */
-    fun deleteProject(id: String) {
+    override fun deleteProject(id: String) {
         projects.value = projects.value.filterNot { it.id == id }
     }
 
-    /** 审批中心条目的本地裁决（demo：不回写服务器，阶段3走真实 pending 流） */
-    fun resolveCenterApproval(requestId: String) {
+    override fun resolveCenterApproval(requestId: String) {
         approvals.value = approvals.value.filterNot { it.requestId == requestId }
     }
 
-    /** 中心条目的单卡裁决（demo）：全部卡落定后条目消失 */
-    fun resolveCenterApprovalCard(requestId: String, cardId: String, @Suppress("UNUSED_PARAMETER") approved: Boolean) {
+    override fun resolveCenterApprovalCard(requestId: String, cardId: String, @Suppress("UNUSED_PARAMETER") approved: Boolean) {
         approvals.value = approvals.value.map { approval ->
             if (approval.requestId == requestId) {
                 approval.copy(cards = approval.cards.filterNot { it.id == cardId })
             } else approval
         }.filterNot { it.cards.isEmpty() }
     }
+
+    override fun refreshDevices() = Unit
+
+    override fun refreshApprovals() = Unit
+
+    override fun retryConnection() = Unit
 
     companion object {
         const val DEMO_SERVER = "https://nova.example.net"

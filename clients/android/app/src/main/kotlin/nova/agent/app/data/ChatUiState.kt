@@ -9,6 +9,8 @@ data class ChatUiState(
     val draft: String = "",
     val hasMoreOlder: Boolean = true,
     val runStatus: RunStatus = RunStatus.Idle,
+    /** run 失败原因（FailedRetry 横幅真实文案；其余态为 null） */
+    val runError: String? = null,
     val lease: ReadOnlyLease? = null,
     val input: String = "",
     val execMode: ExecMode = ExecMode.NEED_APPROVAL,
@@ -48,6 +50,10 @@ sealed interface ChatUiEvent {
     data class ExecModeChanged(val mode: ExecMode) : ChatUiEvent
     data class LeaseObserved(val lease: ReadOnlyLease?) : ChatUiEvent
     data class ReasoningToggled(val itemId: String) : ChatUiEvent
+    /** 系统胶囊（恢复补完/离线补推等可见化，FR10） */
+    data class SysPillAdded(val text: String, val kind: PillKind) : ChatUiEvent
+    /** 会话切换：状态整场重置（首屏历史经事件流重放） */
+    data object ConversationReset : ChatUiEvent
 }
 
 /** 一次性事件（对话框/toast），不参与状态回放 */

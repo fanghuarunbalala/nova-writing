@@ -328,9 +328,37 @@ RealChatRepository/ChatSideChannels；manifest 四权限 + singleTask + dataSync
 12. **会话切换的 park/reattach**：切换会话旧会话 park（心跳/journal/SSE 存续，活跃 run 后台继续，
     UI 中继断开）；重附着 = 全量首屏重放（后台完成的 run 从 journal 补齐）；FGS 谓词覆盖后台会话
     （held 非空 ⇒ 持租约）。
+13. **真机 E2E 揭穿的四层叠加 bug（全部已修，2026-09-12 下午）**：
+    - **KeystoreTokenCipher 密钥轮换**（最隐蔽）：构造时无条件 `generateKey()` 覆盖同名别名——
+      每次进程重启密钥轮换，上一进程加密的令牌/BYOK blob 全部 `AEADBadTagException` → 自清理
+      → 「每次重启都要重新登录、BYOK 丢失」。修法：先 `KeyStore.getKey(alias)` 取回、缺失才生成；
+      修复后冷启动日志 `Cipher key REUSED` + `TokenStore load ok user=...` 免登录恢复。
+    - **`Files.writeString/readString` 是 API 33+**（compileSdk 36 编译期不报错）：真机 API<33 运行时
+      `NoSuchMethodError`（是 Error，catch(Exception) 拦不住）直接杀进程。全仓 9 处替换
+      `Files.write(p, s.toByteArray(), ...)` / `String(Files.readAllBytes(p))`。
+    - **JsonNull 串染**：DeepSeek 空帧 `{"content":null}` → `JsonNull.content` 返回字面 "null" 字符串
+      拼进正文（server 账本 16 个 "null" 实证）。防御：`takeIf { it.isString }?.content` 五处。
+    - **双上屏**：AgentLoop 回放语义的 `UserMessage`（id=u-r*）与本地 Submitted（id=u-*）两套 id
+      去重失效。修法：reducer UserEchoed 按「u- 前缀且非 u-r 前缀且同文本」内容配对跳过。
+14. **登录门语义修正**：MainScaffold 只放行 Online/Offline(有令牌)；LoggingIn 与无令牌 Offline 留在
+    登录页——此前漏入的「假登录态」导致无网时误以为已登录（server devices 表是判真登录的铁证）。
+15. **发送自动建会话+首句定题**：无活跃会话时 send 自动 opener(pid, null) 建会话；meta.title==
+    "新会话" 时首条用户消息 `take(24)` 定题（真机实测 title=「你好呀」）。失败可见化：RunClosed
+    FAILED → runError 横幅；open 失败按 Holder/ReadOnly/网络三种 pill 提示。NovaDiag 全链路诊断
+    日志（BuildConfig.DEBUG 门控）+ debug 预填管线（local.properties → BuildConfig →
+    LoginScreen/BYOK，真机免手输）。
+16. **测试基建**：JVM 单测遇 android.util.Log 需 `unitTests.isReturnDefaultValues=true`；
+    跨真实 IO 线程的断言列表用 CopyOnWriteArrayList（waitFor 与事件追加竞态 CME）。
+
+**真机 E2E（2026-09-12 17:2x，小米 HyperOS API<33 + cloud/server + DeepSeek BYOK）全绿**：
+冷启动免登录（密钥复用+令牌恢复）→ 发「你好呀」单条上屏 → DeepSeek 真实中文回复（含 reasoning 落账本）
+→ NovaDiag 全链有序（Lease Granted→FGS→Build→Open Holder→RunStart→RunEnd COMPLETED）→
+server 三表互证（devices=23127PN0CC / leases 活跃后空闲过期 / journal_events seq15 user×1+seq16
+assistant 真文本）→ FGS 通知常驻 → 定题=「你好呀」→ crash buffer 0 条。回归：全模块 test 双变体绿。
 
 **移交阶段 4 的债**：审批卡富化（proposal/NOVEL.md 卡片渲染未做——中心仅基础卡）；ui- 域通道；
 字数/进度真值投影（CloudProject.words=0 占位）；AppDrawer 会话项运行中标记（数据源已备，
-`ConversationCoordinator.held` 状态未投影到列表）；真机回归清单（旋转/深色/冻结解冻 dumpsys）待执行。
+`ConversationCoordinator.held` 状态未投影到列表）；markdown 渲染（真机回复为纯文本展示）；
+真机回归清单（旋转/深色/冻结解冻 dumpsys）待执行。
 
 **server 回提清单**：全局 SSE hub 按 userId 过滤（跨用户泄漏，§5-① 实测）。

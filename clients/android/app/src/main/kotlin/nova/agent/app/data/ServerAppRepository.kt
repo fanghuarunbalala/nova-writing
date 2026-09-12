@@ -99,16 +99,21 @@ class ServerAppRepository(
                 url = target
                 authSession.restore(target)
                 call()
+                nova.agent.app.di.D { "Auth establish ok url=$target" }
                 refreshProjects()
                 refreshDevices()
             } catch (e: ServerApiException) {
+                nova.agent.app.di.D { "Auth establish 4xx/${e.status} code=${e.code}" }
                 _loginErrors.tryEmit(mapLoginError(e))
                 _auth.value = mapAuth(authSession.state.value)
             } catch (_: NetworkUnreachableException) {
+                // 登录请求网络失败：回登录页（无令牌的 Offline 不进主界面），文案经 loginErrors
+                nova.agent.app.di.D { "Auth establish network-unreachable url=$target" }
                 _loginErrors.tryEmit("无法连接服务器，请检查地址与网络")
-                _auth.value = AuthUiState.Offline
+                _auth.value = AuthUiState.Unconfigured
             } catch (e: Exception) {
                 // 兜底：非契约异常（解析/存储等）不让登录协程静默死亡
+                nova.agent.app.di.D { "Auth establish unexpected: ${e::class.simpleName} ${e.message}" }
                 _loginErrors.tryEmit("登录失败：${e.message ?: e.toString()}")
                 _auth.value = mapAuth(authSession.state.value)
             }
@@ -218,14 +223,17 @@ class ServerAppRepository(
     private suspend fun refreshProjects() {
         try {
             val list = client().list().filter { it.archivedAt == null }
+            nova.agent.app.di.D { "Repo projects ok count=${list.size} first=${list.firstOrNull()?.id}" }
             _projects.value = list.map { mapProject(it) }
             authSession.reportRequestSuccess()
             if (_currentProjectId.value.isBlank()) {
                 _currentProjectId.value = list.firstOrNull()?.id ?: ""
             }
         } catch (e: ServerApiException) {
+            nova.agent.app.di.D { "Repo projects api-fail ${e.status}/${e.code}" }
             authSession.reportRequestFailure(e)
         } catch (e: NetworkUnreachableException) {
+            nova.agent.app.di.D { "Repo projects network-fail" }
             authSession.reportRequestFailure(e)
         }
     }

@@ -19,6 +19,7 @@ import kotlinx.serialization.json.Json
 import nova.agent.app.data.ChatOneShot
 import nova.agent.app.data.ChatSideChannels
 import nova.agent.app.data.ReadOnlyLease
+import nova.agent.app.di.D
 import nova.agent.approval.ApprovalDecision
 import nova.agent.approval.ApprovalGate
 import nova.agent.definition.DefinitionAssembler
@@ -162,7 +163,8 @@ class ConversationCoordinator(
         }
         paging = HistoryPaging()
         announcedRuns.clear()
-        return when (val st = leaseCoordinator.acquire(conversationId)) {
+        val st = leaseCoordinator.acquire(conversationId)
+        val outcome = when (st) {
             is LeaseState.Holder -> {
                 attachHolder(conversationId, projectId)
                 OpenOutcome.Holder
@@ -176,12 +178,32 @@ class ConversationCoordinator(
                 OpenOutcome.Offline
             }
         }
+        D { "Open cid=$conversationId pid=$projectId outcome=${outcome::class.simpleName} lease=${st::class.simpleName}" }
+        return outcome
     }
 
     /** run 启动入口收敛（teammate 前瞻 §3）：本阶段仅 USER 走会话内输入条。 */
     fun startRun(source: RunSource, text: String) {
-        val cid = _active.value?.conversationId ?: return
-        held[cid]?.session?.submit(text)
+        val cid = _active.value?.conversationId
+        if (cid == null) {
+            D { "Run drop: no active conversation" }
+            _pills.tryEmit("尚未打开会话——发送未执行")
+            return
+        }
+        val conv = held[cid]
+        if (conv == null) {
+            val act = _active.value
+            D { "Run drop: cid=$cid no held session (readOnly=${act?.readOnly})" }
+            _pills.tryEmit(if (act?.readOnly == true) "当前会话只读/离线，无法启动写作" else "会话未就绪，发送未执行")
+            return
+        }
+        // 首条用户消息定题（PRD FR3：默认标题「新会话」→ 首 24 字）
+        val meta = registry.metaOf(cid)
+        if (source == RunSource.USER && meta != null && meta.title == "新会话") {
+            scope.launch { registry.updateAfterOpen(cid, meta.lastSeq, text.take(24)) }
+        }
+        D { "Run submit cid=$cid source=$source len=${text.length}" }
+        conv.session.submit(text)
     }
 
     fun steer(text: String) {
@@ -271,7 +293,14 @@ class ConversationCoordinator(
             // 后台会话重新附着：盯一次积压（重附着前离线积压的补推可见化）
             watchPendingDrain(cid, null)
         }
-        conv.relayJob = scope.launch { conv.session.events.collect { _events.tryEmit(it) } }
+        conv.relayJob = scope.launch {
+            conv.session.events.collect { e ->
+                if (e is LoopEvent.RunStart || e is LoopEvent.RunEnd) {
+                    D { "Event ${e::class.simpleName} run=${e.runSeq} cid=${e.conversationId}${if (e is LoopEvent.RunEnd) " reason=${e.reason} err=${e.error}" else ""}" }
+                }
+                _events.tryEmit(e)
+            }
+        }
         scope.launch {
             conv.session.state.collect { s ->
                 _sessionState.value = s
@@ -285,6 +314,7 @@ class ConversationCoordinator(
 
     private suspend fun buildHeld(cid: String, projectId: String?): Held {
         val definition = runCatching { loadDefinition() }.getOrNull()
+        D { "Build cid=$cid definition=${definition?.definitionVersion ?: "none"}" }
         val store = RemoteNovelStore(
             projects = CloudProjectsClient(httpFactory(baseUrl()), authSession),
             projectId = projectId ?: "",
@@ -294,7 +324,9 @@ class ConversationCoordinator(
             cachePath = registry.mirrorPath(cid).resolveSibling("domain-snapshot.json"),
             io = io,
         )
-        store.init()
+        // 域投影失败不阻断会话建立（文本回复不依赖域；工具执行时才真正失败回填）
+        runCatching { store.init() }.onFailure { D { "Build cid=$cid store.init FAILED: ${it.message}" } }
+        D { "Build cid=$cid store.init ok" }
         val journal = HttpJournalStore(
             http = httpFactory(baseUrl()),
             conversationId = cid,
@@ -326,6 +358,7 @@ class ConversationCoordinator(
         // open() 的 drain 与 start() 异步竞态：先取积压基数再启动（drain 完成早于首拍也能出 pill）
         val pendingBefore = pendingQueue.count(cid)
         session.start()
+        D { "Build cid=$cid session.started pendingBefore=$pendingBefore byokHeld=${definition != null}" }
         if (pendingBefore > 0) watchPendingDrain(cid, pendingBefore)
         return Held(session, gate, channel, store, relayJob = Job())
     }

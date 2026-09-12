@@ -14,27 +14,40 @@ interface TokenCipher {
 
 /**
  * AndroidKeyStore AES-256-GCM 加解密器：密钥不出安全硬件别名（[alias]），
- * blob 布局 = 12 字节 IV + 密文。构造即生成/取回密钥，KeyStore 异常向上抛
+ * blob 布局 = 12 字节 IV + 密文。构造即取回既有密钥、无则生成，KeyStore 异常向上抛
  * （调用方 [KeystoreTokenStore.fromContext] 捕获后回落明文路径并打点）。
+ *
+ * 注意：AndroidKeyStore 的 KeyGenerator.generateKey() 会无条件覆盖同名别名，
+ * 必须「先取回、缺失才生成」，否则每次进程重启密钥轮换、旧密文全部 AEADBadTag。
  */
 class KeystoreTokenCipher(alias: String) : TokenCipher {
 
-    private val key: javax.crypto.SecretKey = javax.crypto.KeyGenerator
-        .getInstance("AES", "AndroidKeyStore")
-        .apply {
-            init(
-                android.security.keystore.KeyGenParameterSpec.Builder(
-                    alias,
-                    android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
-                        android.security.keystore.KeyProperties.PURPOSE_DECRYPT,
-                )
-                    .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .build()
-            )
+    private val key: javax.crypto.SecretKey = loadOrCreate(alias)
+
+    private fun loadOrCreate(alias: String): javax.crypto.SecretKey {
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(alias, null) as? javax.crypto.SecretKey)?.let {
+            nova.agent.app.di.D { "Cipher key REUSED alias=$alias" }
+            return it
         }
-        .generateKey()
+        nova.agent.app.di.D { "Cipher key GENERATED alias=$alias" }
+        return javax.crypto.KeyGenerator
+            .getInstance("AES", "AndroidKeyStore")
+            .apply {
+                init(
+                    android.security.keystore.KeyGenParameterSpec.Builder(
+                        alias,
+                        android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
+                            android.security.keystore.KeyProperties.PURPOSE_DECRYPT,
+                    )
+                        .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(256)
+                        .build()
+                )
+            }
+            .generateKey()
+    }
 
     override fun encrypt(plain: ByteArray): ByteArray {
         val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")

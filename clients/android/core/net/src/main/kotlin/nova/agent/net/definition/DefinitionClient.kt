@@ -65,7 +65,7 @@ class DefinitionClient(
             }
             .reversed()
             .firstNotNullOfOrNull { p ->
-                runCatching { DefinitionBundleCodec.decode(Files.readString(p)) }.getOrNull()
+                runCatching { DefinitionBundleCodec.decode(String(Files.readAllBytes(p))) }.getOrNull()
             }
     }
 
@@ -73,7 +73,7 @@ class DefinitionClient(
         runCatching {
             val dir = cacheDir.resolve("definitions")
             Files.createDirectories(dir)
-            Files.writeString(dir.resolve("${bundle.definitionVersion}.json"), DefinitionBundleCodec.encode(bundle))
+            Files.write(dir.resolve("${bundle.definitionVersion}.json"), DefinitionBundleCodec.encode(bundle).toByteArray())
         }
     }
 

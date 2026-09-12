@@ -86,9 +86,10 @@ object JournalMirror {
         if (fresh.isEmpty()) return 0
         return try {
             Files.createDirectories(path.toAbsolutePath().parent)
-            Files.writeString(
+            Files.write(
+                // Files.writeString 需 API 33+（真机 NoSuchMethodError 实证），write(bytes) API 26 安全
                 path,
-                fresh.joinToString("\n", postfix = "\n") { json.encodeToString(MirrorRow.serializer(), it) },
+                fresh.joinToString("\n", postfix = "\n") { json.encodeToString(MirrorRow.serializer(), it) }.toByteArray(),
                 StandardOpenOption.APPEND, StandardOpenOption.CREATE,
             )
             fresh.size
@@ -101,7 +102,7 @@ object JournalMirror {
     fun rewriteMirrorRows(path: Path, rows: List<MirrorRow>) {
         try {
             Files.createDirectories(path.toAbsolutePath().parent)
-            Files.writeString(path, rows.joinToString("\n", postfix = "\n") { json.encodeToString(MirrorRow.serializer(), it) })
+            Files.write(path, rows.joinToString("\n", postfix = "\n") { json.encodeToString(MirrorRow.serializer(), it) }.toByteArray())
         } catch (_: Exception) {
             // 静默：下次对账自愈
         }

@@ -56,19 +56,32 @@ class KeystoreTokenStore(
 
     override fun save(tokens: AuthTokens) {
         val c = cipher ?: run {
+            nova.agent.app.di.D { "TokenStore save via PLAINTEXT fallback (keystore unavailable)" }
             fallback?.save(tokens)
             return
         }
-        blobs.save(c.encrypt(json.encodeToString(AuthTokens.serializer(), tokens).toByteArray()))
+        runCatching { blobs.save(c.encrypt(json.encodeToString(AuthTokens.serializer(), tokens).toByteArray())) }
+            .onFailure { nova.agent.app.di.D { "TokenStore save FAILED: ${it::class.simpleName} ${it.message}" } }
+        nova.agent.app.di.D { "TokenStore save ok len=${blobs.load()?.size}" }
     }
 
     override fun load(): AuthTokens? {
-        if (cipher == null) return fallback?.load()
-        val blob = blobs.load() ?: return null
+        if (cipher == null) {
+            nova.agent.app.di.D { "TokenStore load via PLAINTEXT fallback" }
+            return fallback?.load()
+        }
+        val blob = blobs.load()
+        if (blob == null) {
+            nova.agent.app.di.D { "TokenStore load: no blob" }
+            return null
+        }
         return try {
-            json.decodeFromString(AuthTokens.serializer(), String(cipher.decrypt(blob)))
-        } catch (_: Exception) {
+            val t = json.decodeFromString(AuthTokens.serializer(), String(cipher.decrypt(blob)))
+            nova.agent.app.di.D { "TokenStore load ok user=${t.username}" }
+            t
+        } catch (e: Exception) {
             // 损坏（密钥轮换/写一半崩溃）按未配置处理并自清理
+            nova.agent.app.di.D { "TokenStore load CORRUPT (${e::class.simpleName}: ${e.message}) -> clear" }
             clear()
             null
         }

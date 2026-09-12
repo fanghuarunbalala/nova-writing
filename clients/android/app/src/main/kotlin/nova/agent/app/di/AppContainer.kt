@@ -1,5 +1,7 @@
 package nova.agent.app.di
 
+import nova.agent.app.BuildConfig
+
 import android.content.Context
 import androidx.room.Room
 import kotlinx.coroutines.CoroutineScope
@@ -154,7 +156,7 @@ class AppContainer(private val appContext: Context) {
     val conversationSwitched = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     /** 会话打开入口（demo 模式为 null，UI 静默）。 */
-    val conversationOpener: (suspend (projectId: String?, cid: String?) -> Unit)? =
+    val conversationOpener: (suspend (projectId: String?, cid: String?) -> ConversationCoordinator.OpenOutcome)? =
         if (mode == DataSource.REAL) ({ projectId, cid -> conversationCoordinator.open(projectId, cid) }) else null
 
     val conversations: StateFlow<List<ConversationMeta>> =
@@ -218,6 +220,16 @@ class AppContainer(private val appContext: Context) {
 
     init {
         if (mode == DataSource.REAL) {
+            // debug BYOK 预填（local.properties nova.dev.byok.*；仅当未配置时落一次，不覆盖用户手填）
+            if (BuildConfig.DEBUG &&
+                BuildConfig.DEV_BYOK_URL.isNotBlank() && BuildConfig.DEV_BYOK_KEY.isNotBlank() && BuildConfig.DEV_BYOK_MODEL.isNotBlank()
+            ) {
+                applicationScope.launch {
+                    if (settings.byokConfig() == null) {
+                        settings.setByok(BuildConfig.DEV_BYOK_URL, BuildConfig.DEV_BYOK_KEY, BuildConfig.DEV_BYOK_MODEL)
+                    }
+                }
+            }
             // GlobalChannel 生命周期 = 登录态（Online/Offline 常驻；NeedRelogin/Unconfigured 停）
             applicationScope.launch {
                 (appRepo as? ServerAppRepository)?.auth?.collect { st ->
@@ -239,6 +251,7 @@ class AppContainer(private val appContext: Context) {
             // 后台期间谓词变真不启动，进程未冻结前工作照常，回前台 ON_START 补启）
             applicationScope.launch {
                 conversationCoordinator.fgsRequired.collect { required ->
+                    nova.agent.app.di.D { "FGS required=$required fg=${appInForeground.value}" }
                     runCatching {
                         if (required && appInForeground.value) {
                             nova.agent.app.service.NovaForegroundService.start(appContext)

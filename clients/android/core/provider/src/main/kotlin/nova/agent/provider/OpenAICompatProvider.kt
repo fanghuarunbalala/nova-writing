@@ -198,11 +198,13 @@ class OpenAICompatProvider(
                 ?.let { finishReason = normalizeFinish(it.content) }
 
             val delta = (choice["delta"] as? kotlinx.serialization.json.JsonObject) ?: return
-            delta["content"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() }?.let {
+            // JsonNull.content 返回字符串 "null"（真机实证：DeepSeek 空帧 {"content":null} 拼出 16 个 "null"）——isString 过滤
+            fun kotlinx.serialization.json.JsonPrimitive.textOrNull(): String? = takeIf { it.isString }?.content
+            delta["content"]?.jsonPrimitive?.textOrNull()?.takeIf { it.isNotEmpty() }?.let {
                 content.append(it)
                 onDelta(ProviderDelta(DeltaType.TEXT, it))
             }
-            delta["reasoning_content"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() }?.let {
+            delta["reasoning_content"]?.jsonPrimitive?.textOrNull()?.takeIf { it.isNotEmpty() }?.let {
                 reasoning.append(it)
                 onDelta(ProviderDelta(DeltaType.REASONING, it))
             }
@@ -210,10 +212,10 @@ class OpenAICompatProvider(
                 val tc = tcEl.jsonObject
                 val index = tc["index"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
                 val acc = toolCalls.getOrPut(index) { ToolCallAcc() }
-                tc["id"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() }?.let { acc.id = it }
+                tc["id"]?.jsonPrimitive?.textOrNull()?.takeIf { it.isNotEmpty() }?.let { acc.id = it }
                 (tc["function"] as? kotlinx.serialization.json.JsonObject)?.let { fn ->
-                    fn["name"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() }?.let { acc.name = it }
-                    fn["arguments"]?.jsonPrimitive?.content?.let { acc.args.append(it) }
+                    fn["name"]?.jsonPrimitive?.textOrNull()?.takeIf { it.isNotEmpty() }?.let { acc.name = it }
+                    fn["arguments"]?.jsonPrimitive?.textOrNull()?.let { acc.args.append(it) }
                 }
             }
         }

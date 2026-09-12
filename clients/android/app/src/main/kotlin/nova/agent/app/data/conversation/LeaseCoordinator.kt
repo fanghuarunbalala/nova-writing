@@ -113,7 +113,9 @@ class LeaseCoordinator(
     /** 打开会话时取租约（PRD §1.2-②：不在首次 submit 才取）。 */
     suspend fun acquire(cid: String): LeaseState {
         conversationId = cid
-        return when (val r = transport.acquire(cid)) {
+        val r = transport.acquire(cid)
+        nova.agent.app.di.D { "Lease acquire cid=$cid result=${r::class.simpleName}${if (r is LeaseTransport.Acquire.Error) " msg=${r.message}" else ""}" }
+        return when (r) {
             is LeaseTransport.Acquire.Granted -> enterHolder(cid, r.leaseToken, r.expiresAt)
             is LeaseTransport.Acquire.Held -> {
                 val name = deviceNameOf(r.holderDeviceId)

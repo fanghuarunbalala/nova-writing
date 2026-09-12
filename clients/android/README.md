@@ -115,6 +115,7 @@ android/
 | **:app 阶段2（28）** | **EventReducer（13）**：提交空闲/运行进幽灵、RunStart 晋升（id 保持）、思考→生成切换点、delta 累计幂等、收口落块与重放幂等、工具行三态、审批征询/裁决/失序幂等、五态映射、历史回放去重、前插序、折叠与输入模式、租约；**LoopEventMapping（4）**：基本映射、arguments 审批载荷三型解析、坏载荷回落、Compacted 吞掉；**FakeChatRepository（6）**：虚拟时间全时间轴（思考窗口零 delta→首 delta、完整审批通过收口、驳回 ABORTED、stop 补发 ABORTED、幽灵排队自动接续双审批、loadOlder 两段后耗尽）；**AppNavState（5）**：返回优先级 sheet>抽屉>栈>退出纯函数 |
 | **:app 阶段3（32）** | **KeystoreTokenStore（4）**：假加解密器往返/损坏自清理/明文回退/清空；**ServerAppRepository（5）**：登录 Online 映射+项目设备聚合、四类错误码文案、409 username_taken、建项目 POST+刷新、踢本机 NeedRelogin；**JournalProjector（4）**：整 run 全生命周期（含 RunEnd 终判合成）、悬挂 run 不合成、snapshot/append 行级、payload 数组/字符串双形态；**PaginationFold（3）**：limit+1 探测边界、页内升序+u-r id 幂等、不足页无 more；**LeaseCoordinator（9）**：Granted→Holder、Held→ReadOnly+UI 投影、心跳丢→Lost+停 run+接管横幅、device_revoked 联动登出、resume 双向、409 冲突框、Revoked→Lost、Error 留 Idle、release 幂等；**RealChatRepository（3）**：全链路（submit→审批上报→他端裁决→gate 放行→RunEnd 落账本）、断网入队恢复 drain+补推 SysPill、409 只读分支 Watcher 投影复刻；**ApprovalCenter（2）**：pending 聚合+卡级落批级、批级裁决落 server |
 | **runtime/net 阶段3（4）** | **AgentSessionRecoveryTest（2）**：悬挂调用补完回调+事件流回填、干净 journal 不触发；**NovelStoreContractTest（2）**：InMemory 与 Remote(oplog) 双实现同契约（乐观锁过期/未知 id 语义） |
+| **真机批次（+3）** | provider 空帧 JsonNull 不串染；EventReducer Submitted/UserEchoed 同文本去重（纯回放仍上屏）；RealChatRepository 并发列表 CME 修复。真机 E2E 全绿记录见 PRD 阶段3 §7-13~16 |
 
 ## 后续里程碑（PRD §5 非目标之外）
 

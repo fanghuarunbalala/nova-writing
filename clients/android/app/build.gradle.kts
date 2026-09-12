@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -17,6 +18,19 @@ android {
         targetSdk = 36
         versionCode = 3
         versionName = "0.3.0-stage3"
+        // debug 登录预填（真机验证免手输）：local.properties 的 nova.dev.server/user/pass（gitignore，不入库）
+        val devProps = Properties().apply {
+            val f = rootProject.file("local.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }
+        fun devField(key: String): String = "\"${(devProps.getProperty(key) ?: "").replace("\"", "")}\""
+        buildConfigField("String", "DEV_SERVER", devField("nova.dev.server"))
+        buildConfigField("String", "DEV_USER", devField("nova.dev.user"))
+        buildConfigField("String", "DEV_PASS", devField("nova.dev.pass"))
+        // BYOK 预填（同 local.properties；Android 端 baseUrl 需带 /v1，provider 直拼 /chat/completions）
+        buildConfigField("String", "DEV_BYOK_URL", devField("nova.dev.byok.url"))
+        buildConfigField("String", "DEV_BYOK_MODEL", devField("nova.dev.byok.model"))
+        buildConfigField("String", "DEV_BYOK_KEY", devField("nova.dev.byok.key"))
     }
 
     buildTypes {
@@ -29,6 +43,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    testOptions {
+        // JVM 单测里 android.util.Log（NovaDiag）返回默认值而非抛「not mocked」
+        unitTests.isReturnDefaultValues = true
     }
 
     compileOptions {

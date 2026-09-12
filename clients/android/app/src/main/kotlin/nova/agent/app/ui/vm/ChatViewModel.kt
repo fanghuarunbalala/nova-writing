@@ -31,7 +31,7 @@ import nova.agent.app.di.AppContainer
 class ChatViewModel private constructor(
     private val repo: ChatRepository,
     private val channels: ChatSideChannels,
-    container: AppContainer,
+    private val container: AppContainer,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -78,6 +78,28 @@ class ChatViewModel private constructor(
         val text = _uiState.value.input.trim()
         if (text.isEmpty()) return
         dispatch(ChatUiEvent.Submitted(text, System.currentTimeMillis()))
+        val activeCid = container.activeConversation.value
+        nova.agent.app.di.D { "Send text=${text.take(16)} active=$activeCid mode=${container.mode}" }
+        // 无活跃会话：发送即自动建（PRD FR3 语义——不要求用户先手动开会话）
+        if (container.mode == nova.agent.app.settings.DataSource.REAL && activeCid == null) {
+            val opener = container.conversationOpener
+            if (opener != null) {
+                viewModelScope.launch {
+                    val pid = container.appRepo.currentProjectId.value
+                    val outcome = runCatching { opener(pid, null) }
+                        .onFailure { nova.agent.app.di.D { "Send open threw: ${it::class.simpleName} ${it.message}" } }
+                        .getOrNull()
+                    nova.agent.app.di.D { "Send open outcome=${outcome?.let { o -> o::class.simpleName } ?: "throw"} pid=$pid" }
+                    when (outcome) {
+                        is nova.agent.app.data.conversation.ConversationCoordinator.OpenOutcome.Holder -> repo.submit(text)
+                        is nova.agent.app.data.conversation.ConversationCoordinator.OpenOutcome.ReadOnly ->
+                            dispatch(ChatUiEvent.SysPillAdded("会话被 ${outcome.holderDeviceName} 持有（只读），发送未执行", PillKind.WARN))
+                        else -> dispatch(ChatUiEvent.SysPillAdded("无法连接服务器——消息已暂存，请恢复网络后重发", PillKind.WARN))
+                    }
+                }
+                return
+            }
+        }
         repo.submit(text)
     }
 

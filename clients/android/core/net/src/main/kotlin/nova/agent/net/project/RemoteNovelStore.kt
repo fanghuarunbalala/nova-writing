@@ -173,7 +173,7 @@ class RemoteNovelStore(
     private suspend fun loadCache(): Boolean {
         val path = cachePath ?: return false
         return try {
-            val parsed = json.decodeFromString(SnapshotCache.serializer(), Files.readString(path))
+            val parsed = json.decodeFromString(SnapshotCache.serializer(), String(Files.readAllBytes(path)))
             if (parsed.version != 1) return false
             entities.clear()
             entities += parsed.entities
@@ -191,9 +191,9 @@ class RemoteNovelStore(
             try {
                 Files.createDirectories(path.toAbsolutePath().parent)
                 val tmp = path.resolveSibling(path.fileName.toString() + ".tmp")
-                Files.writeString(
+                Files.write(
                     tmp,
-                    json.encodeToString(SnapshotCache.serializer(), SnapshotCache(cursor = cursor, entities = entities.toList())),
+                    json.encodeToString(SnapshotCache.serializer(), SnapshotCache(cursor = cursor, entities = entities.toList())).toByteArray(),
                 )
                 Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
             } catch (_: Exception) {

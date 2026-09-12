@@ -81,7 +81,9 @@ fun NovaApp(container: AppContainer) {
         val imeVisible = WindowInsets.isImeVisible
         Box(Modifier.fillMaxSize()) {
             when (auth) {
-                AuthUiState.Unconfigured, AuthUiState.NeedRelogin -> LoginScreen(appViewModel)
+                // 登录中停在登录页（busy 转圈）；Offline 仅在有令牌的离线续用时进主界面
+                // （真机踩坑：LoggingIn/无 token 的 Offline 漏进主界面 → 用户误以为登录成功）
+                AuthUiState.Unconfigured, AuthUiState.NeedRelogin, AuthUiState.LoggingIn -> LoginScreen(appViewModel)
                 else -> MainScaffold(container, appViewModel)
             }
             if (BuildConfig.DEBUG && container.mode == nova.agent.app.settings.DataSource.DEMO &&
@@ -119,7 +121,11 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
     val nav = remember { AppNavState() }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded)
+    // skipHiddenState=false：键盘弹起要走 hide()（Material3 默认 true 时 hide() 抛 ISE——真机 12:14 闪退根因）
+    val sheetState = rememberStandardBottomSheetState(
+        initialValue = SheetValue.PartiallyExpanded,
+        skipHiddenState = false,
+    )
     val projects by appViewModel.projects.collectAsStateWithLifecycle()
     val currentId by appViewModel.currentProjectId.collectAsStateWithLifecycle()
     val approvals by appViewModel.approvals.collectAsStateWithLifecycle()
@@ -229,6 +235,9 @@ private fun ChatBase(
     val palette = LocalNovaPalette.current
     val scope = rememberCoroutineScope()
     val byokReady by chatViewModel.byokReady.collectAsStateWithLifecycle()
+    val auth by appViewModel.auth.collectAsStateWithLifecycle()
+    val projects by appViewModel.projects.collectAsStateWithLifecycle()
+    val activeCid by appViewModel.activeConversation.collectAsStateWithLifecycle()
 
     // 键盘弹起时整体收掉内容 sheet：否则 peek 高度 + 导航栏内边距会垫在输入法与输入条之间
     // （真机实测的大段空白，PRD 开放问题④的落地）；键盘收起后回落 peek。
@@ -249,6 +258,63 @@ private fun ChatBase(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            // 离线横幅（真机实测：WiFi 掉线/切流量时引导重连，不静默空白）
+            if (auth == AuthUiState.Offline) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(palette.danger12)
+                        .clickable { appViewModel.retryConnection() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "离线中——无法连接服务器，请检查网络（本机 WiFi）",
+                        style = NovaTypography.labelSmall.copy(color = palette.danger),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("重试", style = NovaTypography.labelSmall.copy(color = palette.danger, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                }
+            }
+            // 空项目引导（新账号首启）：一键建书，不再让顶栏悬着「—」
+            if (auth is AuthUiState.Online && projects.isEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(palette.accent11)
+                        .clickable { appViewModel.createProject("我的新书") }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "还没有项目——创建你的第一本书开始写作",
+                        style = NovaTypography.labelSmall.copy(color = palette.accent),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("创建项目", style = NovaTypography.labelSmall.copy(color = palette.accent, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                }
+            }
+            // 无活跃会话引导（在线 + 有项目但未开会话：此时发消息不会有 run）
+            if (auth is AuthUiState.Online && projects.isNotEmpty() && activeCid == null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(palette.accent11)
+                        .clickable { appViewModel.openConversation(null, currentProject.takeIf { it.id != "p-0" }?.id) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "还没有打开会话——发消息前先开一个",
+                        style = NovaTypography.labelSmall.copy(color = palette.accent),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("新建会话", style = NovaTypography.labelSmall.copy(color = palette.accent, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                }
+            }
             // BYOK 未配置引导（FR9）：跳设置，不弹错误堆栈
             if (!byokReady) {
                 Row(

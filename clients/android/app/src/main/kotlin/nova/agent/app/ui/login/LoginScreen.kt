@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import nova.agent.app.BuildConfig
 import nova.agent.app.data.AuthUiState
 import nova.agent.app.ui.theme.FwMedium
 import nova.agent.app.ui.theme.LocalNovaPalette
@@ -71,6 +72,14 @@ fun LoginScreen(vm: AppViewModel) {
     // 已保存的服务器地址回填一次（不覆盖用户输入）
     LaunchedEffect(serverUrlHint) {
         if (serverUrl.isBlank() && serverUrlHint.isNotBlank()) serverUrl = serverUrlHint
+    }
+    // debug 预填（local.properties nova.dev.* → BuildConfig；release 恒空串不生效）
+    LaunchedEffect(Unit) {
+        if (BuildConfig.DEBUG) {
+            if (serverUrl.isBlank()) serverUrl = BuildConfig.DEV_SERVER
+            if (username.isBlank()) username = BuildConfig.DEV_USER
+            if (password.isBlank()) password = BuildConfig.DEV_PASS
+        }
     }
     // 服务端错误码 → 本地错误文案
     LaunchedEffect(Unit) {

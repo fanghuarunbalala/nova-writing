@@ -56,6 +56,7 @@ fun RunStatusBanner(
     runStartedAt: Long?,
     draftCount: Int,
     onRetry: () -> Unit,
+    runError: String? = null,
 ) {
     if (status == RunStatus.Idle) return
     val palette = LocalNovaPalette.current
@@ -88,7 +89,12 @@ fun RunStatusBanner(
             }
             RunStatus.FailedRetry -> {
                 ShakeIcon { Icon(Icons.Rounded.Refresh, null, tint = palette.danger, modifier = Modifier.size(18.dp)) }
-                Text("生成失败 · provider 超时（demo）", style = NovaTypography.bodySmall.copy(color = palette.danger))
+                Text(
+                    "生成失败 · ${runError ?: "未知错误"}",
+                    style = NovaTypography.bodySmall.copy(color = palette.danger),
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 Text(
                     "重试",
                     color = palette.danger,

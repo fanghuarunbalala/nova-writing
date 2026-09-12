@@ -40,7 +40,7 @@ class RealChatRepositoryTest {
     private val coordinatorRef = java.util.concurrent.atomic.AtomicReference<ConversationCoordinator?>()
     private lateinit var coordinator: ConversationCoordinator
     private lateinit var repo: RealChatRepository
-    private val collected = mutableListOf<LoopEvent>()
+    private val collected = java.util.concurrent.CopyOnWriteArrayList<LoopEvent>()
     private val pills = mutableListOf<String>()
 
     @BeforeTest

@@ -9,6 +9,8 @@ data class ChatUiState(
     val draft: String = "",
     val hasMoreOlder: Boolean = true,
     val runStatus: RunStatus = RunStatus.Idle,
+    /** run 失败原因（FailedRetry 横幅真实文案；其余态为 null） */
+    val runError: String? = null,
     val lease: ReadOnlyLease? = null,
     val input: String = "",
     val execMode: ExecMode = ExecMode.NEED_APPROVAL,

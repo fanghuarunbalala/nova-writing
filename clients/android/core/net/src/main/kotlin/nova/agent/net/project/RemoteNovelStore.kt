@@ -9,6 +9,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import nova.agent.net.mirror.JournalMirror
 import nova.agent.tool.novel.InMemoryNovelStore
+import nova.agent.tool.novel.NovelParagraph
+import nova.agent.tool.novel.NovelStore
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -42,7 +44,7 @@ class RemoteNovelStore(
     private val cachePath: Path? = null,
     private val onReplaySkip: (NovelMutation, Throwable) -> Unit = { _, _ -> },
     private val io: CoroutineDispatcher = Dispatchers.IO,
-) {
+) : NovelStore {
     @Serializable
     data class OplogData(val sessionTag: String, val mutation: NovelMutation)
 
@@ -73,17 +75,33 @@ class RemoteNovelStore(
         persistCache()
     }
 
-    suspend fun query(storyUnitId: String? = null): List<InMemoryNovelStore.Paragraph> {
+    override suspend fun query(storyUnitId: String?): List<NovelParagraph> {
         init()
         sync()
-        return projection.list(storyUnitId)
+        return projection.query(storyUnitId)
     }
 
-    suspend fun paragraph(id: String): InMemoryNovelStore.Paragraph? {
+    override suspend fun paragraph(id: String): NovelParagraph? {
         init()
         sync()
-        return projection.get(id)
+        return projection.paragraph(id)
     }
+
+    /** NovelStore 端口：单条写 = 本地应用 + oplog 上推（乐观锁冲突在 applyLocal 抛 ToolException）。 */
+    override suspend fun write(id: String, storyUnitId: String, orderKey: Int, text: String, baseRevision: Int?): String =
+        mutate(
+            NovelMutation(
+                op = "write",
+                id = id,
+                storyUnitId = storyUnitId,
+                orderKey = orderKey,
+                text = text,
+                baseRevision = baseRevision,
+            )
+        )
+
+    override suspend fun delete(id: String, baseRevision: Int?): String =
+        mutate(NovelMutation(op = "delete", id = id, baseRevision = baseRevision))
 
     suspend fun mutate(mutation: NovelMutation): String {
         init()
@@ -110,7 +128,7 @@ class RemoteNovelStore(
         if (delta.entities.isNotEmpty()) persistCache()
     }
 
-    private fun replay(rows: List<OplogEntity>) {
+    private suspend fun replay(rows: List<OplogEntity>) {
         rows.forEach { e ->
             if (e.seq > cursor) cursor = e.seq
             if (e.kind != OPLOG_KIND) return@forEach
@@ -123,7 +141,7 @@ class RemoteNovelStore(
         }
     }
 
-    private fun applyLocal(m: NovelMutation): String = when (m.op) {
+    private suspend fun applyLocal(m: NovelMutation): String = when (m.op) {
         "write" -> projection.write(
             id = m.id,
             storyUnitId = m.storyUnitId ?: throw IllegalArgumentException("write 需要 storyUnitId"),
@@ -152,7 +170,7 @@ class RemoteNovelStore(
 
     // ---- 域快照缓存（tmp+rename 原子写；损坏按未命中回退全量） ----
 
-    private fun loadCache(): Boolean {
+    private suspend fun loadCache(): Boolean {
         val path = cachePath ?: return false
         return try {
             val parsed = json.decodeFromString(SnapshotCache.serializer(), Files.readString(path))

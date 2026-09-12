@@ -9,24 +9,29 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import nova.agent.app.data.ChatOneShot
 import nova.agent.app.data.ChatRepository
+import nova.agent.app.data.ChatSideChannels
 import nova.agent.app.data.ChatUiEvent
 import nova.agent.app.data.ChatUiState
 import nova.agent.app.data.ExecMode
+import nova.agent.app.data.PillKind
 import nova.agent.app.data.mapLoopEvent
 import nova.agent.app.data.reduce
 import nova.agent.app.di.AppContainer
-import nova.agent.app.di.DemoTriggers
 
 /**
  * 聊天状态机壳：事件进 reducer 纯函数，一次性副作用走 oneShot。
- * 仓库（Fake→阶段3真）经 ChatRepository 接口注入，UI 不感知实现。
+ * 仓库（Fake/Real）经 ChatRepository 接口注入，旁路通道（demo 触发器/真实协调层）经
+ * ChatSideChannels 注入——UI 不感知实现（阶段3 FR11 双形态同构）。
  */
 class ChatViewModel private constructor(
     private val repo: ChatRepository,
-    triggers: DemoTriggers,
+    private val channels: ChatSideChannels,
+    container: AppContainer,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -35,6 +40,15 @@ class ChatViewModel private constructor(
     private val _oneShot = MutableSharedFlow<ChatOneShot>(extraBufferCapacity = 16)
     val oneShot: SharedFlow<ChatOneShot> = _oneShot.asSharedFlow()
 
+    /** BYOK 就绪（真实模式读设置；演示模式恒 true）。发送前置检查 → 引导横幅。 */
+    val byokReady: StateFlow<Boolean> =
+        if (container.mode == nova.agent.app.settings.DataSource.REAL) {
+            container.settings.byok.map { it != null }
+                .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+        } else {
+            MutableStateFlow(true)
+        }
+
     init {
         viewModelScope.launch {
             repo.events.collect { event ->
@@ -42,10 +56,17 @@ class ChatViewModel private constructor(
             }
         }
         viewModelScope.launch {
-            triggers.oneShots.collect { _oneShot.tryEmit(it) }
+            channels.oneShots.collect { _oneShot.tryEmit(it) }
         }
         viewModelScope.launch {
-            triggers.lease.collect { dispatch(ChatUiEvent.LeaseObserved(it)) }
+            channels.lease.collect { dispatch(ChatUiEvent.LeaseObserved(it)) }
+        }
+        viewModelScope.launch {
+            channels.pills.collect { dispatch(ChatUiEvent.SysPillAdded(it, PillKind.INFO)) }
+        }
+        // 会话切换：整场重置（首屏历史经事件流重放）
+        viewModelScope.launch {
+            container.conversationSwitched.collect { dispatch(ChatUiEvent.ConversationReset) }
         }
     }
 
@@ -62,10 +83,9 @@ class ChatViewModel private constructor(
 
     fun stop() = repo.stop()
 
-    /** 只读接续（demo）：真实语义 = 申请租约，409 时弹冲突；阶段3 接 LeaseClient */
+    /** 只读「接续」：真实 = 重取租约（结果经 oneShots/lease 回流）；demo = 弹冲突框。 */
     fun resumeLease() {
-        val holder = _uiState.value.lease?.deviceName ?: return
-        _oneShot.tryEmit(ChatOneShot.Conflict409(holder))
+        viewModelScope.launch { channels.resumeLease() }
     }
 
     /** 失败重试：用户消息已在屏上，只重启 run 不再上屏 */
@@ -110,7 +130,7 @@ class ChatViewModel private constructor(
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     require(modelClass == ChatViewModel::class.java)
-                    return ChatViewModel(container.chatRepo, container.demoTriggers) as T
+                    return ChatViewModel(container.chatRepo, container.chatChannels, container) as T
                 }
             }
     }

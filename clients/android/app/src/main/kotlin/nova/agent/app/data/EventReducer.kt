@@ -128,6 +128,13 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
 
     is ChatUiEvent.LeaseObserved -> copy(lease = event.lease)
 
+    is ChatUiEvent.SysPillAdded -> {
+        val nextId = localId + 1
+        copy(items = items + ChatItem.SysPill("sp-$nextId", event.text, event.kind), localId = nextId)
+    }
+
+    ChatUiEvent.ConversationReset -> ChatUiState()
+
     is ChatUiEvent.ReasoningToggled -> copy(items = items.map { item ->
         if (item.id == event.itemId && item is ChatItem.AssistantMsg) {
             item.copy(reasoningExpanded = !item.reasoningExpanded)

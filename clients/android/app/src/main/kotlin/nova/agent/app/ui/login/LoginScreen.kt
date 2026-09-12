@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,18 +48,19 @@ import nova.agent.app.ui.theme.NovaDimens
 import nova.agent.app.ui.theme.NovaText
 import nova.agent.app.ui.theme.brandBrush
 import nova.agent.app.ui.vm.AppViewModel
-import nova.agent.app.data.AppRepository
 
 /**
  * 登录门（纯云端，无「先本地使用」逃生口）。
- * demo：任意用户名 + ≥6 位密码直接 Online；错误文案按 server 契约码映射（客户端校验先行演示）。
+ * 阶段3：服务器地址栏（持久化 server_url）+ 服务端错误码文案（loginErrors）。
  */
 @Composable
 fun LoginScreen(vm: AppViewModel) {
     val palette = LocalNovaPalette.current
     val auth by vm.auth.collectAsStateWithLifecycle()
+    val serverUrlHint by vm.serverUrlHint.collectAsStateWithLifecycle()
 
     var registerMode by rememberSaveable { mutableStateOf(false) }
+    var serverUrl by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var confirm by rememberSaveable { mutableStateOf("") }
@@ -66,15 +68,27 @@ fun LoginScreen(vm: AppViewModel) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     val busy = auth is AuthUiState.LoggingIn
 
+    // 已保存的服务器地址回填一次（不覆盖用户输入）
+    LaunchedEffect(serverUrlHint) {
+        if (serverUrl.isBlank() && serverUrlHint.isNotBlank()) serverUrl = serverUrlHint
+    }
+    // 服务端错误码 → 本地错误文案
+    LaunchedEffect(Unit) {
+        vm.loginErrors.collect { error = it }
+    }
+
     fun submit() {
+        val trimmedUrl = serverUrl.trim()
         error = when {
+            !trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://") ->
+                "服务器地址需以 http:// 或 https:// 开头"
             username.isBlank() -> "请输入用户名"
-            password.length < 6 -> "密码至少 6 位（401 invalid_credentials 演示）"
+            registerMode && password.length < 8 -> "密码至少 8 位（weak_password）"
             registerMode && password != confirm -> "两次密码不一致"
             else -> null
         } ?: run {
-            if (registerMode) vm.register(username, password, deviceName)
-            else vm.login(username, password, deviceName)
+            if (registerMode) vm.register(username, password, deviceName, trimmedUrl)
+            else vm.login(username, password, deviceName, trimmedUrl)
             null
         }
     }
@@ -103,6 +117,17 @@ fun LoginScreen(vm: AppViewModel) {
         )
         Spacer(Modifier.height(56.dp))
 
+        OutlinedTextField(
+            value = serverUrl,
+            onValueChange = { serverUrl = it },
+            label = { Text("服务器地址") },
+            placeholder = { Text("https://your-nova-server") },
+            singleLine = true,
+            enabled = !busy,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },
@@ -186,7 +211,7 @@ fun LoginScreen(vm: AppViewModel) {
 
         Spacer(Modifier.weight(1f))
         Text(
-            "纯云端 · 无本地模式\n${AppRepository.DEMO_SERVER}",
+            "纯云端 · 无本地模式\n${serverUrl.ifBlank { "未配置服务器地址" }}",
             style = NovaText.mono11.copy(color = palette.faint, fontWeight = androidx.compose.ui.text.font.FontWeight.Normal),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 24.dp),

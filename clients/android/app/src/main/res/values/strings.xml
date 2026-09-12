@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">nova</string>
+    <string name="fgs_syncing">后台同步中</string>
 </resources>

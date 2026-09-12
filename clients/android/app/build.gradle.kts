@@ -15,8 +15,8 @@ android {
         applicationId = "nova.agent.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0-stage2"
+        versionCode = 3
+        versionName = "0.3.0-stage3"
     }
 
     buildTypes {
@@ -44,8 +44,14 @@ kotlin {
 }
 
 dependencies {
-    // 仅类型契约（LoopEvent 等）；真实数据接线是阶段 3
+    // 阶段3 真实数据接线：runtime（LoopEvent 等类型契约）+ net（auth/lease/journal/SSE）+ data（Room）
     implementation(project(":core:runtime"))
+    implementation(project(":core:net"))
+    implementation(project(":core:data"))
+    // :core:data 对 room-runtime 是 implementation 不传递；:app 侧 databaseBuilder 需显式引入
+    implementation(libs.room.runtime)
+    // :core:net 对 okhttp 是 implementation 不传递；:app 构造 ServerHttp/Provider 默认客户端需显式引入
+    implementation(libs.okhttp)
     implementation(libs.serialization.json)
 
     implementation(platform(libs.compose.bom))
@@ -61,6 +67,7 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.coroutines.test)
+    testImplementation(libs.mockwebserver)
     testRuntimeOnly(libs.junit.launcher)
     // 截图基线（Roborazzi/Robolectric）阶段5引入：本机 RNG 渲染损坏（PRD 阶段2 实现备注）
 }

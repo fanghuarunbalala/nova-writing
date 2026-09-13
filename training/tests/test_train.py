@@ -52,8 +52,8 @@ def test_group_split_no_leakage():
 
 def test_synthetic_end_to_end_converges():
 	# n_windows=300 → 2400 段；520 维下样本太小时会过拟合（2400 行 + l2=1e-2 收敛到 0.92+）
-	emb, feat, labels, groups = make_synthetic(n_windows=300, seed=7)
-	weights, metrics = train_head(emb, feat, labels, groups, seed=7)
+	emb, feat, labels, emotion, groups = make_synthetic(n_windows=300, seed=7)
+	weights, metrics = train_head(emb, feat, labels, groups, emotion=emotion, seed=7)
 	assert metrics["valMacroAuc"] > 0.9
 	assert len(weights.thresholds) == len(LABEL_KEYS)
 	assert weights.embedding_dim == emb.shape[1]
@@ -63,3 +63,29 @@ def test_synthetic_end_to_end_converges():
 	pos_mean = probs[labels[:, j] == 1, j].mean()
 	neg_mean = probs[labels[:, j] == 0, j].mean()
 	assert pos_mean > neg_mean + 0.3
+	# 情绪有序头：阈值升序、累积概率单调、期望强度与真值强相关、MAE 合理
+	assert len(weights.emotion_b) == 3
+	assert weights.emotion_b == sorted(weights.emotion_b)
+	cum = weights.score_emotion(emb, feat)
+	assert ((cum[:, 0] >= cum[:, 1] - 1e-9) & (cum[:, 1] >= cum[:, 2] - 1e-9)).all()
+	expect = cum.sum(axis=1)
+	corr = np.corrcoef(expect, emotion.astype(float))[0, 1]
+	assert corr > 0.8, corr
+	assert metrics["emotion"]["mae"] < 0.5
+
+
+def test_train_head_without_emotion_omits_head():
+	emb, feat, labels, _emotion, groups = make_synthetic(n_windows=50, seed=3)
+	weights, metrics = train_head(emb, feat, labels, groups, emotion=None, seed=3)
+	assert weights.emotion_w == [] and weights.emotion_b == []
+	assert "emotion" not in metrics
+
+
+def test_train_head_rows_with_missing_emotion_are_masked():
+	emb, feat, labels, emotion, groups = make_synthetic(n_windows=100, seed=5)
+	emotion_masked = emotion.copy()
+	emotion_masked[: len(emotion) // 2] = -1  # 半数行缺失（v1 遗留记录）
+	train_mask, _val, _test = group_split(groups, seed=5)
+	weights, metrics = train_head(emb, feat, labels, groups, emotion=emotion_masked, seed=5)
+	assert len(weights.emotion_b) == 3
+	assert metrics["emotion"]["nTrain"] == int((train_mask & (emotion_masked >= 0)).sum())

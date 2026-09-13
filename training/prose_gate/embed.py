@@ -15,6 +15,21 @@ import numpy as np
 
 MAX_TOKENS = 480  # 512 上限留 [CLS]/[SEP] 余量（PRD F4）
 
+# 编码器档位（large 为预留接口，未接实现/未下载，选型 BGE-M3，PRD F4）：
+# 整章 2000-4000 字 ≈ 峰值 ~5K token，8192 上限富余；XLM-R 系 tokenizer 仍暴露
+# cls/sep_token_id，[CLS] p1 [SEP]… span 池化机制可原样复用（token_type 全 0 兼容）。
+MODEL_TIERS: dict[str, dict] = {
+	"small": {"modelDir": "bge-small-zh-v1.5", "maxTokens": 480, "dim": 512},
+	"large": {"modelDir": "bge-m3", "maxTokens": 8000, "dim": 1024},
+}
+
+
+def tier_spec(tier: str) -> dict:
+	"""档位名 → 规格（modelDir 为 models/ 下的目录名）。"""
+	if tier not in MODEL_TIERS:
+		raise ValueError(f"未知编码器档位：{tier}（可选 {sorted(MODEL_TIERS)}）")
+	return MODEL_TIERS[tier]
+
 
 class SegmentEmbedder:
 	"""冻结编码器段级嵌入器。model_dir 为本地 HF 格式模型目录（scripts/fetch_model.py）。"""
@@ -72,8 +87,9 @@ def embed_windows_jsonl(
 	model_dir: str | Path,
 	out_path: str | Path,
 	limit: int | None = None,
+	max_tokens: int = MAX_TOKENS,
 ) -> dict:
-	"""windows.jsonl → embeddings.npz（key=windowId, value=n×512 float32）。返回统计。"""
+	"""windows.jsonl → embeddings.npz（key=windowId, value=n×dim float32）。返回统计。"""
 	embedder = SegmentEmbedder(model_dir)
 	data: dict[str, np.ndarray] = {}
 	count = 0
@@ -82,7 +98,7 @@ def embed_windows_jsonl(
 			if limit is not None and count >= limit:
 				break
 			rec = json.loads(line)
-			data[rec["windowId"]] = embedder.embed_window(rec["texts"])
+			data[rec["windowId"]] = embedder.embed_window(rec["texts"], max_tokens=max_tokens)
 			count += 1
 	out_path = Path(out_path)
 	out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -93,12 +109,23 @@ def embed_windows_jsonl(
 def main(argv: list[str] | None = None) -> int:
 	parser = argparse.ArgumentParser(description="windows.jsonl → 段级嵌入 npz")
 	parser.add_argument("--windows", type=Path, default=Path("artifacts/windows.jsonl"))
-	parser.add_argument("--model-dir", type=Path, default=Path("models/bge-small-zh-v1.5"))
+	parser.add_argument(
+		"--tier",
+		default="small",
+		choices=sorted(MODEL_TIERS),
+		help="编码器档位（large=BGE-M3 预留，需先下载模型）",
+	)
+	parser.add_argument("--model-dir", type=Path, default=None, help="缺省 models/<档位 modelDir>")
 	parser.add_argument("--out", type=Path, default=Path("artifacts/embeddings.npz"))
 	parser.add_argument("--limit", type=int, default=None)
 	args = parser.parse_args(argv)
-	stats = embed_windows_jsonl(args.windows, args.model_dir, args.out, args.limit)
-	print(stats)
+
+	spec = tier_spec(args.tier)
+	model_dir = args.model_dir or Path("models") / spec["modelDir"]
+	stats = embed_windows_jsonl(
+		args.windows, model_dir, args.out, args.limit, max_tokens=spec["maxTokens"]
+	)
+	print({**stats, "tier": args.tier})
 	return 0
 
 

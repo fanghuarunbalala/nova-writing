@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 from pathlib import Path
 
@@ -31,10 +32,15 @@ FORM_PRESETS = {
 
 
 def build_expand_prompt(
-	unit: dict, style_anchor: str, target_lines: int, form_line: str = FORM_PRESETS["sentence"]
+	unit: dict,
+	style_anchor: str,
+	target_lines: int,
+	form_line: str = FORM_PRESETS["sentence"],
+	length_hint: str = "",
 ) -> str:
 	elements = unit.get("elements", {})
 	element_lines = "\n".join(f"- {k}：{v}" for k, v in elements.items())
+	hint_line = f"\n- {length_hint}" if length_hint else ""
 	return f"""按下面的场景大纲写一章网文正文。
 
 【场景大纲】（id：{unit.get("id")}，标题：{unit.get("title")}）
@@ -46,7 +52,7 @@ def build_expand_prompt(
 【形式要求】
 - {form_line}，共约 {target_lines} 行
 - 直接从正文开始，不要章节号和小标题
-- 覆盖大纲全部五要素"""
+- 覆盖大纲全部五要素{hint_line}"""
 
 
 def expand_unit(
@@ -57,14 +63,18 @@ def expand_unit(
 	max_attempts: int = 3,
 	style_anchor: str = STYLE_ANCHOR,
 	form: str = "sentence",
+	length_hint: str = "",
 ) -> tuple[str, str]:
 	"""扩写一个 leaf unit，返回 (正文文本, 实际使用的模型)。
 
 	推理型模型可能把 max_tokens 预算耗在推理段导致可见内容为空——给足 8192 并对
 	空返回自动重试；连续空返回则显式报错（不静默产出空窗口）。
+	length_hint：段落粒度提示（窗口级配对用：按原文窗平均段长约束，防巨型段）。
 	"""
 	resolved = resolve_model(model)
-	prompt = build_expand_prompt(unit, style_anchor, target_lines, FORM_PRESETS[form])
+	prompt = build_expand_prompt(
+		unit, style_anchor, target_lines, FORM_PRESETS[form], length_hint
+	)
 
 	def too_short(text: str) -> bool:
 		lines = [line for line in text.splitlines() if line.strip()]
@@ -115,6 +125,82 @@ def ai_windows_from_text(
 		}
 		for w in build_windows(book_id, chapter_no, units)
 	]
+
+
+def single_window_from_text(
+	text: str,
+	window_id: str,
+	book_id: str,
+	chapter_no: int,
+	source: str = "ai-expanded",
+	pair_window_id: str = "",
+) -> dict:
+	"""AI 生成文本 → **单窗**记录（PRD 工作台 v2 F1）：整段列表直接成一条、不切窗
+	（窗口级配对的生成侧段数可与原文窗 ≠8）；pairWindowId 显式指回原文窗。"""
+	return single_window_from_texts(
+		[u.text for u in re_split_paragraphs(text)],
+		window_id,
+		book_id,
+		chapter_no,
+		source=source,
+		pair_window_id=pair_window_id,
+	)
+
+
+def single_window_from_texts(
+	texts: list[str],
+	window_id: str,
+	book_id: str,
+	chapter_no: int,
+	source: str = "ai-expanded",
+	pair_window_id: str = "",
+) -> dict:
+	"""段列表 → 单窗记录（段列表可来自生成原文或句重组 regroup_paragraphs）。"""
+	return {
+		"windowId": window_id,
+		"bookId": book_id,
+		"chapterNo": chapter_no,
+		"source": source,
+		"pairWindowId": pair_window_id,
+		"lineIndexes": list(range(len(texts))),
+		"texts": texts,
+		"features": paragraph_features(texts),
+	}
+
+
+_SENT_RE = re.compile(r"[^。！？…]*[。！？…]+(?:[”」』])?|[^。！？…]+$")
+
+
+def split_sentences(text: str) -> list[str]:
+	"""按句终标点（含引号收尾）切句，保留标点。"""
+	return [s for s in (m.group(0).strip() for m in _SENT_RE.finditer(text)) if s]
+
+
+def regroup_paragraphs(text: str, target_n: int) -> list[str]:
+	"""巨型段兜底（窗口级配对）：按句边界把整段文本重组为约 target_n 个均衡段。
+
+	模型常无视"每行一个自然段"输出巨型段（一段 200-400 字），逐段标注粒度失效；
+	贪心按字符预算（总字数/target_n）聚句成段，尾段过短并入前段。
+	"""
+	sents = split_sentences(text)
+	if not sents:
+		return [text.strip()] if text.strip() else []
+	target_n = max(1, target_n)
+	total = sum(len(s) for s in sents)
+	budget = max(20, -(-total // target_n))  # ceil
+	paras: list[str] = []
+	cur = ""
+	for sent in sents:
+		cur += sent
+		if len(cur) >= budget:
+			paras.append(cur)
+			cur = ""
+	if cur:
+		if paras and len(cur) < budget * 0.5:
+			paras[-1] += cur
+		else:
+			paras.append(cur)
+	return paras
 
 
 def main(argv: list[str] | None = None) -> int:

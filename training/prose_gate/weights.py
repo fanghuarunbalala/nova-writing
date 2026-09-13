@@ -1,7 +1,12 @@
 """weights JSON 契约（语言无关；未来 TS runtime M3 按同契约加载）。
 
 z = [h(embedding_dim) ‖ x_normed(len(feature_keys))]，
-logit_j = W[j]·z + b[j]，P = sigmoid(logit)，n×8 段级独立概率（多标签）。
+缺陷头：logit_j = W[j]·z + b[j]，P = sigmoid(logit)，n×7 段级独立概率（多标签）。
+情绪头（v2 新增，CORAL 有序回归）：score = emotion_w·z，
+P(强度 ≥ k) = sigmoid(score − emotion_b[k])，k=1..3；biases 升序保证累积概率单调。
+期望强度 E = Σ_k P(≥k)；窗口平直 = 情绪线极差 ≤ labels.FLAT_RANGE_MAX（派生，不在权重内）。
+encoder（可选块）：声明训练用的编码器档位（embed.MODEL_TIERS），TS/推理侧据此选模型
+与 maxTokens；缺省空 = 未声明（按 small 处理）。
 """
 
 from __future__ import annotations
@@ -13,14 +18,15 @@ from pathlib import Path
 import numpy as np
 
 from .features import FEATURE_KEYS
-from .labels import LABEL_KEYS, LABELS_VERSION
+from .labels import EMOTION_MAX, LABEL_KEYS, LABELS_VERSION
 
-WEIGHTS_SCHEMA = 1
+WEIGHTS_SCHEMA = 2
 
 
 @dataclass
 class Weights:
-	"""判官权重产物。W 形状 (labels, embedding_dim + features)；feature_norm 为训练集统计。"""
+	"""判官权重产物。W 形状 (labels, embedding_dim + features)；feature_norm 为训练集统计。
+	emotion_w/emotion_b 为情绪有序头（共享打分 + 升序阈值，缺省为空 = 无情绪头）。"""
 
 	labels_version: str
 	labels: list[str]
@@ -30,6 +36,9 @@ class Weights:
 	b: list[float]
 	feature_norm: dict = field(default_factory=dict)  # {"mu": [...], "sd": [...]}
 	thresholds: list[float] = field(default_factory=list)
+	emotion_w: list[float] = field(default_factory=list)
+	emotion_b: list[float] = field(default_factory=list)  # 长度 3（对应 ≥1/≥2/≥3），升序
+	encoder: dict = field(default_factory=dict)  # {"tier","modelDir","maxTokens","dim"}，缺省空 = 未声明
 	train_data: dict = field(default_factory=dict)  # 训练数据/指标 manifest
 
 	def validate(self) -> None:
@@ -47,12 +56,29 @@ class Weights:
 		sd = self.feature_norm.get("sd", [])
 		if len(mu) != len(self.feature_keys) or len(sd) != len(self.feature_keys):
 			raise ValueError(f"feature_norm.mu/sd 长度应为 {len(self.feature_keys)}")
+		has_w, has_b = bool(self.emotion_w), bool(self.emotion_b)
+		if has_w != has_b:
+			raise ValueError("emotion_w/emotion_b 必须同时提供或同时为空")
+		if has_b:
+			if len(self.emotion_w) != expected_cols:
+				raise ValueError(f"emotion_w 长度应为 {expected_cols}")
+			if len(self.emotion_b) != EMOTION_MAX:
+				raise ValueError(f"emotion_b 长度应为 {EMOTION_MAX}")
+			if any(self.emotion_b[k] > self.emotion_b[k + 1] for k in range(EMOTION_MAX - 1)):
+				raise ValueError("emotion_b 应升序（保证 P(≥k) 随 k 单调不增）")
+		if self.encoder:
+			missing = {"tier", "modelDir", "maxTokens", "dim"} - set(self.encoder)
+			if missing:
+				raise ValueError(f"encoder 缺字段：{sorted(missing)}")
+			if int(self.encoder["dim"]) != self.embedding_dim:
+				raise ValueError(
+					f"encoder.dim={self.encoder['dim']} 与 embedding_dim={self.embedding_dim} 不符"
+				)
 
 	def matches_current_labels(self) -> bool:
 		return list(self.labels) == list(LABEL_KEYS) and self.labels_version == LABELS_VERSION
 
-	def score_matrix(self, embeddings: np.ndarray, features: np.ndarray) -> np.ndarray:
-		"""(n, embedding_dim) 嵌入 + (n, len(feature_keys)) 原始特征 → (n, labels) 概率。"""
+	def _z(self, embeddings: np.ndarray, features: np.ndarray) -> np.ndarray:
 		embeddings = np.asarray(embeddings, dtype=np.float64)
 		features = np.asarray(features, dtype=np.float64)
 		if embeddings.shape[1] != self.embedding_dim:
@@ -63,9 +89,25 @@ class Weights:
 			mu = np.array(self.feature_norm["mu"])
 			sd = np.array(self.feature_norm["sd"])
 			features = (features - mu) / (sd + 1e-9)
-		z = np.concatenate([embeddings, features], axis=1)
+		return np.concatenate([embeddings, features], axis=1)
+
+	def score_matrix(self, embeddings: np.ndarray, features: np.ndarray) -> np.ndarray:
+		"""(n, embedding_dim) 嵌入 + (n, len(feature_keys)) 原始特征 → (n, labels) 缺陷概率。"""
+		z = self._z(embeddings, features)
 		logits = z @ np.array(self.W).T + np.array(self.b)
 		return 1.0 / (1.0 + np.exp(-logits))
+
+	def score_emotion(self, embeddings: np.ndarray, features: np.ndarray) -> np.ndarray:
+		"""→ (n, 3) 累积概率 P(强度≥1/≥2/≥3)；无情绪头时抛错。"""
+		if not self.emotion_b:
+			raise ValueError("该权重无情绪头（emotion_b 为空）")
+		z = self._z(embeddings, features)
+		score = z @ np.array(self.emotion_w)
+		return 1.0 / (1.0 + np.exp(-(score[:, None] - np.array(self.emotion_b)[None, :])))
+
+	def emotion_line(self, embeddings: np.ndarray, features: np.ndarray) -> np.ndarray:
+		"""→ (n,) 期望强度 E = Σ_k P(≥k)（0-3 连续值，供派生平直/转折）。"""
+		return self.score_emotion(embeddings, features).sum(axis=1)
 
 
 def save_weights(w: Weights, path: str | Path) -> None:
@@ -79,7 +121,7 @@ def save_weights(w: Weights, path: str | Path) -> None:
 def load_weights(path: str | Path) -> Weights:
 	payload = json.loads(Path(path).read_text(encoding="utf-8"))
 	if payload.get("schema") != WEIGHTS_SCHEMA:
-		raise ValueError(f"不支持的 weights schema：{payload.get('schema')}")
+		raise ValueError(f"不支持的 weights schema：{payload.get('schema')}（当前 {WEIGHTS_SCHEMA}）")
 	fields = {f.name for f in Weights.__dataclass_fields__.values()}  # type: ignore[attr-defined]
 	weights = Weights(**{k: v for k, v in payload.items() if k in fields})
 	weights.validate()

@@ -35,6 +35,9 @@ def test_prompt_contains_style_anchor_and_all_labels():
 		assert d.key in prompt and d.boundary in prompt
 	assert "[1] 他嘴角勾起一抹冷笑。" in prompt
 	assert "other" in prompt and "evidence" in prompt
+	# v2：情绪线档位进 prompt；flatAffect 已移除（平直派生）
+	assert "情绪线" in prompt and "平静" in prompt and "剧烈" in prompt
+	assert "flatAffect" not in prompt
 
 
 def test_parse_valid_reply_with_evidence():
@@ -44,12 +47,14 @@ def test_parse_valid_reply_with_evidence():
 				{
 					"index": 1,
 					"labels": {"clicheExpression": 1},
+					"emotion": 2,
 					"evidence": {"clicheExpression": "嘴角勾起一抹冷笑"},
 				},
-				{"index": 2, "labels": {}, "evidence": {}},
+				{"index": 2, "labels": {}, "emotion": 0, "evidence": {}},
 				{
 					"index": 3,
 					"labels": {"explainTelling": 1},
+					"emotion": 1,
 					"evidence": {"explainTelling": "他心里想：这个人得防着点。"},
 				},
 			],
@@ -61,6 +66,24 @@ def test_parse_valid_reply_with_evidence():
 	assert result.labels[0]["clicheExpression"] == 1
 	assert result.labels[1] == {k: 0 for k in LABEL_KEYS}
 	assert result.labels[2]["explainTelling"] == 1
+	assert result.emotion == [2, 0, 1]
+	assert result.errors == []
+
+
+def test_emotion_clamped_and_invalid_defaults_zero():
+	reply = json.dumps(
+		{
+			"paragraphs": [
+				{"index": 1, "labels": {}, "emotion": 9, "evidence": {}},
+				{"index": 2, "labels": {}, "emotion": "很激动", "evidence": {}},
+				{"index": 3, "labels": {}, "evidence": {}},
+			],
+			"other": [],
+		},
+		ensure_ascii=False,
+	)
+	result = parse_annotation_reply(reply, make_window())
+	assert result.emotion == [3, 0, 0]  # 越界截断 / 非法归零 / 缺省归零（评级不算错误）
 	assert result.errors == []
 
 
@@ -86,6 +109,7 @@ def test_invalid_evidence_invalidates_label():
 def test_non_json_reply_all_zero_with_error():
 	result = parse_annotation_reply("我觉得写得不错", make_window())
 	assert all(v == 0 for row in result.labels for v in row.values())
+	assert result.emotion == [0, 0, 0]
 	assert result.errors
 
 
@@ -120,4 +144,6 @@ def test_annotate_window_with_injected_fake_call():
 	assert result.others == ["节奏有点拖"]
 	record = result.to_record(window, model, prompt)
 	assert record["meta"]["judgeModel"] == "test-judge"
+	assert record["meta"]["labelsVersion"] == "v3"
 	assert len(record["meta"]["promptSha256"]) == 64
+	assert record["emotion"] == [0, 0, 0]

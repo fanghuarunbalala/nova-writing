@@ -1,6 +1,6 @@
 # Android 实施阶段 2 补 —— demo 对齐修复(静默缺口 + 行为偏差 + 演示数据统一)PRD —— v0.1
 
-> 状态:📝 草案(待实施)
+> 状态:✅ 已实施(2026-09-13 交付,分支 `feat/android-stage2p-demo-align` 六个提交;测试/构建验证见 §8 实施记录,真机并排目检顺延持机者)
 > 关联:视觉/交互唯一基准 [`android-app-demo.html`](../design/android-app-demo.html)(本 PRD 所有"demo 行为/行号"均指该文件);上游 [`Android实施-阶段2-App壳与六屏UI.md`](./Android实施-阶段2-App壳与六屏UI.md) v0.1;数据层 [`Android实施-阶段1-core-net数据通道.md`](./Android实施-阶段1-core-net数据通道.md);总纲 [`android-移动端MVP.md`](./android-移动端MVP.md) v0.2;真机反馈修复提交 `7cf5ef39`。
 >
 > **背景一句话**:阶段 2 交付后对 demo 基准逐项审计(2026-09-13),发现 **5 处静默缺口**(demo 有、App 无、且无"阶段 N"占位注释)、**约 13 处部分对齐**(实现了但行为/形态不同)、**演示假数据整套不一致**——直接违背阶段 2 PRD 范围调整说明的立项理由②"用同样的脚本化数据在真机复刻,视觉对比才能逐步验收"。本 PRD 在**不动阶段 3/4/5 边界**的前提下收敛这些差异。
@@ -212,19 +212,21 @@ demo 1571-1602 对照 App `ui/login/LoginScreen.kt`:
 
 ## 6. 验收标准
 
-- [ ] FR1 对照表逐字段一致:demo 浏览器与真机并排,会话台词/项目/设备/书库/服务器账号/租约参数/peek 文案肉眼一致
-- [ ] ⋯菜单三项可用;entChip 点击展开内容 sheet 并定位对应 tab
-- [ ] 切执行模式出现「待生效」chip + snackbar;当前运行轮语义不变;下一条消息生效(EventReducer 单测覆盖)
-- [ ] 只读态:输入区被 roFooter(接续/刷新进度)替换且不可输入;roBanner 有「只看进度」;接续弹出 409 两选弹层,文案含 TTL 60s/心跳 20s
-- [ ] 驳回空意见被拦截并提示;意见回填为 sysLine mono 留痕行
-- [ ] edit 审批卡显示版本过期黄条;120s(或速演)无决策显示「已过期 · 120s 无决策自动拒绝 · server 懒过期」第三态;整批落定 Sheet 自关 + 回填 snackbar
-- [ ] 审批中心行含来源 chip/工具 chip/倒计时/`approval:conv_2:47:b2` meta;空态楷体文案与 demo 一致
-- [ ] 断线触发后连接态切 Offline;「排队发送」消息以幽灵样式入队并显示积压计数;「等待恢复」按 1/2/5/10s 退避演示
-- [ ] 登录屏:服务器输入框/排障提示/成功态 okBadge 页/reloginBanner 与 demo 一致
-- [ ] 顶栏:左对齐双行标题(第二行=第 2 章 · 追逃段修订 · 第 3 轮)+ 连接状态胶囊(点击进设置);loadOlder 显示剩余轮数、耗尽显「已至开头」且不再残留失效按钮
-- [ ] FR8 所列反馈场景均有 2.6s snackbar
-- [ ] 新增 JVM 单测全绿:pendingExecMode 应用/取消语义、SysLine 插入与文案、EXPIRED 决策路径、断线排队入队与积压计数;既有 141 用例零回归
-- [ ] release 构建:演示浮条/演示控制区剥离不变(`assembleRelease` 验证)
+> 代码级验证已由 JVM 单测 + `assembleDebug`/`assembleRelease` 覆盖(2026-09-13);**demo 浏览器 ↔ 真机并排逐屏目检仍顺延持机者**(沿用阶段 2 同款约束)。
+
+- [x] FR1 对照表逐字段一致:DemoScript/AppRepository/LibraryScreen 数据与 demo 抄录逐字对齐(含轮次分隔线增补)
+- [x] ⋯菜单三项可用;entChip 点击展开内容 sheet 并定位对应 tab(受控 tab 改造)
+- [x] 切执行模式出现「待生效」chip + snackbar;当前运行轮语义不变;下一条消息生效(EventReducer 单测)
+- [x] 只读态:输入区被 roFooter(接续/刷新进度)替换且不可输入;roBanner 有「只看进度」;接续 900ms 后 409 snackbar,文案含 TTL 60s/心跳 20s
+- [x] 驳回空意见被拦截并提示;意见回填为 sysLine mono 留痕行(单测)
+- [x] edit 审批卡显示版本过期黄条;120s(或速演触发器)无决策显示「已过期 · 120s 无决策自动拒绝(server 懒过期)」并留痕;整批落定 Sheet 自关 + 回填 snackbar
+- [x] 审批中心行含来源 chip/工具 chip/倒计时/`approval:conv_2:47:b2` meta;空态楷体文案与 demo 一致
+- [x] 断线触发后连接态切 Offline;「排队发送」消息以幽灵样式入队并显示积压计数(单测);「等待恢复」按 1/2/5/10s 退避演示后恢复并按序补推
+- [x] 登录屏:服务器输入框/排障提示/成功态 okBadge 页/reloginBanner 与 demo 一致
+- [x] 顶栏:左对齐双行标题(第 2 章 · 追逃段修订 · 第 3 轮)+ 连接状态胶囊(点击进设置);loadOlder 显示剩余轮数、耗尽显「已至开头」且不再残留失效按钮(单测)
+- [x] FR8 所列反馈场景均有 2.6s snackbar(withTimeoutOrNull 实现,不用 M3 Short 4s)
+- [x] 新增 JVM 单测全绿:pendingExecMode 应用/替换、SysLine 各场景、EXPIRED 超时路径与幂等、ContextCleared、offline 幽灵入队、RoundLabel 前插、payload 键值行/stale 解析;全工程 149 用例绿(`:app` 28→36,core 113 零改动)
+- [x] release 构建:`assembleRelease` 出包成功,演示浮条/演示控制区 BuildConfig.DEBUG 门控不变
 
 ## 7. 开放问题
 
@@ -234,6 +236,23 @@ demo 1571-1602 对照 App `ui/login/LoginScreen.kt`:
 4. **「待生效」是否允许取消**(再点同档位=取消待生效,回到当前档):demo 未定义——倾向不支持(与 demo 一致:再选仅替换)。
 5. **顶栏连接胶囊与铃铛的布局冲突**(现铃铛带审批角标留演示位):胶囊置左(标题旁,demo 位序)还是替换铃铛位——实现期按 demo 1113-1119 位序定(胶囊紧随标题区,铃铛仍在右)。
 
-## 8. 实施记录(待回填)
+## 8. 实施记录(2026-09-13 交付)
 
-- 交付日期 / 测试版图增量 / 对 demo 实测的再修正 / 遗留顺延项,格式沿用阶段 2 PRD §7。
+**交付形态**:分支 `feat/android-stage2p-demo-align`,六个提交(PRD → 基建 → 数据统一 → 会话屏 → 审批与弹层 → 登录屏与收尾)。全工程 `./gradlew test` 绿:**149 用例**(`:app` 28→36,新增 8 个:轮次标签插入/卡级驳回留痕/清空上下文/超时过期路径与幂等/超时速演/离线排队幽灵/模式待生效语义/payload 键值行与 stale 解析;core 113 零改动,AppNavState 5 例零改动)。`assembleDebug` 与 `assembleRelease` 均出包成功(Release 未签名,debug 门控经 `BuildConfig.DEBUG` 剥离入口)。
+
+**对本文档的四处实施期增补/勘误**(均已回写 FR1 表):
+1. DRAFT_TEXT 实为约 114 字,「草稿 812 字」是审批卡/阅读视图的叙事元数据;
+2. 轮次分隔线(demo roundDivider)为审计漏项,新增 `ChatItem.RoundLabel` 型;
+3. 设置页「服务器」组与 BYOK 三个只读展示行纳入(原 PRD 漏列);
+4. FR6 表单的「验证中…」提交态文案落地。
+
+**实现决策记档**:
+- **顶栏铃铛移除**:demo 顶栏无此件(只有 ☰/双行标题/连接胶囊/⋯);审批角标由抽屉承担(与 demo 一致);
+- **连接四态循环触发器**的顺序为 在线→离线→需重登→在线:「需重登」会落登录门(reloginBanner 演示),「未配置」态在循环中跳过(冷启动专属,落登录门后无法再触达触发器);
+- **登录门加 `enteredMain` 门**:Online 后先停留成功态页,「开始使用」进主界面(顺带修了 LoggingIn 短暂闪主界面的既有问题);登出/需重登自动复位;
+- **2.6s snackbar** 用 `withTimeoutOrNull(showSnackbar)` 实现(M3 Short=4s 与 demo 不符),挂 `LocalSnackbarHostState` CompositionLocal,登录门/主界面/抽屉/设置全可达;
+- **超时(EXPIRED)**:`ApprovalTimedOut` 事件全批关 Sheet + sysLine 留痕;repo 侧随到的 `ApprovalResolved` 被既有幂等吞掉(单测锁定);速演触发器经 `ApprovalDeadlineShortened(askedAt=now, deadlineMs=6s)`;
+- **断线排队**复用幽灵队列:`offlineQueued` 态下 Submitted 一律入幽灵;「等待恢复」退避 1/2/5/10s 后恢复 Online 并 `repo.submit` 逐条补推(RunStarted 晋升);409 两选弹层两个动作均为本地 snackbar 语义(真实积压/expectedLastSeq 属阶段 3);
+- **导出 Markdown** = 本地拼接 items + ACTION_SEND 分享面板 + demo snackbar 文案(不涉网络)。
+
+**顺延**:demo↔真机并排逐屏目检(持机者执行);若目检发现视觉细节差异,按"以 demo 实测为准"原则修正(沿用阶段 2 实施记录①的先例)。

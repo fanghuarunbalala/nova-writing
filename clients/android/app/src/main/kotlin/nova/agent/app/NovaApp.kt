@@ -84,12 +84,19 @@ fun NovaApp(container: AppContainer) {
         // 全局 snackbar 宿主（PRD FR8）：登录门/主界面/演示浮条都在其内
         nova.agent.app.ui.common.FeedbackHost {
             val auth by appViewModel.auth.collectAsStateWithLifecycle()
+            // 登录成功态页（demo okBadge）→「开始使用」进主界面；登出/需重登时复位
+            var enteredMain by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(auth) {
+                if (auth is AuthUiState.NeedRelogin || auth is AuthUiState.Unconfigured) enteredMain = false
+            }
+            val showMain = (auth is AuthUiState.Online && enteredMain) || auth is AuthUiState.Offline
             // 键盘弹起时藏掉演示浮条（避免盖住输入区）
             val imeVisible = WindowInsets.isImeVisible
             Box(Modifier.fillMaxSize()) {
-                when (auth) {
-                    AuthUiState.Unconfigured, AuthUiState.NeedRelogin -> LoginScreen(appViewModel)
-                    else -> MainScaffold(container, appViewModel)
+                if (showMain) {
+                    MainScaffold(container, appViewModel)
+                } else {
+                    LoginScreen(appViewModel) { enteredMain = true }
                 }
                 if (BuildConfig.DEBUG && !imeVisible && auth !is AuthUiState.Unconfigured && auth !is AuthUiState.NeedRelogin) {
                     val leaseActive by container.demoTriggers.lease.collectAsStateWithLifecycle()

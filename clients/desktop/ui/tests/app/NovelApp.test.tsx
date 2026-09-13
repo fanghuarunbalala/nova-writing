@@ -3,7 +3,7 @@
  * 打开后切到工作台壳；登录门强制（未登录必拦，无本地模式跳过）。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NovelApp } from "../../src/app/NovelApp.js";
 import { WorkspaceController } from "../../src/domains/workspace/controller/WorkspaceController.js";
@@ -328,7 +328,9 @@ describe("NovelApp 登录门（纯云端化 ⑥：强制登录）", () => {
   it("未登录 → 先见登录门（盖欢迎页），且无本地模式跳过入口", async () => {
     renderApp(buildAuthClient({ status: "unconfigured" }));
     expect(await screen.findByRole("heading", { name: LOGIN_TITLE })).toBeInTheDocument();
-    expect(screen.getByText("推荐 · 本机默认")).toBeInTheDocument();
+    // 固定 server：地址输入已退役，表单仅账号密码
+    expect(screen.queryByLabelText(/服务器地址/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/用户名/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "暂不登录，本地模式使用" })).not.toBeInTheDocument();
   });
 

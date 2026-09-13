@@ -47,6 +47,7 @@ import {
 import type { FrontendPlatform } from "../platform/index.js";
 import type { NovelUiExtensions } from "../extensions/index.js";
 import { ThemeProvider } from "../shared/theme/index.js";
+import { DefaultServerUrlContext } from "../shared/DefaultServerUrlContext.js";
 import {
   InspectorRouter,
   MainViewRouter,
@@ -87,6 +88,12 @@ export interface NovelAppProps {
    * list 拉 server 项目；create/openProject 返回打开引用（经 workspaceController.open）。
    */
   readonly cloudProjects?: CloudProjectsPort;
+  /**
+   * 构建期注入的固定 server 地址（客户端固定server PRD）：gui 宿主经 preload 桥传入，
+   * 经 DefaultServerUrlContext 发布——LoginPage / ServerSettingsPanel 的登录目标；
+   * 未提供（web shell / 单测）时消费方回退本地常量。
+   */
+  readonly defaultServerUrl?: string;
 }
 
 /** 云项目通道（renderer → main workspace-rpc；纯云端化 ⑥：项目列表唯一来源） */
@@ -110,7 +117,9 @@ export function NovelApp(props: NovelAppProps) {
   }
   return (
     <ThemeProvider>
-      <NovelAppReady {...props} workspaceController={props.workspaceController} />
+      <DefaultServerUrlContext.Provider value={props.defaultServerUrl}>
+        <NovelAppReady {...props} workspaceController={props.workspaceController} />
+      </DefaultServerUrlContext.Provider>
     </ThemeProvider>
   );
 }

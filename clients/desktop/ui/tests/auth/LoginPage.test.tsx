@@ -1,12 +1,14 @@
 /**
- * LoginPage 组件测试（登录门形态定稿）：表单三字段/推荐默认值、地址校验、
- * 登录与注册参数透传、错误横幅（防枚举/username_taken 文案原样）、成功态 用户名@server、
- * 跳过回调、老 main 进程降级（无 serverRegister 隐藏注册入口）。
+ * LoginPage 组件测试（固定 server 形态）：表单去地址输入（用户名+密码）、
+ * 登录目标优先级（已保存配置地址 > DefaultServerUrlContext 注入 > 本地 fallback）、
+ * 登录与注册参数透传、错误横幅（防枚举/username_taken 文案原样）、成功态 用户名@host、
+ * 老 main 进程降级（无 serverRegister 隐藏注册入口）。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ServerAuthState } from "@novel/core";
 import { LoginPage } from "../../src/auth/LoginPage.js";
+import { DefaultServerUrlContext } from "../../src/shared/DefaultServerUrlContext.js";
 import type { ApplicationConfigurationClient } from "../../src/settings/ApplicationConfigurationClient.js";
 
 function makeClient(options?: {
@@ -39,8 +41,7 @@ function makeClient(options?: {
 	} as never;
 }
 
-function fillAndSubmit(url = "http://127.0.0.1:8787", username = "alice", password = "pw12345678"): void {
-	fireEvent.change(screen.getByLabelText(/服务器地址/), { target: { value: url } });
+function fillAndSubmit(username = "alice", password = "pw12345678"): void {
 	fireEvent.change(screen.getByLabelText(/用户名/), { target: { value: username } });
 	fireEvent.change(screen.getByLabelText(/密码/), { target: { value: password } });
 	fireEvent.click(screen.getByRole("button", { name: /登 录/ }));
@@ -52,37 +53,68 @@ afterEach(() => {
 	localStorage.clear();
 });
 
-describe("LoginPage", () => {
-	it("初始渲染：三字段 + 推荐默认地址 + 注册次级入口 + 信任脚注", () => {
+describe("LoginPage（固定 server）", () => {
+	it("初始渲染：无服务器地址输入，仅用户名+密码 + 注册次级入口 + 信任脚注", () => {
 		render(<LoginPage configuration={makeClient()} onEnterWorkspace={() => {}} />);
-		expect((screen.getByLabelText(/服务器地址/) as HTMLInputElement).value).toBe("http://127.0.0.1:8787");
-		expect(screen.getByText("推荐 · 本机默认")).toBeTruthy();
+		// 地址输入已退役（客户端固定server PRD FR3）
+		expect(screen.queryByLabelText(/服务器地址/)).toBeNull();
+		expect(screen.getByLabelText(/用户名/)).toBeTruthy();
+		expect(screen.getByLabelText(/密码/)).toBeTruthy();
 		// 纯云端化 ⑥：强制登录——本地模式跳过入口不存在
 		expect(screen.queryByRole("button", { name: "暂不登录，本地模式使用" })).toBeNull();
 		expect(screen.getByRole("button", { name: "注册账号" })).toBeTruthy();
 		expect(screen.getByText(/safeStorage/)).toBeTruthy();
 	});
 
-	it("地址非法被拦（不触网）；用户名/密码空拦", async () => {
+	it("无注入时登录目标回退本地 fallback 常量；用户名/密码空拦（不触网）", async () => {
 		const client = makeClient();
 		render(<LoginPage configuration={client} onEnterWorkspace={() => {}} />);
-		fillAndSubmit("not-a-url");
-		expect(await screen.findByRole("alert")).toHaveTextContent("服务器地址需为 http/https URL");
-		fillAndSubmit("http://127.0.0.1:8787", "ab", "pw12345678");
+		fillAndSubmit("ab", "pw12345678");
+		expect(await screen.findByRole("alert")).toHaveTextContent("请填写用户名");
+		fillAndSubmit("", "");
 		expect(await screen.findByRole("alert")).toHaveTextContent("请填写用户名");
 		expect(client.serverLogin).not.toHaveBeenCalled();
 	});
 
-	it("登录：参数（修剪后）透传 serverLogin；成功 → 成功态 用户名@server + 进入工作台", async () => {
+	it("登录：无注入 → serverLogin 收到 fallback 地址；成功 → 成功态 用户名@host + 进入工作台", async () => {
 		const client = makeClient();
 		const enter = vi.fn();
 		render(<LoginPage configuration={client} onEnterWorkspace={enter} />);
-		fillAndSubmit(" http://127.0.0.1:8787 ", " alice ", "pw12345678");
+		fillAndSubmit(" alice ", "pw12345678");
 		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://127.0.0.1:8787", "alice", "pw12345678"));
 		expect(await screen.findByText("已连接同步服务")).toBeTruthy();
 		expect(screen.getByText("alice")).toBeTruthy();
+		expect(screen.getByText(/@127\.0\.0\.1:8787/)).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: /进入工作台/ }));
 		expect(enter).toHaveBeenCalledTimes(1);
+	});
+
+	it("注入优先：DefaultServerUrlContext 提供地址 → 登录/注册打到注入地址", async () => {
+		const client = makeClient();
+		render(
+			<DefaultServerUrlContext.Provider value="http://121.43.61.81:8080">
+				<LoginPage configuration={client} onEnterWorkspace={() => {}} />
+			</DefaultServerUrlContext.Provider>,
+		);
+		fillAndSubmit("alice", "pw12345678");
+		await waitFor(() =>
+			expect(client.serverLogin).toHaveBeenCalledWith("http://121.43.61.81:8080", "alice", "pw12345678"),
+		);
+	});
+
+	it("已保存地址优先：serverAuth 带 url → 登录打到已保存地址（注入值让位）", async () => {
+		const client = makeClient({ authState: { status: "unconfigured", url: "http://192.168.1.5:8787" } });
+		render(
+			<DefaultServerUrlContext.Provider value="http://121.43.61.81:8080">
+				<LoginPage configuration={client} onEnterWorkspace={() => {}} />
+			</DefaultServerUrlContext.Provider>,
+		);
+		// 等 serverAuth 回流完成 seed（savedUrl 是异步 setState），再提交
+		await waitFor(() => expect(client.serverAuth).toHaveBeenCalledTimes(1));
+		fillAndSubmit("alice", "pw12345678");
+		await waitFor(() =>
+			expect(client.serverLogin).toHaveBeenCalledWith("http://192.168.1.5:8787", "alice", "pw12345678"),
+		);
 	});
 
 	it("登录失败：server 防枚举文案原样呈现（横幅 + 不进成功态）", async () => {
@@ -101,10 +133,10 @@ describe("LoginPage", () => {
 		expect(screen.getByText("至少 8 位；建议混合字母与数字")).toBeTruthy();
 		expect(screen.getByRole("button", { name: /注 册 并 登 录/ })).toBeTruthy();
 		// 短密码被本地校验拦
-		fillAndSubmit("http://127.0.0.1:8787", "newbie", "short");
+		fillAndSubmit("newbie", "short");
 		expect(await screen.findByRole("alert")).toHaveTextContent("密码至少 8 位");
 		// 合法注册 → serverRegister 透传 + 成功态
-		fillAndSubmit("http://127.0.0.1:8787", "newbie", "pw12345678");
+		fillAndSubmit("newbie", "pw12345678");
 		await waitFor(() => expect(client.serverRegister).toHaveBeenCalledWith("http://127.0.0.1:8787", "newbie", "pw12345678"));
 		expect(await screen.findByText("newbie")).toBeTruthy();
 		// 返回登录链接仍在注册模式时可见；成功态后消失
@@ -115,7 +147,7 @@ describe("LoginPage", () => {
 		const client = makeClient({ registerError: "用户名已存在" });
 		render(<LoginPage configuration={client} onEnterWorkspace={() => {}} />);
 		fireEvent.click(screen.getByRole("button", { name: "注册账号" }));
-		fillAndSubmit("http://127.0.0.1:8787", "dup", "pw12345678");
+		fillAndSubmit("dup", "pw12345678");
 		expect(await screen.findByRole("alert")).toHaveTextContent("用户名已存在");
 	});
 
@@ -123,7 +155,7 @@ describe("LoginPage", () => {
 		const client = makeClient();
 		render(<LoginPage configuration={client} onEnterWorkspace={() => {}} />);
 		fireEvent.click(screen.getByRole("button", { name: "注册账号" }));
-		fillAndSubmit("http://127.0.0.1:8787", "x", "short");
+		fillAndSubmit("x", "short");
 		expect(await screen.findByRole("alert")).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: /返回登录/ }));
 		expect(screen.getByText("登录同步服务")).toBeTruthy();
@@ -140,15 +172,14 @@ describe("LoginPage", () => {
 		expect(screen.getByRole("button", { name: /登 录/ })).toBeDisabled();
 	});
 
-	it("已在线重开（欢迎页入口）：直接呈现成功态", async () => {
+	it("已在线重开（欢迎页入口）：直接呈现成功态（host 展示）", async () => {
 		render(
 			<LoginPage
 				configuration={makeClient({ authState: { status: "online", url: "http://192.168.1.5:8787", username: "alice" } })}
-				
 				onEnterWorkspace={() => {}}
 			/>,
 		);
 		expect(await screen.findByText("已连接同步服务")).toBeTruthy();
-		expect(screen.getByText(/192\.168\.1\.5/)).toBeTruthy();
+		expect(screen.getByText(/192\.168\.1\.5:8787/)).toBeTruthy();
 	});
 });

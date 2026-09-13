@@ -52,7 +52,8 @@ import nova.agent.app.ui.vm.AppViewModel
 
 /**
  * 登录门（纯云端，无「先本地使用」逃生口）。
- * 阶段3：服务器地址栏（持久化 server_url）+ 服务端错误码文案（loginErrors）。
+ * 固定 server（客户端固定server PRD FR5）：地址输入已退役——登录目标 =
+ * 已保存 DataStore 地址（serverUrlHint）> 构建期注入（BuildConfig.DEFAULT_SERVER）。
  */
 @Composable
 fun LoginScreen(vm: AppViewModel) {
@@ -61,7 +62,6 @@ fun LoginScreen(vm: AppViewModel) {
     val serverUrlHint by vm.serverUrlHint.collectAsStateWithLifecycle()
 
     var registerMode by rememberSaveable { mutableStateOf(false) }
-    var serverUrl by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var confirm by rememberSaveable { mutableStateOf("") }
@@ -69,14 +69,12 @@ fun LoginScreen(vm: AppViewModel) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     val busy = auth is AuthUiState.LoggingIn
 
-    // 已保存的服务器地址回填一次（不覆盖用户输入）
-    LaunchedEffect(serverUrlHint) {
-        if (serverUrl.isBlank() && serverUrlHint.isNotBlank()) serverUrl = serverUrlHint
-    }
-    // debug 预填（local.properties nova.dev.* → BuildConfig；release 恒空串不生效）
+    // 登录目标：已保存地址 > 构建期注入（hint 异步加载中先落到注入值，保存值回流后自然生效）
+    val targetServerUrl = serverUrlHint.ifBlank { BuildConfig.DEFAULT_SERVER }
+
+    // debug 预填（local.properties nova.dev.user/pass → BuildConfig；release 恒空串不生效）
     LaunchedEffect(Unit) {
         if (BuildConfig.DEBUG) {
-            if (serverUrl.isBlank()) serverUrl = BuildConfig.DEV_SERVER
             if (username.isBlank()) username = BuildConfig.DEV_USER
             if (password.isBlank()) password = BuildConfig.DEV_PASS
         }
@@ -87,17 +85,14 @@ fun LoginScreen(vm: AppViewModel) {
     }
 
     fun submit() {
-        val trimmedUrl = serverUrl.trim()
         error = when {
-            !trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://") ->
-                "服务器地址需以 http:// 或 https:// 开头"
             username.isBlank() -> "请输入用户名"
             registerMode && password.length < 8 -> "密码至少 8 位（weak_password）"
             registerMode && password != confirm -> "两次密码不一致"
             else -> null
         } ?: run {
-            if (registerMode) vm.register(username, password, deviceName, trimmedUrl)
-            else vm.login(username, password, deviceName, trimmedUrl)
+            if (registerMode) vm.register(username, password, deviceName, targetServerUrl)
+            else vm.login(username, password, deviceName, targetServerUrl)
             null
         }
     }
@@ -126,17 +121,6 @@ fun LoginScreen(vm: AppViewModel) {
         )
         Spacer(Modifier.height(56.dp))
 
-        OutlinedTextField(
-            value = serverUrl,
-            onValueChange = { serverUrl = it },
-            label = { Text("服务器地址") },
-            placeholder = { Text("https://your-nova-server") },
-            singleLine = true,
-            enabled = !busy,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },
@@ -220,7 +204,7 @@ fun LoginScreen(vm: AppViewModel) {
 
         Spacer(Modifier.weight(1f))
         Text(
-            "纯云端 · 无本地模式\n${serverUrl.ifBlank { "未配置服务器地址" }}",
+            "纯云端 · 无本地模式\n${android.net.Uri.parse(targetServerUrl).host ?: targetServerUrl}",
             style = NovaText.mono11.copy(color = palette.faint, fontWeight = androidx.compose.ui.text.font.FontWeight.Normal),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 24.dp),

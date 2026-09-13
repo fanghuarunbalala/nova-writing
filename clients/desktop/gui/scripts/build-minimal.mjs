@@ -9,6 +9,13 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 await mkdir(join(root, "dist/minimal"), { recursive: true });
 
+// 固定 server 地址（客户端固定server PRD FR1）：构建期注入 main/preload 产物，
+// preload 经 __NOVEL_DEFAULT_SERVER_URL__ 桥暴露给 renderer → ui 登录目标。
+// NOVA_DEFAULT_SERVER_URL 覆盖，缺省指向公网部署 server。
+const defaultServerUrl = process.env.NOVA_DEFAULT_SERVER_URL ?? "http://121.43.61.81:8080";
+const define = { "process.env.NOVEL_DEFAULT_SERVER_URL": JSON.stringify(defaultServerUrl) };
+console.log(`[build-minimal] default server url = ${defaultServerUrl}`);
+
 // 1. main（Electron 主进程，cjs——Electron main 默认 cjs，避免 ESM 下 pino 动态 require 失败）
 // @novel/core/node 及 kkrpc external，让 Electron main 运行时从各自包的 node_modules 解析
 // （zeromq/pino 是 @novel/core 的传递依赖，随其 ESM 解析）
@@ -19,6 +26,7 @@ await build({
   platform: "node",
   format: "cjs",
   external: ["electron", "kkrpc", "@novel/core", "@novel/core/node"],
+  define,
   logLevel: "warning",
 });
 
@@ -30,6 +38,7 @@ await build({
   platform: "node",
   format: "cjs",
   external: ["electron"],
+  define,
   logLevel: "warning",
 });
 

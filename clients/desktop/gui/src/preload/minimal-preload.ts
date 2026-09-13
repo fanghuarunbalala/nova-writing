@@ -24,6 +24,9 @@ try {
   });
   // renderer 侧 debugLog 开关（浏览器无 process.env）
   contextBridge.exposeInMainWorld("__NOVEL_LOG_LEVEL__", process.env.NOVEL_LOG_LEVEL ?? "info");
+  // 固定 server 地址（客户端固定server PRD FR2）：构建期 define 注入，登录页去地址输入后
+  // 的登录目标来源；空串 = 未注入（web shell / 无 define 构建），ui 回退本地常量
+  contextBridge.exposeInMainWorld("__NOVEL_DEFAULT_SERVER_URL__", process.env.NOVEL_DEFAULT_SERVER_URL ?? "");
   // debug 标志（gui:debug 注入 NOVEL_DEBUG=1）：试验功能门控
   contextBridge.exposeInMainWorld("__NOVEL_DEBUG__", process.env.NOVEL_DEBUG === "1");
   // 书库视图显式开关（NOVEL_LIBRARY=1 才开启；release/debug 默认均不显示）

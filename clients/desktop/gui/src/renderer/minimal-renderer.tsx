@@ -41,6 +41,8 @@ declare global {
     };
     __NOVEL_DEBUG__?: boolean;
     __NOVEL_LIBRARY_ENABLED__?: boolean;
+    /** 固定 server 地址（preload 桥，构建期 define 注入）；空串 = 未注入 */
+    __NOVEL_DEFAULT_SERVER_URL__?: string;
   }
 }
 
@@ -237,6 +239,7 @@ function AppRoot() {
         onboardingPort={onboardingPort}
         windowChrome={windowChrome}
         cloudProjects={workspaceApi.cloudProjects}
+        defaultServerUrl={window.__NOVEL_DEFAULT_SERVER_URL__?.trim() || undefined}
       />
     </StrictMode>
   );

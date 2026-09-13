@@ -7,10 +7,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- 固定 server 过渡放开明文 HTTP（客户端固定server PRD FR6）：构建期注入的地址是
+         http://121.43.61.81:8080（server 暂无 TLS），release 默认禁 cleartext 会连不上；
+         server 上 TLS 后回收本属性（debug 侧原本就放开，见 app/src/debug/AndroidManifest.xml） -->
     <application
         android:name=".NovaApplication"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Nova">
 
         <!-- singleTask：通知深链/审批跳转不产生双 Activity 双 ViewModel（PRD §1.2-⑨） -->

@@ -28,7 +28,7 @@ const FIXTURE = path.join(
 	"..",
 	"protocol",
 	"fixtures",
-	"definition-novel-1.5.0.json",
+	"definition-novel-1.6.0.json",
 );
 
 function goldenBundle(): DefinitionBundle {

@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 class DefinitionBundleTest {
 
     private fun golden(): DefinitionBundle {
-        val path: Path = Path.of(javaClass.classLoader.getResource("definition-novel-1.5.0.json")!!.toURI())
+        val path: Path = Path.of(javaClass.classLoader.getResource("definition-novel-1.6.0.json")!!.toURI())
         return DefinitionBundleCodec.decode(Files.readString(path))
     }
 

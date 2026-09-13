@@ -48,6 +48,23 @@ export interface SkillsIndexSnapshot {
 }
 
 /**
+ * 风格示例注入快照（PRD 检索式形态示例 F3）：node 层按当前写作焦点从书库风格
+ * 示例库混合检索派生（焦点指纹缓存——变更才重新检索，非每调用重检索）。
+ * content 即 <novel-style-guide> 块正文；快照缺失 = novel.stylelib 段省略（默认关）。
+ * Style guide snapshot: derived by the node layer by hybrid-retrieving the
+ * book-library stylelib against the current writing focus (fingerprint-cached).
+ */
+export interface StylelibGuideSnapshot {
+  /** 注入块正文（novel.stylelib 段直接渲染；空串 = 段省略） */
+  readonly content: string;
+  /** 溯源（书 id + 命中段 id/标签；debug 观测用） */
+  readonly source: {
+    readonly bookId: string;
+    readonly hits: readonly { readonly id: string; readonly styleTag: string }[];
+  };
+}
+
+/**
  * 动态段渲染输入：LoopContext 每 provider call 组装（workdir/platform/modelId
  * 来自 LoopContext 自身状态与 run 配置），仅 novelGlobalConstraints 由宿主注入。
  * Dynamic section render input: assembled per provider call by LoopContext
@@ -68,6 +85,8 @@ export interface DynamicPromptSectionInput {
   readonly novelGlobalConstraints?: NovelGlobalConstraintsSnapshot;
   /** 案例引导快照（宿主每调用注入；缺失时规范段仅省略「参考案例」小节） */
   readonly caseGuide?: CaseGuideSnapshot;
+  /** 风格示例注入快照（宿主每调用注入，焦点指纹缓存；缺失时 novel.stylelib 段省略） */
+  readonly stylelib?: StylelibGuideSnapshot;
   /** 技能索引快照（宿主装配期注入一次、会话期静态；缺失或空时 skill.index 段省略） */
   readonly skills?: SkillsIndexSnapshot;
 }
@@ -87,6 +106,15 @@ export type NovelConstraintsProvider = () => Promise<NovelGlobalConstraintsSnaps
  * the standard sections omit their "reference cases" subsection only.
  */
 export type CaseGuideProvider = () => Promise<CaseGuideSnapshot | undefined>;
+
+/**
+ * 风格示例注入提供者：每 provider call 前调用（node 层按写作焦点从书库示例库
+ * 检索派生，焦点指纹缓存）。返回 undefined → novel.stylelib 段省略。
+ * Stylelib guide provider: invoked before each provider call; the node layer
+ * derives the snapshot from the book-library stylelib against the current
+ * writing focus. undefined → the novel.stylelib section is omitted.
+ */
+export type StylelibProvider = () => Promise<StylelibGuideSnapshot | undefined>;
 
 /**
  * 静态分段：base 缓存一次渲染，跨 provider call 复用（内容恒定）。

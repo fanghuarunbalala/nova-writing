@@ -12,6 +12,7 @@
  * novel.identity → novel.system → novel.doing-tasks → novel.actions →
  * novel.communication → core.runtime.protocol → novel.story_appeal →
  * novel.outline_standard → novel.prose_standard → novel.publication_standard →
+ * novel.stylelib（书库风格示例 few-shot；快照缺失段省略） →
  * tool.policy(dynamic) → tool.guidance(dynamic) → skill.index(dynamic) →
  * core.environment(dynamic) → novel.global_constraints(dynamic)
  */
@@ -26,10 +27,10 @@ import {
   PromptSectionItem,
 } from "../../prompt/PromptRecipe.js";
 
-/** Novel Agent 声明式定义（definitionVersion 1.5.0：runtime.external 外部工具两步模式 + external_tools nudge） */
+/** Novel Agent 声明式定义（definitionVersion 1.6.0：+novel.stylelib 风格示例注入段，默认关快照缺失段省略） */
 export const novelAgentDefinition = new AgentDefinition({
   agentType: "novel",
-  definitionVersion: "1.5.0",
+  definitionVersion: "1.6.0",
   label: "Novel Agent",
   description: "Collaborates with the user to imagine, plan, and create serialized web novels.",
   promptRecipe: new PromptRecipe([
@@ -43,6 +44,8 @@ export const novelAgentDefinition = new AgentDefinition({
     new PromptSectionItem("novel.outline_standard"),
     new PromptSectionItem("novel.prose_standard"),
     new PromptSectionItem("novel.publication_standard"),
+    // 风格示例注入（PRD 检索式形态示例）：书库强风格段 few-shot；快照缺失/默认关段省略
+    new PromptSectionItem("novel.stylelib"),
     new PromptSectionItem("tool.policy"),
     new PromptSectionItem("tool.guidance"),
     new PromptSectionItem("skill.index"),

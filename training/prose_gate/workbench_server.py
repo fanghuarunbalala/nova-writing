@@ -17,12 +17,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from . import config as config_mod
 from . import expand as expand_mod
 from . import outline as outline_mod
-from .annotate import STYLE_ANCHOR, call_openai_compat
+from .annotate import STYLE_ANCHOR, annotate_window
 from .dataset import build_book_windows, read_jsonl, write_jsonl
-from .sheet import _SHEET_CSS, generate_sheet_html, load_windows_by_chapter
+from .sheet import _SHEET_CSS, build_pairs, generate_sheet_html
 from .single_sheet import generate_single_html
+from .windowing import SentenceUnit, Window
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_FIXTURES = REPO_ROOT / "evals" / "fixtures" / "books"
@@ -41,13 +43,20 @@ class Workbench:
 		self,
 		artifacts_dir: Path = DEFAULT_ARTIFACTS,
 		fixtures_root: Path = DEFAULT_FIXTURES,
-		llm_call=call_openai_compat,
+		llm_call=None,
 	) -> None:
 		self.artifacts = Path(artifacts_dir)
 		self.fixtures_root = Path(fixtures_root)
-		self.llm_call = llm_call
+		self.llm_call = llm_call  # 注入式（测试假实现）；None = 按 config（F3）> env 动态解析
 		self.gen_dir = self.artifacts / "gen"
 		self.artifacts.mkdir(parents=True, exist_ok=True)
+
+	def _llm(self, kind: str) -> tuple:
+		"""用途 → (call, model)：gen=概要提炼/扩写，judge=⚡预标。注入优先，其次 config，回退 env。"""
+		if self.llm_call is not None:
+			return self.llm_call, None
+		cfg = config_mod.load_config(self.artifacts)
+		return config_mod.make_call(cfg), config_mod.model_for(cfg, kind)
 
 	# --- 路径 ---
 	def book_json(self, alias: str) -> Path:
@@ -68,6 +77,9 @@ class Workbench:
 
 	def gen_windows_path(self, gen_id: str) -> Path:
 		return self.gen_dir / f"{gen_id}-windows.jsonl"
+
+	def window_outlines_path(self, alias: str) -> Path:
+		return self.artifacts / f"{alias}-window-outlines.json"
 
 	def labels_path(self, scope: str) -> Path:
 		return self.artifacts / f"labels-{scope}.jsonl"
@@ -125,6 +137,59 @@ class Workbench:
 		tmp.replace(path)
 		return len(store)
 
+	# --- LLM 预标注（减标注量：预填 → 人工校正 → 照常保存） ---
+	def _scope_window_paths(self, scope: str) -> list[Path]:
+		if self.gen_windows_path(scope).exists():
+			return [self.gen_windows_path(scope)]
+		return [self.windows_path(scope), self.ai_windows_path(scope)]
+
+	def _style_for_scope(self, scope: str) -> str:
+		"""书域用该书风格锚；生成批次按最长前缀匹配回源书，兜底通用锚。"""
+		if self.book_json(scope).exists():
+			return self.style_anchor(scope)
+		candidates = [
+			path.parent.name
+			for path in sorted(self.fixtures_root.glob("*/book.json"))
+			if scope.startswith(path.parent.name + "-")
+		]
+		return self.style_anchor(max(candidates, key=len)) if candidates else STYLE_ANCHOR
+
+	def preannotate(self, scope: str, window_id: str) -> dict:
+		"""LLM 预标一个窗：不落盘，前端回填表单，人工校正后经 /api/save 保存
+		（meta.annotator 仍是 human；校正即盲审，锚定偏差可控）。"""
+		rec = None
+		for path in self._scope_window_paths(scope):
+			if not path.exists():
+				continue
+			for r in read_jsonl(path):
+				if r["windowId"] == window_id:
+					rec = r
+					break
+			if rec is not None:
+				break
+		if rec is None:
+			raise ValueError(f"windowId 不在域 {scope} 中：{window_id}")
+		window = Window(
+			window_id=rec["windowId"],
+			book_id=rec["bookId"],
+			chapter_no=int(rec["chapterNo"]),
+			units=tuple(
+				SentenceUnit(line_index=li, text=t)
+				for li, t in zip(rec["lineIndexes"], rec["texts"])
+			),
+		)
+		call, judge_model = self._llm("judge")
+		result, _prompt, model = annotate_window(
+			window, model=judge_model, call=call, style_anchor=self._style_for_scope(scope)
+		)
+		return {
+			"labels": result.labels,
+			"emotion": result.emotion,
+			"evidence": result.evidence,
+			"errors": result.errors,
+			"model": model,
+		}
+
 	# --- 书目列表（首页） ---
 	def list_books(self) -> list[dict]:
 		books = []
@@ -134,31 +199,28 @@ class Workbench:
 				if not NAME_RE.match(alias):
 					continue
 				info = self.book_info(alias)
-				windows = ai_windows = 0
+				windows = ai_windows = legacy_ai = 0
 				pair_total = pair_done = 0
 				if self.windows_path(alias).exists():
 					windows = len(read_jsonl(self.windows_path(alias)))
-					orig_by_ch = load_windows_by_chapter(self.windows_path(alias), source="book")
 					if self.ai_windows_path(alias).exists():
-						ai_windows = len(read_jsonl(self.ai_windows_path(alias)))
-						ai_by_ch = load_windows_by_chapter(
-							self.ai_windows_path(alias), source="ai-expanded"
-						)
+						ai_records = read_jsonl(self.ai_windows_path(alias))
+						ai_windows = len(ai_records)
+						# F1：进度按 pairWindowId 显式映射（旧章级记录不计入、只提示重跑）
+						paired = {r["pairWindowId"]: r for r in ai_records if r.get("pairWindowId")}
+						legacy_ai = ai_windows - len(paired)
 						store = self.load_labels(alias)
-						for no, origs in orig_by_ch.items():
-							ais = ai_by_ch.get(no)
-							if not ais:
-								continue  # 无 AI 窗的章不进配对（标注页同样只配交集章）
-							for idx, orig in enumerate(origs[: len(ais)]):
-								pair_total += 1
-								if (
-									store.get(orig["windowId"])
-									and store.get(ais[idx]["windowId"])
-								):
-									pair_done += 1
+						for rec in read_jsonl(self.windows_path(alias)):
+							ai = paired.get(rec["windowId"])
+							if rec.get("source") != "book" or ai is None:
+								continue
+							pair_total += 1
+							if store.get(rec["windowId"]) and store.get(ai["windowId"]):
+								pair_done += 1
 				info.update(
 					windows=windows,
 					aiWindows=ai_windows,
+					legacyAiWindows=legacy_ai,
 					hasUnits=self.units_path(alias).exists(),
 					hasStyle=self.style_path(alias).exists(),
 					pairTotal=pair_total,
@@ -214,13 +276,14 @@ class Workbench:
 		if len(chapters) > MAX_OUTLINE_CHAPTERS:
 			raise ValueError(f"单次提取章数上限 {MAX_OUTLINE_CHAPTERS}")
 		all_chapters = {no: (title, text) for no, title, text in self.chapters(alias)}
+		call, gen_model = self._llm("gen")
 		units = []
 		for no in chapters:
 			if no not in all_chapters:
 				raise ValueError(f"章号不存在：{no}")
 			title, text = all_chapters[no]
 			outline, _model = outline_mod.extract_outline(
-				title, text, call=self.llm_call
+				title, text, model=gen_model, call=call
 			)
 			units.append(
 				{
@@ -311,8 +374,9 @@ class Workbench:
 			target = counts.get(contrast, 48)
 		else:
 			target = 48
+		call, gen_model = self._llm("gen")
 		text, model = expand_mod.expand_unit(
-			unit, target, call=self.llm_call, style_anchor=style, form=resolved_form
+			unit, target, model=gen_model, call=call, style_anchor=style, form=resolved_form
 		)
 		lines = [l for l in text.splitlines() if l.strip()]
 		result: dict = {"lines": len(lines), "model": model, "preview": text}
@@ -350,6 +414,133 @@ class Workbench:
 			)
 		return result
 
+	# --- 窗口级配对生成（PRD v2 F1：每原文窗 提炼概要 → 扩写 → 单生成窗 1:1） ---
+	def load_window_outlines(self, alias: str) -> dict:
+		"""窗口概要 {原文窗Id → {title, elements, model, chapterNo}}。"""
+		path = self.window_outlines_path(alias)
+		if not path.exists():
+			return {}
+		try:
+			payload = json.loads(path.read_text(encoding="utf-8"))
+		except json.JSONDecodeError:
+			return {}
+		out: dict = {}
+		for wid, o in (payload.get("windows") or {}).items():
+			out[wid] = {
+				"title": str(o.get("title", "")),
+				"elements": o.get("elements", {}) or {},
+				"model": str(o.get("model", "")),
+				"chapterNo": int(o.get("chapterNo", 0)),
+			}
+		return out
+
+	def generate_window_pairs(self, alias: str, chapters: list[int], form: str | None = None) -> dict:
+		"""逐原文窗：提炼窗口概要（≤100 字/要素防泄漏护栏）→ 扩写（目标=该窗段数）→
+		单生成窗（pairWindowId 指回原文窗）；**按章幂等替换** ai-windows；概要落盘溯源。"""
+		if not self.windows_path(alias).exists():
+			raise ValueError("请先在向导里建原文窗")
+		wanted = set(int(c) for c in chapters)
+		orig_windows = [
+			r
+			for r in read_jsonl(self.windows_path(alias))
+			if r.get("source") == "book" and int(r["chapterNo"]) in wanted
+		]
+		if not orig_windows:
+			raise ValueError("所选章没有原文窗")
+		call, gen_model = self._llm("gen")
+		style = self.style_anchor(alias)
+		resolved_form = form or ("sentence" if alias == "ywjs" else "paragraph")
+		outlines = self.load_window_outlines(alias)
+		records: list[dict] = []
+		for rec in orig_windows:
+			orig_wid = rec["windowId"]
+			orig_texts = rec["texts"]
+			avg = max(1, sum(len(t) for t in orig_texts) // len(orig_texts))
+			# 段落粒度约束（长段书）：模型常无视"每行一段"输出巨型段，prompt 给长度预算 + 事后按句重组兜底
+			length_hint = (
+				f"段落粒度贴近原书：每段约 {max(15, avg - 10)}–{avg + 40} 字（1-3 句），"
+				f"必须用换行分段，禁止一段超过 {avg * 3} 字"
+				if resolved_form == "paragraph"
+				else ""
+			)
+			outline, _m = outline_mod.extract_outline(
+				f"第{rec['chapterNo']}章 窗口", "\n".join(orig_texts), model=gen_model, call=call
+			)
+			unit = {
+				"id": orig_wid,
+				"title": outline["title"],
+				"chapterNo": int(rec["chapterNo"]),
+				"elements": outline["elements"],
+			}
+			text, model = expand_mod.expand_unit(
+				unit,
+				len(orig_texts),
+				model=gen_model,
+				call=call,
+				style_anchor=style,
+				form=resolved_form,
+				length_hint=length_hint,
+			)
+			paras = [u.text for u in expand_mod.re_split_paragraphs(text)]
+			regrouped = False
+			if len(paras) < max(2, round(len(orig_texts) * 0.7)) or (
+				paras and max(len(p) for p in paras) > avg * 3
+			):
+				paras = expand_mod.regroup_paragraphs(text, len(orig_texts))
+				regrouped = True
+			ai_wid = f"{alias}-ai{orig_wid[len(alias):]}"  # 镜像命名：wudao-c002-w001 → wudao-ai-c002-w001
+			records.append(
+				expand_mod.single_window_from_texts(
+					paras,
+					ai_wid,
+					book_id=f"{alias}-ai",
+					chapter_no=int(rec["chapterNo"]),
+					source="ai-expanded",
+					pair_window_id=orig_wid,
+				)
+			)
+			outlines[orig_wid] = {
+				"title": outline["title"],
+				"elements": outline["elements"],
+				"model": model,
+				"chapterNo": int(rec["chapterNo"]),
+				"regrouped": regrouped,
+			}
+		# 按章幂等替换（含旧章级遗留记录）；其他章保留
+		existing = (
+			read_jsonl(self.ai_windows_path(alias)) if self.ai_windows_path(alias).exists() else []
+		)
+		kept = [r for r in existing if int(r.get("chapterNo", 0)) not in wanted]
+		write_jsonl(kept + records, self.ai_windows_path(alias))
+		self.window_outlines_path(alias).write_text(
+			json.dumps(
+				{
+					"schema": 1,
+					"book": alias,
+					"generatedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+					"windows": outlines,
+				},
+				ensure_ascii=False,
+				indent=1,
+			),
+			encoding="utf-8",
+		)
+		return {
+			"mode": "window-pairs",
+			"windows": len(records),
+			"chapters": sorted(wanted),
+			"model": model,
+			"annotateUrl": f"/sheet/{alias}",
+			"preview": [
+				{
+					"windowId": r["pairWindowId"],
+					"elements": outlines[r["pairWindowId"]]["elements"],
+					"firstLine": r["texts"][0] if r["texts"] else "",
+				}
+				for r in records[:3]
+			],
+		}
+
 
 # ---------- 页面 ----------
 
@@ -384,13 +575,24 @@ def _page(title: str, body: str, back: str = "/") -> str:
  .chlist label{{display:block;margin:3px 0;font-size:13.5px}}
  #result{{display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:12px;white-space:pre-wrap;font-size:14px}}
  .ok{{color:var(--orig);font-weight:700}} .err{{color:#b91c1c}}
+ @media (max-width:720px){{.panel{{margin:12px auto;padding:14px 14px}} label.f input,textarea,select{{font-size:16px}}
+  .btn{{width:100%}} .cards{{grid-template-columns:1fr}} .chlist{{max-height:38vh;overflow:auto}}}}
 </style></head><body>
-<header class="bar"><div><h1>{_esc(title)}</h1><p>prose-gate 训练数据工作台 · <a href="{_esc(back)}">← 返回</a></p></div></header>
+<header class="bar"><div><h1>{_esc(title)}</h1><p>prose-gate 训练数据工作台 · <a href="{_esc(back)}">← 返回</a></p></div>
+<button class="theme" id="theme" type="button">🌙</button></header>
 {body}
+<script>
+(function(){{var r=document.documentElement,b=document.getElementById('theme');
+if(localStorage.getItem('wb-theme')==='dark')r.dataset.theme='dark';
+b.textContent=r.dataset.theme==='dark'?'☀️':'🌙';
+b.addEventListener('click',function(){{r.dataset.theme=r.dataset.theme==='dark'?'':'dark';
+localStorage.setItem('wb-theme',r.dataset.theme);b.textContent=r.dataset.theme==='dark'?'☀️':'🌙';}});}})();
+</script>
 </body></html>"""
 
 
 def index_html(wb: Workbench) -> str:
+	cfg = config_mod.masked(config_mod.load_config(wb.artifacts))
 	cards = []
 	for book in wb.list_books():
 		pairs = (
@@ -422,6 +624,19 @@ def index_html(wb: Workbench) -> str:
   <button class="btn" onclick="doImport()">上传并解析</button>
   <p id="msg" class="meta"></p>
 </div>
+<div class="panel">
+  <h2>LLM Provider</h2>
+  <p class="meta">存本机配置（gitignored），保存即时生效；API Key 只写不回读。概要提炼/扩写用生成模型，⚡ 预标用标注模型；未配置时回退环境变量。</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0 14px">
+    <label class="f">Base URL（OpenAI 兼容）<input id="cfg-base" value="{_esc(cfg['baseUrl'])}" placeholder="https://api.deepseek.com/v1"></label>
+    <label class="f">API Key<input id="cfg-key" type="password" placeholder="{('已配置（' + cfg['apiKey'] + '，留空保持不变）') if cfg['hasKey'] else '未配置'}"></label>
+    <label class="f">生成模型（提炼/扩写）<input id="cfg-model" value="{_esc(cfg['model'])}" placeholder="deepseek-v4-flash"></label>
+    <label class="f">标注模型（⚡预标）<input id="cfg-judge" value="{_esc(cfg['judgeModel'])}" placeholder="deepseek-v4-flash"></label>
+  </div>
+  <button class="btn" onclick="doConfig('save')">保存</button>
+  <button class="btn ghost" onclick="doConfig('test')">测试连接</button>
+  <p id="cfgmsg" class="meta"></p>
+</div>
 <div class="panel"><h2>独立生成批次（题目注入）</h2><div class="cards" style="margin:0">{''.join(gen_cards) or '<p style="color:var(--muted)">在「生成」页用自定义题目注入后出现在这里。</p>'}</div></div>
 <script>
 async function doImport() {{
@@ -436,6 +651,29 @@ async function doImport() {{
   const data = await r.json();
   if (r.ok) {{ msg.innerHTML = '<span class="ok">已导入 ' + data.chapters + ' 章，正在跳转向导…</span>'; setTimeout(() => location.href = '/book/' + alias, 600); }}
   else msg.innerHTML = '<span class="err">' + (data.error || r.status) + '</span>';
+}}
+async function doConfig(op) {{
+  const body = {{
+    baseUrl: document.getElementById('cfg-base').value,
+    apiKey: document.getElementById('cfg-key').value,
+    model: document.getElementById('cfg-model').value,
+    judgeModel: document.getElementById('cfg-judge').value
+  }};
+  const msg = document.getElementById('cfgmsg');
+  msg.textContent = op === 'save' ? '保存中…' : '测试连接中…';
+  const r = await fetch(op === 'save' ? '/api/config' : '/api/config/test', {{
+    method: op === 'save' ? 'PUT' : 'POST',
+    headers: {{'Content-Type': 'application/json'}},
+    body: JSON.stringify(body)
+  }});
+  const data = await r.json().catch(() => ({{}}));
+  if (!r.ok) {{ msg.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>'; return; }}
+  if (op === 'save') {{
+    document.getElementById('cfg-key').value = '';
+    msg.innerHTML = '<span class="ok">已保存（即时生效）' + (data.hasKey ? ' · key ' + data.apiKey : '') + '</span>';
+  }} else {{
+    msg.innerHTML = '<span class="ok">✓ ' + data.model + ' · ' + data.latencyMs + 'ms · “' + (data.reply || '') + '”</span>';
+  }}
 }}
 </script>"""
 	return _page("prose-gate 工作台", body)
@@ -533,16 +771,15 @@ async function buildWindows() {{
 
 def gen_html(wb: Workbench, alias: str) -> str:
 	info = wb.book_info(alias)
-	units = []
-	if wb.units_path(alias).exists():
-		units = json.loads(wb.units_path(alias).read_text(encoding="utf-8"))["units"]
 	chapters = wb.chapters(alias)
-	unit_opts = "".join(
-		f"<option value='{int(u['chapterNo'])}'>第{int(u['chapterNo'])}章 {_esc(u['title'])}</option>"
-		for u in units
+	ai_count = len(read_jsonl(wb.ai_windows_path(alias))) if wb.ai_windows_path(alias).exists() else 0
+	legacy = sum(
+		1 for r in (read_jsonl(wb.ai_windows_path(alias)) if wb.ai_windows_path(alias).exists() else [])
+		if not r.get("pairWindowId")
 	)
-	ch_opts = "<option value=''>不对照（独立标注）</option>" + "".join(
-		f"<option value='{no}'>第{no}章 {_esc(title)}</option>" for no, title, _ in chapters
+	ch_rows = "".join(
+		f"<label><input type='checkbox' value='{no}' checked> 第{no}章 {_esc(title)}（{len(text.splitlines())} 行）</label>"
+		for no, title, text in chapters[:MAX_OUTLINE_CHAPTERS]
 	)
 	topic_rows = "".join(
 		f"<label class='f'>{k}<input id='t-{k}' placeholder='一句话'></label>"
@@ -550,56 +787,71 @@ def gen_html(wb: Workbench, alias: str) -> str:
 	)
 	body = f"""
 <div class="panel">
-  <p class="meta">{_esc(info['title'])} · 生成来源二选一 · 扩写只见大纲不见原文</p>
-  <label class="f">来源
-    <select id="source" onchange="toggleSource()">
-      <option value="outline">某章定稿大纲（仿写）</option>
-      <option value="topic">自定义题目（注入）</option>
-    </select></label>
-  <div id="src-outline"><label class="f">章（需先在向导定稿大纲）<select id="unit-ch">{unit_opts or '<option value="">（无定稿大纲）</option>'}</select></label></div>
-  <div id="src-topic" style="display:none"><label class='f'>标题<input id="t-title" placeholder="四字内（可选）"></label>{topic_rows}</div>
-  <label class="f">对照（配对 = 生成物与该章原文窗配对标；独立 = 单独标注，贴近生产门控）
-    <select id="contrast">{ch_opts}</select></label>
+  <div class="step">① 窗口级配对生成（PRD F1：每个原文窗单独「提炼概要 → 扩写」，1:1 内容对齐）</div>
+  <p class="meta">{_esc(info['title'])} · 现有 AI 窗 {ai_count} 个（旧章级 {legacy} 个）· 重跑所选章 = 整章替换（幂等）· 每窗 2 次 LLM 调用</p>
+  <div class="chlist">{ch_rows}</div>
+  <button class="btn ghost" onclick="toggleAll(true)">全选</button>
+  <button class="btn ghost" onclick="toggleAll(false)">全不选</button>
+  <label class="f">本书文风基准（提炼/扩写注入）<textarea id="style">{_esc(wb.style_anchor(alias))}</textarea></label>
   <label class="f">段落形式 <select id="form"><option value="">自动（ywjs=一句一段，其他=长段）</option><option value="sentence">一句一段</option><option value="paragraph">长段</option></select></label>
-  <label class="f">批次名（独立模式的标注域，缺省自动时间戳）<input id="genLabel" placeholder="如 wudao-topic-01"></label>
-  <label class="f">本书文风基准（扩写 prompt 注入）<textarea id="style">{_esc(wb.style_anchor(alias))}</textarea></label>
-  <button class="btn" onclick="doGen()">生成</button>
+  <button class="btn" onclick="doPairs()">生成窗口级配对</button>
+  <p id="pmsg" class="meta"></p>
+  <div id="presult"></div>
+</div>
+<div class="panel">
+  <div class="step">② 独立生成（题目注入 · 单栏标注，贴近生产门控）</div>
+  <label class='f'>标题<input id="t-title" placeholder="四字内（可选）"></label>{topic_rows}
+  <label class="f">批次名（标注域，缺省自动时间戳）<input id="genLabel" placeholder="如 wudao-topic-01"></label>
+  <button class="btn" onclick="doGen()">生成独立批次</button>
   <p id="gmsg" class="meta"></p>
   <div id="result"></div>
 </div>
 <script>
-function toggleSource() {{
-  const v = document.getElementById('source').value;
-  document.getElementById('src-outline').style.display = v === 'outline' ? '' : 'none';
-  document.getElementById('src-topic').style.display = v === 'topic' ? '' : 'none';
+function toggleAll(v) {{ document.querySelectorAll('.chlist input').forEach(c => c.checked = v); }}
+async function post(url, body) {{
+  const r = await fetch(url, {{method: 'POST', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify(body || {{}})}});
+  const data = await r.json().catch(() => ({{}}));
+  return {{ok: r.ok, data}};
+}}
+async function doPairs() {{
+  const chapters = Array.from(document.querySelectorAll('.chlist input:checked')).map(c => parseInt(c.value, 10));
+  if (!chapters.length) return;
+  const style = document.getElementById('style').value.trim();
+  if (style) await fetch('/api/books/{_esc(alias)}/style', {{method: 'PUT', headers: {{'Content-Type': 'text/plain'}}, body: style}});
+  const msg = document.getElementById('pmsg');
+  msg.textContent = '逐窗提炼概要并扩写中（每窗 2 次调用，一章约 30 次）…';
+  const {{ok, data}} = await post('/api/books/{_esc(alias)}/window-pairs', {{
+    chapters, form: document.getElementById('form').value || null
+  }});
+  if (!ok) {{ msg.innerHTML = '<span class="err">' + (data.error || '失败') + '</span>'; return; }}
+  msg.innerHTML = '<span class="ok">完成：' + data.windows + ' 窗 · 章 ' + data.chapters.join(',') + ' · 模型 ' + data.model + '</span>';
+  const box = document.getElementById('presult');
+  const cards = (data.preview || []).map(p =>
+    '<div class="unit"><b>' + p.windowId + '</b><div class="row"><span>概要</span><span>' +
+    Object.keys(p.elements).map(k => k + '：' + p.elements[k]).join('；') + '</span></div>' +
+    '<div class="row"><span>生成首段</span><span>' + p.firstLine + '</span></div></div>').join('');
+  box.innerHTML = '<a href="/sheet/{_esc(alias)}"><button class="btn">去两段式标注</button></a>' + cards;
 }}
 async function doGen() {{
-  const source = document.getElementById('source').value;
-  const contrast = document.getElementById('contrast').value;
   const body = {{
-    book: '{_esc(alias)}', source,
-    form: document.getElementById('form').value || null,
-    contrast: contrast ? parseInt(contrast, 10) : null,
+    book: '{_esc(alias)}', source: 'topic',
     genLabel: document.getElementById('genLabel').value.trim() || null,
-    styleAnchor: document.getElementById('style').value.trim() || null,
-  }};
-  if (source === 'outline') body.chapterNo = parseInt(document.getElementById('unit-ch').value, 10);
-  else body.topic = {{
-    title: document.getElementById('t-title').value,
-    elements: {{
-      '人物': document.getElementById('t-人物').value, '地点': document.getElementById('t-地点').value,
-      '事件': document.getElementById('t-事件').value, '转折': document.getElementById('t-转折').value,
-      '情绪': document.getElementById('t-情绪').value
+    topic: {{
+      title: document.getElementById('t-title').value,
+      elements: {{
+        '人物': document.getElementById('t-人物').value, '地点': document.getElementById('t-地点').value,
+        '事件': document.getElementById('t-事件').value, '转折': document.getElementById('t-转折').value,
+        '情绪': document.getElementById('t-情绪').value
+      }}
     }}
   }};
   const msg = document.getElementById('gmsg'); msg.textContent = 'LLM 生成中…';
-  const r = await fetch('/api/generate', {{method: 'POST', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify(body)}});
-  const data = await r.json().catch(() => ({{}}));
-  if (!r.ok) {{ msg.innerHTML = '<span class="err">' + (data.error || r.status) + '</span>'; return; }}
-  msg.innerHTML = '<span class="ok">完成：' + data.mode + ' · ' + data.lines + ' 行 · ' + data.windows + ' 窗 · 模型 ' + data.model + '</span>';
+  const {{ok, data}} = await post('/api/generate', body);
+  if (!ok) {{ msg.innerHTML = '<span class="err">' + (data.error || '失败') + '</span>'; return; }}
+  msg.innerHTML = '<span class="ok">完成：' + data.lines + ' 行 · ' + data.windows + ' 窗 · 模型 ' + data.model + '</span>';
   const box = document.getElementById('result');
   box.style.display = 'block';
-  box.innerHTML = '<a href="' + data.annotateUrl + '"><button class="btn">去标注</button></a>\\n\\n' + data.preview;
+  box.innerHTML = '<a href="' + data.annotateUrl + '"><button class="btn">去标注</button></a>' + data.preview;
 }}
 </script>"""
 	return _page(f"生成 · {info['title']}", body)
@@ -644,11 +896,20 @@ def make_handler(wb: Workbench):
 					self._html(200, gen_html(wb, alias))
 				elif path.startswith("/sheet/") and NAME_RE.match(alias := path[7:]):
 					if not (wb.windows_path(alias).exists() and wb.ai_windows_path(alias).exists()):
-						self._html(400, _page("缺少数据", "<div class='panel'>需要先建原文窗并生成配对 AI 窗。</div>"))
+						self._html(400, _page("缺少数据", "<div class='panel'>需要先建原文窗并生成窗口级配对 AI 窗。</div>"))
 						return
-					orig = load_windows_by_chapter(wb.windows_path(alias), source="book")
-					ai = load_windows_by_chapter(wb.ai_windows_path(alias), source="ai-expanded")
-					page, _ = generate_sheet_html(orig, ai, title=f"配对标注 · {alias}", mode="server", scope=alias)
+					orig_records = [
+						r for r in read_jsonl(wb.windows_path(alias)) if r.get("source") == "book"
+					]
+					pairs, legacy = build_pairs(orig_records, read_jsonl(wb.ai_windows_path(alias)))
+					page, _ = generate_sheet_html(
+						pairs,
+						outlines=wb.load_window_outlines(alias),
+						title=f"配对标注 · {alias}",
+						mode="server",
+						scope=alias,
+						legacy_count=legacy,
+					)
 					self._html(200, page)
 				elif path.startswith("/label/gen/") and NAME_RE.match(gen_id := path[11:]):
 					path_gen = wb.gen_windows_path(gen_id)
@@ -661,6 +922,10 @@ def make_handler(wb: Workbench):
 					self._html(200, page)
 				elif path.startswith("/api/labels/") and NAME_RE.match(scope := path[len("/api/labels/"):]):
 					self._json(200, wb.load_labels(scope))
+				elif path == "/api/config":
+					self._json(200, config_mod.masked(config_mod.load_config(wb.artifacts)))
+				elif path.startswith("/api/window-outlines/") and NAME_RE.match(alias := path[len("/api/window-outlines/"):]):
+					self._json(200, {"outlines": wb.load_window_outlines(alias)})
 				elif path == "/api/books":
 					self._json(200, {"books": wb.list_books(), "gens": wb.list_gens()})
 				else:
@@ -672,7 +937,10 @@ def make_handler(wb: Workbench):
 			parsed = urlparse(self.path)
 			path = parsed.path.rstrip("/")
 			try:
-				if path.startswith("/api/books/") and path.endswith("/units"):
+				if path == "/api/config":
+					merged = config_mod.save_config(wb.artifacts, json.loads(self._body().decode("utf-8")))
+					self._json(200, config_mod.masked(merged))
+				elif path.startswith("/api/books/") and path.endswith("/units"):
 					alias = path[len("/api/books/") : -len("/units")]
 					if not NAME_RE.match(alias):
 						raise ValueError("非法别名")
@@ -713,12 +981,24 @@ def make_handler(wb: Workbench):
 					if not NAME_RE.match(alias):
 						raise ValueError("非法别名")
 					self._json(200, {"windows": wb.build_windows(alias)})
+				elif path.startswith("/api/books/") and path.endswith("/window-pairs"):
+					alias = path[len("/api/books/") : -len("/window-pairs")]
+					if not NAME_RE.match(alias):
+						raise ValueError("非法别名")
+					payload = json.loads(self._body().decode("utf-8"))
+					chapters = [int(c) for c in payload.get("chapters", [])]
+					if not chapters:
+						raise ValueError("至少选一章")
+					self._json(200, wb.generate_window_pairs(alias, chapters, form=payload.get("form")))
 				elif path.startswith("/api/save/") and NAME_RE.match(scope := path[len("/api/save/"):]):
 					records = json.loads(self._body().decode("utf-8"))
 					if not isinstance(records, list):
 						raise ValueError("body 应为记录数组")
 					total = wb.save_labels(scope, records)
 					self._json(200, {"ok": True, "total": total})
+				elif path.startswith("/api/annotate/") and NAME_RE.match(scope := path[len("/api/annotate/"):]):
+					payload = json.loads(self._body().decode("utf-8"))
+					self._json(200, wb.preannotate(scope, str(payload.get("windowId", ""))))
 				elif path == "/api/generate":
 					payload = json.loads(self._body().decode("utf-8"))
 					book = payload.get("book", "")
@@ -737,6 +1017,22 @@ def make_handler(wb: Workbench):
 						wb.style_path(book).parent.mkdir(parents=True, exist_ok=True)
 						wb.style_path(book).write_text(payload["styleAnchor"], encoding="utf-8")
 					self._json(200, result)
+				elif path == "/api/config/test":
+					body = json.loads(self._body().decode("utf-8") or "{}")
+					saved = config_mod.load_config(wb.artifacts)
+					effective = {
+						**saved,
+						**{k: str(v).strip() for k, v in body.items() if str(v).strip()},
+					}
+					try:  # 注入式 llm（测试）优先，否则按 config/env 通道真实调用
+						self._json(
+							200,
+							config_mod.test_connection(
+								effective, call=wb.llm_call if wb.llm_call is not None else None
+							),
+						)
+					except Exception as exc:  # noqa: BLE001 —— 连接失败回显给面板
+						self._json(400, {"error": str(exc)})
 				else:
 					self._json(404, {"error": "not found"})
 			except Exception as exc:  # noqa: BLE001
@@ -750,7 +1046,7 @@ def make_server(
 	port: int = 8321,
 	artifacts_dir: Path = DEFAULT_ARTIFACTS,
 	fixtures_root: Path = DEFAULT_FIXTURES,
-	llm_call=call_openai_compat,
+	llm_call=None,
 ) -> ThreadingHTTPServer:
 	wb = Workbench(artifacts_dir=artifacts_dir, fixtures_root=fixtures_root, llm_call=llm_call)
 	return ThreadingHTTPServer((host, port), make_handler(wb))

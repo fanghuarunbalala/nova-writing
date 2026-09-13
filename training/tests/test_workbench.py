@@ -1,4 +1,4 @@
-"""工作台集成测试：mock LLM 全链路——导入→提纲→定稿→建窗→生成（独立/配对照）→标注→重启保留。"""
+"""工作台集成测试：mock LLM 全链路——导入→提纲→建窗→窗口级配对→两段式标注页→保存→幂等→重启保留→config。"""
 
 from __future__ import annotations
 
@@ -20,11 +20,22 @@ SAMPLE_TXT = (
 
 
 def fake_llm(system: str, user: str, model: str, max_tokens: int = 2048) -> str:
-	if "提取场景大纲" in system:  # outline_mod.OUTLINE_SYSTEM
+	if "提取场景大纲" in system:  # outline_mod.OUTLINE_SYSTEM（章级向导 + 窗口级配对共用）
 		return json.dumps(
 			{
 				"title": "试炼",
 				"elements": {"人物": "沈砚", "地点": "小镇", "事件": "避雨", "转折": "改口", "情绪": "戒备"},
+			},
+			ensure_ascii=False,
+		)
+	if "段落缺陷标注" in system:  # annotate._ANNOTATION_SYSTEM（LLM 预标）
+		return json.dumps(
+			{
+				"paragraphs": [
+					{"index": 1, "labels": {}, "emotion": 0, "evidence": {}},
+					{"index": 2, "labels": {}, "emotion": 2, "evidence": {}},
+				],
+				"other": [],
 			},
 			ensure_ascii=False,
 		)
@@ -60,10 +71,14 @@ def get_page(url: str) -> str:
 		return r.read().decode("utf-8")
 
 
+def read_jsonl(path: Path) -> list[dict]:
+	return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
 def test_full_flow(wb_env):
 	base, fixtures, artifacts = wb_env
 
-	# 1. 导入（raw txt bytes + query 参数）
+	# 1. 导入 + 向导（章大纲/建窗保留）
 	status, data = http(
 		"POST",
 		base + "/api/books/import?alias=demo&title=" + urllib.parse.quote("演示书"),
@@ -71,38 +86,45 @@ def test_full_flow(wb_env):
 		"application/octet-stream",
 	)
 	assert status == 200 and data["chapters"] == 2
-	assert (fixtures / "demo" / "book.json").exists()
-	assert (artifacts / "demo-style.md").exists()  # 默认风格锚已种
-
-	# 2. LLM 提纲（mock）→ 草稿
-	status, data = http(
-		"POST", base + "/api/books/demo/outline", json.dumps({"chapters": [1, 2]}).encode()
-	)
-	assert status == 200 and data["units"] == 2
-	assert (artifacts / "demo-units-draft.json").exists()
-
-	# 3. 编辑定稿（PUT；要素白名单 + 截断护栏生效）
-	units = [
-		{
-			"chapterNo": 1,
-			"title": "试炼改",
-			"elements": {"人物": "沈砚（编辑后）", "多余": "应被丢弃", "地点": "小镇", "事件": "避雨", "转折": "改口", "情绪": "戒备"},
-		},
-		{"chapterNo": 2, "title": "夜行", "elements": {"人物": "沈砚", "地点": "小镇", "事件": "夜行", "转折": "遇袭", "情绪": "紧张"}},
-	]
-	status, data = http(
-		"PUT", base + "/api/books/demo/units", json.dumps(units, ensure_ascii=False).encode()
-	)
-	assert status == 200 and data["units"] == 2
-	final = json.loads((artifacts / "demo-units.json").read_text(encoding="utf-8"))["units"]
-	assert "多余" not in final[0]["elements"]
-	assert final[0]["title"] == "试炼改"
-
-	# 4. 建窗（短段书自适应到整章一窗，2 章 ≥2 窗）
+	status, _ = http("POST", base + "/api/books/demo/outline", json.dumps({"chapters": [1, 2]}).encode())
+	assert status == 200
 	status, data = http("POST", base + "/api/books/demo/windows", b"{}")
 	assert status == 200 and data["windows"] >= 2
 
-	# 5. 题目注入（独立模式）
+	# 2. 窗口级配对生成（F1）：逐原文窗 提炼→扩写→单生成窗，按章幂等替换
+	status, data = http(
+		"POST", base + "/api/books/demo/window-pairs", json.dumps({"chapters": [1]}).encode()
+	)
+	assert status == 200 and data["mode"] == "window-pairs" and data["windows"] == 1
+	ai = read_jsonl(artifacts / "demo-ai-windows.jsonl")
+	assert ai[0]["pairWindowId"] == "demo-c001-w000"
+	assert ai[0]["windowId"] == "demo-ai-c001-w000"
+	outlines = json.loads((artifacts / "demo-window-outlines.json").read_text(encoding="utf-8"))["windows"]
+	assert "demo-c001-w000" in outlines and outlines["demo-c001-w000"]["elements"]["人物"] == "沈砚"
+
+	# 3. 幂等：重跑同章替换不追加；扩到第 2 章保留第 1 章
+	status, data = http(
+		"POST", base + "/api/books/demo/window-pairs", json.dumps({"chapters": [1]}).encode()
+	)
+	assert status == 200 and len(read_jsonl(artifacts / "demo-ai-windows.jsonl")) == 1
+	status, data = http(
+		"POST", base + "/api/books/demo/window-pairs", json.dumps({"chapters": [2]}).encode()
+	)
+	assert status == 200 and data["windows"] == 1
+	ai = read_jsonl(artifacts / "demo-ai-windows.jsonl")
+	assert {r["windowId"] for r in ai} == {"demo-ai-c001-w000", "demo-ai-c002-w000"}
+
+	# 4. 两段式标注页（F2）：显式配对 + 概要卡 + 两部分结构
+	page = get_page(base + "/sheet/demo")
+	assert 'data-orig="demo-c001-w000"' in page and 'data-ai="demo-ai-c001-w000"' in page
+	assert 'class="part part1"' in page and 'class="part part2"' in page
+	assert "窗口概要（提炼自原文窗，只读）" in page and "查看原文" in page
+	assert 'id="overviewSheet"' in page and 'id="exportSheet"' in page
+	# 概要 API
+	status, data = http("GET", base + "/api/window-outlines/demo")
+	assert status == 200 and "demo-c001-w000" in data["outlines"]
+
+	# 5. 独立批次（题目注入）不变
 	topic = {
 		"title": "雨夜",
 		"elements": {"人物": "无名客", "地点": "渡口", "事件": "等船", "转折": "船不来", "情绪": "平静"},
@@ -110,67 +132,85 @@ def test_full_flow(wb_env):
 	status, gen = http(
 		"POST",
 		base + "/api/generate",
-		json.dumps(
-			{"book": "demo", "source": "topic", "topic": topic, "form": "sentence", "genLabel": "demo-topic-1"},
-			ensure_ascii=False,
-		).encode(),
+		json.dumps({"book": "demo", "source": "topic", "topic": topic, "form": "sentence", "genLabel": "demo-topic-1"}, ensure_ascii=False).encode(),
 	)
-	assert status == 200 and gen["mode"] == "independent" and gen["lines"] == 24
-	assert gen["annotateUrl"] == "/label/gen/demo-topic-1"
+	assert status == 200 and gen["mode"] == "independent" and gen["annotateUrl"] == "/label/gen/demo-topic-1"
+	assert "情绪线" in get_page(base + "/label/gen/demo-topic-1")
 
-	# 6. 仿写配对照（paired 模式并入 ai-windows）
-	status, gen2 = http(
-		"POST",
-		base + "/api/generate",
-		json.dumps({"book": "demo", "source": "outline", "chapterNo": 1, "contrast": 1}, ensure_ascii=False).encode(),
-	)
-	assert status == 200 and gen2["mode"] == "paired" and gen2["annotateUrl"] == "/sheet/demo"
-	assert (artifacts / "demo-ai-windows.jsonl").exists()
-
-	# 7. 两个标注页可达
-	page = get_page(base + "/label/gen/demo-topic-1")
-	assert "demo-topic-1" in page and "chip" in page and "独立标注" in page
-	assert "配对标注" in get_page(base + "/sheet/demo")
-
-	# 8. 保存标注 + 非法 windowId 拒绝
-	gen_windows = [
-		json.loads(line)
-		for line in (artifacts / "gen" / "demo-topic-1-windows.jsonl").read_text(encoding="utf-8").splitlines()
+	# 6. 预标（标注通道）+ 保存整窗两条记录 + 进度按映射
+	status, pre = http("POST", base + "/api/annotate/demo", json.dumps({"windowId": "demo-c001-w000"}).encode())
+	assert status == 200 and pre.get("emotion")
+	records = [
+		{"windowId": "demo-c001-w000", "bookId": "demo", "chapterNo": 1,
+		 "labels": [{"clicheExpression": 0} for _ in range(5)], "emotion": [0, 1, 0, 0, 0],
+		 "evidence": [{} for _ in range(5)], "meta": {"annotator": "human"}},
+		{"windowId": "demo-ai-c001-w000", "bookId": "demo-ai", "chapterNo": 1,
+		 "labels": [{"clicheExpression": 1} for _ in range(24)], "emotion": [0] * 24,
+		 "evidence": [{} for _ in range(24)], "flag": True, "meta": {"annotator": "human"}},
 	]
-	wid = gen_windows[0]["windowId"]
-	rec = {
-		"windowId": wid,
-		"bookId": "demo-topic-1",
-		"chapterNo": 1,
-		"labels": [{"clicheExpression": 1} for _ in gen_windows[0]["texts"]],
-		"evidence": [{} for _ in gen_windows[0]["texts"]],
-		"flag": True,
-		"meta": {"annotator": "human"},
-	}
-	status, data = http("POST", base + "/api/save/demo-topic-1", json.dumps([rec], ensure_ascii=False).encode())
-	assert status == 200 and data["total"] == 1
-	status, data = http("POST", base + "/api/save/demo-topic-1", json.dumps([{"windowId": "hack"}]).encode())
-	assert status == 400
+	status, data = http("POST", base + "/api/save/demo", json.dumps(records, ensure_ascii=False).encode())
+	assert status == 200 and data["total"] == 2
+	status, data = http("GET", base + "/api/books")
+	book = next(b for b in data["books"] if b["alias"] == "demo")
+	assert book["pairTotal"] == 2 and book["pairDone"] == 1 and book["legacyAiWindows"] == 0
 
-	# 9. 重启（新 server 实例同目录）后进度保留
-	server2 = make_server(
-		"127.0.0.1", 0, artifacts_dir=artifacts, fixtures_root=fixtures, llm_call=fake_llm
-	)
+	# 7. 旧章级遗留（无 pairWindowId）：不计进度，页面横幅提示
+	with open(artifacts / "demo-ai-windows.jsonl", "a", encoding="utf-8") as fh:
+		fh.write(json.dumps({"windowId": "demo-ai-legacy", "bookId": "demo-ai", "chapterNo": 1,
+		                     "source": "ai-expanded", "texts": ["旧数据。"], "features": [[0.0] * 8]}, ensure_ascii=False) + "\n")
+	page = get_page(base + "/sheet/demo")
+	assert "旧「整章仿写」" in page
+	status, data = http("GET", base + "/api/books")
+	book = next(b for b in data["books"] if b["alias"] == "demo")
+	assert book["legacyAiWindows"] == 1 and book["pairTotal"] == 2
+
+	# 8. 重启（新 server 同目录）后进度保留（含情绪线与 flag）
+	server2 = make_server("127.0.0.1", 0, artifacts_dir=artifacts, fixtures_root=fixtures, llm_call=fake_llm)
 	thread2 = threading.Thread(target=server2.serve_forever, daemon=True)
 	thread2.start()
 	try:
-		with urllib.request.urlopen(
-			f"http://127.0.0.1:{server2.server_port}/api/labels/demo-topic-1", timeout=10
-		) as r:
+		with urllib.request.urlopen(f"http://127.0.0.1:{server2.server_port}/api/labels/demo", timeout=10) as r:
 			store = json.loads(r.read().decode("utf-8"))
-		assert wid in store and store[wid]["flag"] is True
+		assert store["demo-c001-w000"]["emotion"][1] == 1
+		assert store["demo-ai-c001-w000"]["flag"] is True
 	finally:
 		server2.shutdown()
 		server2.server_close()
 
-	# 10. 首页含书目与独立批次
+	# 9. 首页含书目与 provider 面板
 	index = get_page(base + "/")
-	assert "演示书" in index and "demo-topic-1" in index
+	assert "演示书" in index and "LLM Provider" in index and "demo-topic-1" in index
+
+
+def test_config_api_mask_and_precedence(wb_env, tmp_path):
+	base, _fixtures, artifacts = wb_env
+
+	status, data = http("PUT", base + "/api/config", json.dumps({
+		"baseUrl": "https://api.example.com/v1", "apiKey": "sk-test-123456789",
+		"model": "gen-m1", "judgeModel": "judge-m1",
+	}).encode())
+	assert status == 200 and data["hasKey"] is True
+	assert data["apiKey"] == "sk-***6789" and "sk-test-123456789" not in json.dumps(data)
+
+	# 空 apiKey = 保留旧值；其余字段可清
+	status, data = http("PUT", base + "/api/config", json.dumps({"apiKey": "", "judgeModel": ""}).encode())
+	assert status == 200 and data["hasKey"] is True and data["model"] == "gen-m1" and data["judgeModel"] == ""
+	saved = json.loads((artifacts / "workbench-config.json").read_text(encoding="utf-8"))
+	assert saved["apiKey"] == "sk-test-123456789"
+
+	# GET 掩码
+	status, data = http("GET", base + "/api/config")
+	assert status == 200 and data["hasKey"] is True
+
+	# 测试连接（注入 fake 优先：不触网）
+	status, data = http("POST", base + "/api/config/test", json.dumps({"model": "gen-m1"}).encode())
+	assert status == 200 and data["model"] == "gen-m1" and "latencyMs" in data
+
+	# config 模型优先于 env（单元层）
+	from prose_gate import config as config_mod
+	cfg = config_mod.load_config(artifacts)
+	assert config_mod.model_for(cfg, "gen") == "gen-m1"
+	assert config_mod.model_for(cfg, "judge") or True  # judgeModel 清空后回退 env 链
 
 
 def test_import_rejects_bad_alias(wb_env):

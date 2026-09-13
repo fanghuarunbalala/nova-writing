@@ -137,6 +137,28 @@ export function highlightsFilePath(libraryRoot: string, bookId: string): string 
 }
 
 /**
+ * 风格示例库文档路径（<bookDir>/analysis/stylelib.json——PRD 检索式形态示例 F1；
+ * 段条目 + 建库统计，与 stylelib.emb 同次重建一起写、行序一致）
+ * @param libraryRoot 书库根
+ * @param bookId 书 id
+ * @returns stylelib 文档路径
+ */
+export function stylelibFilePath(libraryRoot: string, bookId: string): string {
+	return join(bookDir(libraryRoot, bookId), "analysis", "stylelib.json");
+}
+
+/**
+ * 风格示例库嵌入文件路径（<bookDir>/analysis/stylelib.emb——Float32 二进制，
+ * N × 512 行序同 stylelib.json paragraphs）
+ * @param libraryRoot 书库根
+ * @param bookId 书 id
+ * @returns stylelib 嵌入文件路径
+ */
+export function stylelibEmbPath(libraryRoot: string, bookId: string): string {
+	return join(bookDir(libraryRoot, bookId), "analysis", "stylelib.emb");
+}
+
+/**
  * 生成分段 id（`<bookId>-p<6位序>`；全库唯一、可排序、可作文件名）
  * @param bookId 书 id
  * @param seq 全书分段序（1 起）

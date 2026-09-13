@@ -10,7 +10,7 @@ import type { AgentDefinition } from "./AgentDefinition.js";
 import { MapToolDispatcher } from "../tool/MapToolDispatcher.js";
 import type { ToolDef } from "../tool/ToolDef.js";
 import type { ProjectFiles } from "../tool/definitions/files.js";
-import type { NovelConstraintsProvider, CaseGuideProvider } from "../prompt/PromptSection.js";
+import type { NovelConstraintsProvider, CaseGuideProvider, StylelibProvider } from "../prompt/PromptSection.js";
 import type { ContextNudgePolicy } from "../nudge/ContextNudgePolicy.js";
 import { AutoCompactPolicy } from "../compact/definitions/auto-compact.js";
 import { AgentLoop } from "../loop/AgentLoop.js";
@@ -54,6 +54,7 @@ import type {
 } from "../../conversation/contract/types/index.js";
 import type { AskUserChannel } from "../tool/definitions/askUser.js";
 import type { LibraryReadDeps } from "../tool/definitions/library.js";
+import type { WritingFocusRecorder } from "./stylelib/WritingFocusStore.js";
 import type { SkillRegistry } from "../skill/SkillRegistry.js";
 
 /** Novel Agent 装配选项 */
@@ -106,6 +107,16 @@ export interface NovelAgentOptions {
    * 小节的条目来源（main 与 Compose 同源）；缺省仅省略小节。
    */
   caseGuideProvider?: CaseGuideProvider;
+  /**
+   * 风格示例注入提供者（node 层按写作焦点检索书库示例库，焦点指纹缓存）：
+   * novel.stylelib 动态段数据源；缺省段省略（默认关，零残留）。
+   */
+  stylelibProvider?: StylelibProvider;
+  /**
+   * 写作焦点记录面（NovelWrite/NovelEdit 工具成功执行后记录当前 story_unit；
+   * stylelibProvider 的检索输入。缺省不记录——工具零额外开销）。
+   */
+  writingFocus?: WritingFocusRecorder;
   /** compose 模式状态提供者（compose_mode nudge 装配；缺省不注入该 nudge） */
   composeState?: ComposeModeStateProvider;
   /** compose 工具服务（novel.compose 组 Enter/ExitComposeMode；缺省用 composeState 自建兜底） */
@@ -222,6 +233,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
       ...(opts.skills !== undefined ? { skills: opts.skills } : {}),
       ...(opts.library !== undefined ? { library: opts.library } : {}),
       ...(opts.importText !== undefined ? { importText: opts.importText } : {}),
+      ...(opts.writingFocus !== undefined ? { writingFocus: opts.writingFocus } : {}),
       // runtime.external 组：延迟池 + 会话 id + 审批通道（ExecuteExtraTool 内嵌审批用）
       external: {
         registry: externalRegistry,
@@ -300,6 +312,7 @@ export function buildNovelAgent(opts: NovelAgentOptions): AgentLoop {
     platform: opts.platform,
     novelConstraintsProvider: opts.novelConstraintsProvider,
     caseGuideProvider: opts.caseGuideProvider,
+    stylelibProvider: opts.stylelibProvider,
     skillsIndex,
     composeState,
     beforeProviderCall: opts.beforeProviderCall,

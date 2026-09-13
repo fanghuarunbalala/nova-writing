@@ -46,6 +46,13 @@ import {
 import { LlmIntentClassifier } from "../../runtime/agent/composeGuide/LlmIntentClassifier.js";
 import { selectGuideCases } from "../../runtime/agent/composeGuide/selectGuideCases.js";
 import { wrapNovelGuideMessage } from "../../runtime/agent/composeGuide/novelGuideMessage.js";
+import { WritingFocusStore } from "../../runtime/agent/stylelib/WritingFocusStore.js";
+import {
+	combineSeedMessages,
+	createStylelibProvider,
+	createStylelibSeed,
+} from "../../runtime/agent/stylelib/stylelibProvider.js";
+import { createStylelibSearchTool } from "../../runtime/agent/stylelib/stylelibSearchTool.js";
 import {
   ComposeModeService,
   ComposeModeStateProvider,
@@ -151,6 +158,11 @@ const ANALYST_THINKING_ENV = "NOVEL_ANALYST_THINKING" as const;
 /** Compose 案例意图分类开关（默认关——PRD compose-案例引导：索引+自读为主通道，
  *  分类与 <novel-guide> msg 注入待作者验证后经此 env 显式开启） */
 const COMPOSE_GUIDE_CLASSIFY_ENV = "NOVEL_COMPOSE_GUIDE_CLASSIFY" as const;
+
+/** 风格示例注入开关（默认关——PRD 检索式形态示例：写作焦点检索书库强风格段注入
+ *  main 动态段 + Compose seed；需书库已建示例库 + NOVEL_LIBRARY_ROOT 注入。关闭时
+ *  provider/seed 均不接线，零检索、零模型加载） */
+const STYLELIB_INJECT_ENV = "NOVEL_STYLELIB_INJECT" as const;
 
 /** Agent 运行参数 env（RuntimeSettings 解析产物 JSON；main 侧序列化，spawn 时继承。
  *  新对话生效：配置变更后 main 重写 env，已启动进程维持启动时快照） */
@@ -606,6 +618,19 @@ await skillRegistry.load();
 	// 扫描进度草稿不覆盖 main 的执行计划；两者同为进程内内存级）
 	const todoStore = new InMemoryConversationTodoStore();
 
+	// 风格示例注入（PRD 检索式形态示例，默认关）：开启条件 = env 开 + 非后台会话 +
+	// NOVEL_LIBRARY_ROOT 注入（main 已把书库根写进 env，子进程继承）。焦点由
+	// NovelWrite/NovelEdit 工具记录；检索零 LLM、嵌入本地 ONNX 懒加载（provider
+	// 闭包内建，Compose seed 共享同一懒建单例）。deps 此处不含 logger——创建点在
+	// logger 初始化之后（buildNovelAgent / Compose builder 内闭包引用）。
+	const stylelibInjectEnabled =
+		/^(1|true)$/i.test(process.env[STYLELIB_INJECT_ENV] ?? "") &&
+		!isAnalyst &&
+		!isImporter &&
+		(process.env.NOVEL_LIBRARY_ROOT ?? "").trim() !== "";
+	const stylelibLibraryRoot = (process.env.NOVEL_LIBRARY_ROOT ?? "").trim();
+	const writingFocus = new WritingFocusStore();
+
 	// provider-call 调试（NOVEL_DEBUG，gui:debug 经 ProcessSpawner env 透传注入）：
 	// jsonl + html 落盘到 storedir/debug/<agentId>/（无 storedir 的独立脚本/dev 回退
 	// cwd 相对 debug/<conversationId>/<agentId>/）；html 增量写入，会话进行中即可打开查看
@@ -687,6 +712,32 @@ await skillRegistry.load();
 						: undefined;
 					const ensureSeeded = () => ensureAgentCasesSeeded();
 					let guideOnce: Promise<LLMessage[] | undefined> | undefined;
+					// 案例 seed（进程级 memo：首 Compose 任务分类一次）
+					const guideSeed = (input: string): Promise<LLMessage[] | undefined> =>
+						(guideOnce ??= (async () => {
+							if (classifier === undefined) return undefined;
+							await ensureSeeded();
+							const entries = await scanAgentCases(workspace, logger);
+							if (entries === undefined || entries.length === 0) return undefined;
+							const tags = await classifier.classify(input, entries);
+							const selected = selectGuideCases(entries, tags);
+							const items: { entry: (typeof selected)[number]; content: string }[] = [];
+							for (const entry of selected) {
+								const content = await readAgentCaseContent(workspace, entry.file);
+								if (content !== undefined) items.push({ entry, content });
+							}
+							const message = wrapNovelGuideMessage(items);
+							return message !== undefined ? [message] : undefined;
+						})());
+					// 风格示例 seed（PRD 检索式形态示例）：委派 prompt 前缀检索书库强风格段，
+					// <novel-style-guide> 消息每任务一次（seed 检索零 LLM）；与案例 seed 合成注入
+					const stylelibSeed = stylelibInjectEnabled
+						? createStylelibSeed({
+								libraryRoot: stylelibLibraryRoot,
+								workspace,
+								logger,
+							})
+						: undefined;
 					return buildNovelComposeAgent({
 						workspace,
 						provider: createProvider(
@@ -699,22 +750,10 @@ await skillRegistry.load();
 						agentId,
 						debugger: createCallDebugger?.(agentId),
 						caseGuideProvider: caseGuideSnapshotProvider,
-						composeGuideSeed: (input) =>
-							(guideOnce ??= (async () => {
-								if (classifier === undefined) return undefined;
-								await ensureSeeded();
-								const entries = await scanAgentCases(workspace, logger);
-								if (entries === undefined || entries.length === 0) return undefined;
-								const tags = await classifier.classify(input, entries);
-								const selected = selectGuideCases(entries, tags);
-								const items: { entry: (typeof selected)[number]; content: string }[] = [];
-								for (const entry of selected) {
-									const content = await readAgentCaseContent(workspace, entry.file);
-									if (content !== undefined) items.push({ entry, content });
-								}
-								const message = wrapNovelGuideMessage(items);
-								return message !== undefined ? [message] : undefined;
-							})()),
+						composeGuideSeed:
+							stylelibSeed === undefined
+								? guideSeed
+								: combineSeedMessages([guideSeed, stylelibSeed]),
 					});
 				},
 				},
@@ -808,6 +847,17 @@ await skillRegistry.load();
 
 	// agentType 分发：BookAnalyst = 书库完本解构后台装配（书库根沙盒 + 该书 book.db
 	// 读写 + bypass + journal 恢复；无 compose/ask/subagent）；否则 novel 主 Agent。
+	// 风格示例注入 provider（main 动态段 novel.stylelib 数据源）：开启时按写作焦点
+	// 检索书库示例库（焦点指纹缓存）；未开启不接线（零检索、零模型加载）
+	const stylelibProvider = stylelibInjectEnabled
+		? createStylelibProvider({
+				libraryRoot: stylelibLibraryRoot,
+				workspace,
+				focus: writingFocus,
+				handle: novelHandle,
+				logger,
+			})
+		: undefined;
 	const loop = isAnalyst
 		? buildBookAnalystAgent({
 				libraryRoot: workspace,
@@ -875,6 +925,9 @@ await skillRegistry.load();
 			},
 			// 规范段「参考案例」小节的条目来源（seed + mtime 缓存扫描）
 			caseGuideProvider: caseGuideSnapshotProvider,
+			// 风格示例注入（novel.stylelib 动态段）+ 写作焦点记录（工具 → provider 检索输入）
+			...(stylelibProvider !== undefined ? { stylelibProvider } : {}),
+			...(stylelibProvider !== undefined ? { writingFocus } : {}),
 		// compose 状态（nudge/权限门共享）+ 工具服务（novel.compose 组）+ 每次 provider
 		// call 发起时晋升 pendingMode（mode.set 记录后由本钩子生效，PRD F1 双态）
 		composeState,
@@ -883,8 +936,25 @@ await skillRegistry.load();
 			todoStore: new InMemoryConversationTodoStore(),
 			// 技能注册表（runtime.skills 组；空目录=无技能，工具正确回「不存在」）
 			skills: { registry: skillRegistry },
-			// MCP 包装工具（组外追加；连接失败的服务器自然缺席；ProjectImporter 后台受限工具面不挂）
-			...(mcpConnected.tools.length > 0 && !isImporter ? { extraTools: mcpConnected.tools } : {}),
+			// MCP 包装工具 + StylelibSearch（组外追加；连接失败的 MCP 服务器自然缺席；
+			// stylelib 开启时并入延迟池——agent 经 SearchExtraTools/ExecuteExtraTool
+			// 两步主动检索风格示例，与自动注入同一开关；ProjectImporter 后台不挂）
+			...(mcpConnected.tools.length + (stylelibInjectEnabled ? 1 : 0) > 0 && !isImporter
+				? {
+						extraTools: [
+							...mcpConnected.tools,
+							...(stylelibInjectEnabled
+								? [
+										createStylelibSearchTool({
+											libraryRoot: stylelibLibraryRoot,
+											workspace,
+											logger,
+										}),
+									]
+								: []),
+						],
+					}
+				: {}),
 		});
 	// ProjectImporter 里程碑日志（下次「报到超时被 kill」时定位卡点：装配完成→注册→自驱动）
 	if (isImporter) {

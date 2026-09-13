@@ -1,10 +1,11 @@
-"""LLM 标注器：窗口 → 逐段×8 标签 0/1 + 证据摘抄（PRD F3，标注 prompt v1）。
+"""LLM 标注器：窗口 → 逐段×7 缺陷标签 0/1 + 情绪线 0-3 + 证据摘抄（PRD F3，标注 prompt v2）。
 
 调用约定与 evals/src/judge.ts 同源（OpenAI 兼容 /chat/completions）：
 - key：NOVEL_EVAL_API_KEY ?? NOVEL_PROVIDER_API_KEY ?? ANTHROPIC_AUTH_TOKEN
 - base：NOVEL_EVAL_BASE_URL ?? https://api.deepseek.com/v1
 - 模型：--model ?? NOVEL_EVAL_JUDGE_MODEL ?? NOVEL_EVAL_MODEL ?? deepseek-v4-flash
 硬校验：label=1 必须附 evidence 且为该段原文子串，否则该判分作废记入 errors。
+情绪线是强度评级不是缺陷，免证据；平直/转折由 labels.py 规则派生，不在此判定。
 本模块只负责标注；试标/扩量由 CLI 批量跑 windows.jsonl → labels.jsonl。
 """
 
@@ -21,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
-from .labels import LABEL_KEYS, PROSE_GATE_LABELS
+from .labels import EMOTION_LEVELS, LABELS_VERSION, LABEL_KEYS, PROSE_GATE_LABELS, clamp_emotion
 from .windowing import Window
 
 STYLE_ANCHOR = (
@@ -33,31 +34,38 @@ _ANNOTATION_SYSTEM = "你是资深中文网文编辑，为「文风质量判官�
 
 
 def build_annotation_prompt(window: Window, style_anchor: str = STYLE_ANCHOR) -> str:
-	"""标注 prompt v1：风格锚定 + 8 标签累加标准/边界 + 其他字段 + 输出契约。由 labels.py 生成。"""
+	"""标注 prompt v2：风格锚定 + 7 缺陷标签 + 情绪线（0-3 绝对强度）+ 输出契约。由 labels.py 生成。"""
 	labels_block = "\n".join(
 		f"{i} {d.key} {d.label}：{d.rubric} 边界：{d.boundary}"
 		for i, d in enumerate(PROSE_GATE_LABELS, start=1)
+	)
+	emotion_block = "\n".join(
+		f"{lv.value} {lv.name}：{lv.anchor}" for lv in EMOTION_LEVELS
 	)
 	window_block = "\n".join(
 		f"[{i}] {u.text}" for i, u in enumerate(window.units, start=1)
 	)
 	labels_json = json.dumps({k: 0 for k in LABEL_KEYS}, ensure_ascii=False)
-	return f"""{_ANNOTATION_SYSTEM.split("。")[0]}。下面是一个窗口：同一章内连续 {len(window.units)} 段（本书为一段一句范式），每段带编号。请逐段、逐缺陷类别独立判定 0/1 并给证据。
+	return f"""{_ANNOTATION_SYSTEM.split("。")[0]}。下面是一个窗口：同一章内连续 {len(window.units)} 段（本书为一段一句范式），每段带编号。请逐段做两件事：判 {len(PROSE_GATE_LABELS)} 类缺陷 0/1 并给证据；标情绪线强度。
 
 【本书文风基准——符合以下特征的写法是好文风，绝不可判为缺陷】
 {style_anchor}
 
-【八类缺陷】
+【缺陷标签（{len(PROSE_GATE_LABELS)} 类）】
 {labels_block}
 
-【其他】八类之外发现明显缺陷，写入 other 数组自由描述（仅用于扩充清单，不参与判分）。
+【情绪线】每段标一个 0-3 的情绪强度（绝对强度，只描述纸上实际多强，不评价应该多强）：
+{emotion_block}
+
+【其他】上列之外发现明显缺陷，写入 other 数组自由描述（仅用于扩充清单，不参与判分）。
 
 【硬性规则】
-- 判 1 必须填 evidence：逐字摘抄该段原文子串（程序校验，对不上该判分作废）
+- 缺陷判 1 必须填 evidence：逐字摘抄该段原文子串（程序校验，对不上该判分作废）
+- 情绪线是强度评级免证据；每段必填（含 0）
 - 不确定一律判 0；只输出 JSON，无其他文字
 
 【输出格式】
-{{"paragraphs":[{{"index":1,"labels":{labels_json},"evidence":{{}}}}],"other":[]}}
+{{"paragraphs":[{{"index":1,"labels":{labels_json},"emotion":0,"evidence":{{}}}}],"other":[]}}
 （evidence 仅对应 label=1 的项填写，如 {{"clicheExpression":"原文摘抄"}}）
 
 【窗口文本】
@@ -72,9 +80,11 @@ class LLMCaller(Protocol):
 
 @dataclass
 class AnnotationResult:
-	"""标注结果：labels 为逐段 {key: 0/1}；证据校验失败的判分已归零并记 errors。"""
+	"""标注结果：labels 为逐段 {key: 0/1}、emotion 为逐段 0-3 强度；
+	证据校验失败的判分已归零并记 errors。"""
 
 	labels: list[dict[str, int]]
+	emotion: list[int] = field(default_factory=list)
 	evidence: list[dict[str, str]] = field(default_factory=list)
 	others: list[str] = field(default_factory=list)
 	errors: list[str] = field(default_factory=list)
@@ -85,13 +95,14 @@ class AnnotationResult:
 			"bookId": window.book_id,
 			"chapterNo": window.chapter_no,
 			"labels": self.labels,
+			"emotion": self.emotion or [0] * len(window.units),
 			"evidence": self.evidence,
 			"other": self.others,
 			"errors": self.errors,
 			"meta": {
 				"annotator": "llm",
 				"judgeModel": model,
-				"labelsVersion": "v1",
+				"labelsVersion": LABELS_VERSION,
 				"promptSha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
 				"annotatedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
 			},
@@ -99,9 +110,10 @@ class AnnotationResult:
 
 
 def parse_annotation_reply(reply: str, window: Window) -> AnnotationResult:
-	"""解析标注 JSON 并做证据子串硬校验：label=1 的 evidence 必须是该段原文子串。"""
+	"""解析标注 JSON 并做证据子串硬校验：label=1 的 evidence 必须是该段原文子串。
+	情绪线逐段 clamp 到 0-3（非法记 0，不视为错误——评级不是判分）。"""
 	n = len(window.units)
-	result = AnnotationResult(labels=[], evidence=[])
+	result = AnnotationResult(labels=[], emotion=[0] * n, evidence=[])
 	for _ in range(n):
 		result.labels.append({k: 0 for k in LABEL_KEYS})
 		result.evidence.append({})
@@ -126,6 +138,7 @@ def parse_annotation_reply(reply: str, window: Window) -> AnnotationResult:
 			result.errors.append(f"index 越界：{idx + 1}")
 			continue
 		unit_text = window.units[idx].text
+		result.emotion[idx] = clamp_emotion(item.get("emotion", 0))
 		labels_in = item.get("labels", {})
 		evidence_in = item.get("evidence", {}) or {}
 		for key in LABEL_KEYS:
@@ -168,8 +181,16 @@ def resolve_model(model: str | None = None) -> str:
 	)
 
 
-def call_openai_compat(system: str, user: str, model: str, max_tokens: int = 2048) -> str:
-	"""OpenAI 兼容 /chat/completions 调用（stdlib urllib，temperature 0，重试 1 次）。"""
+def call_openai_compat(
+	system: str,
+	user: str,
+	model: str,
+	max_tokens: int = 2048,
+	base_url: str | None = None,
+	api_key: str | None = None,
+) -> str:
+	"""OpenAI 兼容 /chat/completions 调用（stdlib urllib，temperature 0，重试 1 次）。
+	base_url/api_key 可显式传入（config.py 的工作台配置通道），缺省走 env 解析链。"""
 	payload = json.dumps(
 		{
 			"model": model,
@@ -181,8 +202,8 @@ def call_openai_compat(system: str, user: str, model: str, max_tokens: int = 204
 			],
 		}
 	).encode("utf-8")
-	url = resolve_base_url().rstrip("/") + "/chat/completions"
-	key = resolve_api_key()
+	url = (base_url or resolve_base_url()).rstrip("/") + "/chat/completions"
+	key = api_key or resolve_api_key()
 	last_error: Exception | None = None
 	for _attempt in range(2):
 		try:

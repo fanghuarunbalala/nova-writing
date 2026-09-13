@@ -20,6 +20,7 @@ import { createComposeTools } from "../definitions/compose.js";
 import { createAskUserTool } from "../definitions/askUser.js";
 import type { AskUserChannel } from "../definitions/askUser.js";
 import { createNovelEntityTools } from "../definitions/novel.js";
+import type { WritingFocusRecorder } from "../../agent/stylelib/WritingFocusStore.js";
 import { createNovelImportTextTool } from "../definitions/novelImportText.js";
 import { createLibraryReadTool } from "../definitions/library.js";
 import type { LibraryReadDeps } from "../definitions/library.js";
@@ -179,6 +180,11 @@ export interface NovelToolGroupResolverOptions {
   /** novel.entities 写工具审批覆盖（缺省 true=需审批；BookAnalyst 后台无人审批会话传 false，对齐 analyst.files 免审批先例） */
   entityApproval?: boolean;
   /**
+   * 写作焦点记录面（novel.entities 组 NovelWrite/NovelEdit 成功执行后记录当前
+   * story_unit——stylelib 注入 provider 的检索输入；缺省不记录，工具零额外开销）。
+   */
+  writingFocus?: WritingFocusRecorder;
+  /**
    * novel.import 组装配（ProjectImporter 专用）：原始（未守卫）handle——导入工具的
    * 确定性写通道（paragraph.insert + 章回填）；workspace 用顶层 workspace 字段。
    * 缺省=未装配（组不在 definition.groupIds 即不解析，无降级必要）。
@@ -227,7 +233,10 @@ export function createNovelToolGroupResolver(
       () =>
         createNovelEntityTools(
           options.handle,
-          options.entityApproval !== undefined ? { requireApproval: options.entityApproval } : undefined,
+          {
+            ...(options.entityApproval !== undefined ? { requireApproval: options.entityApproval } : {}),
+            ...(options.writingFocus !== undefined ? { writingFocus: options.writingFocus } : {}),
+          },
         ),
     ],
     [

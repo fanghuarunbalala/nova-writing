@@ -22,10 +22,10 @@ const mcpTool: ToolDef = {
 };
 
 describe("buildNovelAgent 组装", () => {
-  it("systemSections 齐全（15 段 recipe 序含 skill.index 专属动态段）+ toolDefs 齐全（15 工具）", () => {
+  it("systemSections 齐全（16 段 recipe 序含 skill.index 与 novel.stylelib 动态段）+ toolDefs 齐全（15 工具）", () => {
     const loop = buildNovelAgent({ workspace: "/ws", provider, handle: handle as NovelHandle });
     const cap = (loop as unknown as { config: { agentCapability: { systemSections: Array<{ id: string; kind: string }>; toolDefs: unknown[] } } }).config.agentCapability;
-    expect(cap.systemSections).toHaveLength(15);
+    expect(cap.systemSections).toHaveLength(16);
     expect(cap.systemSections.map((s) => s.id)).toEqual([
       "novel.identity",
       "novel.system",
@@ -37,15 +37,16 @@ describe("buildNovelAgent 组装", () => {
       "novel.outline_standard",
       "novel.prose_standard",
       "novel.publication_standard",
+      "novel.stylelib",
       "tool.policy",
       "tool.guidance",
       "skill.index",
       "core.environment",
       "novel.global_constraints",
     ]);
-    // 四规范段 + skill.index 转 dynamic：static 6 + dynamic 9
+    // 四规范段 + skill.index + novel.stylelib 转 dynamic：static 6 + dynamic 10
     expect(cap.systemSections.filter((s) => s.kind === "static")).toHaveLength(6);
-    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(9);
+    expect(cap.systemSections.filter((s) => s.kind === "dynamic")).toHaveLength(10);
     // library.read 暂不接入 main（定义组序已移除）——book-analyst 分支恢复后回 16
     // 13（6 组）+ 2（runtime.external 外部工具两步模式）
     expect(cap.toolDefs).toHaveLength(15);

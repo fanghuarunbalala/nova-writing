@@ -77,3 +77,17 @@ def test_ai_windows_from_text_shape():
 	assert all(r["bookId"] == "ywjs-ai" for r in records)
 	assert records[0]["windowId"].startswith("ywjs-ai-c001")
 	assert all(len(row) == 8 for r in records for row in r["features"])
+
+
+def test_regroup_paragraphs_splits_mega_blob():
+	"""巨型段兜底：模型无视换行时按句重组为约 N 个均衡段（窗口级配对粒度保护）。"""
+	from prose_gate.expand import regroup_paragraphs, split_sentences
+
+	blob = "。".join(f"第{i}句测试文本内容稍长一些用于凑字数" for i in range(16)) + "。"
+	assert len(split_sentences(blob)) == 16
+	paras = regroup_paragraphs(blob, 8)
+	assert 6 <= len(paras) <= 9  # 约 8 段（贪心预算 ±尾段合并）
+	assert all(20 <= len(p) <= 80 for p in paras)
+	assert "".join(paras).replace("。", "") == blob.replace("。", "")  # 内容无损
+	# 短文本不过度拆分
+	assert regroup_paragraphs("一句话。", 8) == ["一句话。"]

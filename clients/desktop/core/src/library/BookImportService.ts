@@ -20,12 +20,25 @@ export interface AnalystConversationSpawner {
 	}): Promise<{ conversationId: string }>;
 }
 
+/** stylelib 建库执行面（BookImportService 依赖；StylelibBuildRunner 为其生产实现） */
+export interface StylelibBuildFace {
+	/**
+	 * 后台建库（每书串行；状态回写 meta.stylelib）
+	 * @param bookId 书 id
+	 * @param target 候选组数目标（缺省实现侧默认）
+	 * @returns 建库统计
+	 */
+	build(bookId: string, target?: number): Promise<unknown>;
+}
+
 /** BookImportService 构造选项 */
 export interface BookImportServiceOptions {
 	/** 书库服务（写侧门面） */
 	service: LibraryService;
 	/** 会话派生面（缺省 = 只导入不解析——确定性产物先行，解析另行触发） */
 	spawner?: AnalystConversationSpawner;
+	/** 风格示例库建库面（缺省 = 不建库；PRD 检索式形态示例——独立于解析会话） */
+	stylelib?: StylelibBuildFace;
 	/** 书库根（NOVEL_LIBRARY_ROOT 注入子进程） */
 	libraryRoot: string;
 }
@@ -44,15 +57,18 @@ export class BookImportService {
 	private readonly service: LibraryService;
 	/** 会话派生面 */
 	private readonly spawner?: AnalystConversationSpawner;
+	/** stylelib 建库面 */
+	private readonly stylelib?: StylelibBuildFace;
 	/** 书库根 */
 	private readonly libraryRoot: string;
 
 	/**
-	 * @param options 服务 + 派生面 + 书库根
+	 * @param options 服务 + 派生面 + 建库面 + 书库根
 	 */
 	constructor(options: BookImportServiceOptions) {
 		this.service = options.service;
 		this.spawner = options.spawner;
+		this.stylelib = options.stylelib;
 		this.libraryRoot = options.libraryRoot;
 	}
 
@@ -70,6 +86,12 @@ export class BookImportService {
 			sourcePath: input.sourcePath,
 			...(input.title !== undefined ? { title: input.title } : {}),
 		});
+		if (this.stylelib !== undefined) {
+			// 风格示例库后台建库：fire-and-forget（只读 paragraphs 产物，独立于解析会话；
+			// 失败由 runner 回写 meta.stylelib 状态，不阻塞导入返回）
+			const stylelib = this.stylelib;
+			void stylelib.build(result.bookId).catch(() => {});
+		}
 		if (this.spawner === undefined || input.spawnAnalysis === false) {
 			// 仅导入：没有解析会话在跑，置「未解析」（否则无人翻转、永远停在解析中）
 			await this.service

@@ -18,6 +18,8 @@ def make_weights(embedding_dim: int = 3, n_features: int = 2, n_labels: int = 2)
 		b=[0.0] * n_labels,
 		feature_norm={"mu": [0.0] * n_features, "sd": [1.0] * n_features},
 		thresholds=[0.5] * n_labels,
+		emotion_w=[0.5] * embedding_dim + [0.0, 0.0],
+		emotion_b=[0.0, 1.0, 2.0],
 		train_data={"nTrain": 10},
 	)
 
@@ -25,6 +27,25 @@ def make_weights(embedding_dim: int = 3, n_features: int = 2, n_labels: int = 2)
 def test_validate_rejects_bad_shapes():
 	bad = make_weights()
 	bad.W = [[0.0] * 3]  # 列数不符
+	with pytest.raises(ValueError):
+		bad.validate()
+
+
+def test_validate_rejects_bad_emotion_head():
+	bad = make_weights()
+	bad.emotion_w = [0.0] * 4  # 列数不符（应为 embedding_dim + n_features = 5）
+	with pytest.raises(ValueError):
+		bad.validate()
+	bad = make_weights()
+	bad.emotion_b = [0.0, 1.0]  # 档数不符（应为 3）
+	with pytest.raises(ValueError):
+		bad.validate()
+	bad = make_weights()
+	bad.emotion_b = [2.0, 1.0, 0.0]  # 降序破坏 P(≥k) 单调
+	with pytest.raises(ValueError):
+		bad.validate()
+	bad = make_weights()
+	bad.emotion_w = []  # 一者空一者有 → 拒绝
 	with pytest.raises(ValueError):
 		bad.validate()
 
@@ -37,6 +58,24 @@ def test_save_load_roundtrip(tmp_path):
 	assert loaded.labels == weights.labels
 	assert np.allclose(loaded.W, weights.W)
 	assert loaded.thresholds == weights.thresholds
+	assert np.allclose(loaded.emotion_w, weights.emotion_w)
+	assert loaded.emotion_b == weights.emotion_b
+
+
+def test_score_emotion_cumulative_monotonic():
+	weights = make_weights(embedding_dim=3, n_features=2, n_labels=1)
+	embeddings = np.array([[2.0, -1.0, 0.5], [-2.0, 1.0, -0.5]])
+	features = np.array([[1.0, 0.0], [0.0, 1.0]])
+	cum = weights.score_emotion(embeddings, features)
+	assert cum.shape == (2, 3)
+	# 同段 P(≥1) ≥ P(≥2) ≥ P(≥3)（CORAL 升序阈值保证）
+	assert (cum[:, 0] >= cum[:, 1] - 1e-12).all()
+	assert (cum[:, 1] >= cum[:, 2] - 1e-12).all()
+	# 嵌入第 1 维权重 0.5、特征不进头：行 0 分数高于行 1 → 各档概率更高
+	assert (cum[0] > cum[1]).all()
+	expect = weights.emotion_line(embeddings, features)
+	assert expect.shape == (2,)
+	assert np.allclose(expect, cum.sum(axis=1))
 
 
 def test_score_matrix_concat_order_and_sigmoid():

@@ -1,7 +1,19 @@
-"""8 个段级缺陷标签定义（PRD F2，v1 冻结）。
+"""段级标注 schema v3：11 个缺陷标签 + 情绪线（逐段 0-3 绝对强度）。
+
+v1 → v2：flatAffect（情绪无波动）从标注标签中移除——平直是窗口级序列属性，
+逐段二元判不可锚定且证据不可引用。改为标注逐段情绪强度（描述性、有内容锚），
+平直由规则派生（derive_flat，阈值常量可调，不冻死在标注时刻）。
+转折线 = 情绪线相邻差分，同样派生。
+
+v2 → v3：试标期完备性审计四观察入账，新增 4 标签——
+- logicJump 逻辑断裂（话语连贯：连接词空转/事件跳步/指代悬空）；
+- awkwardDiction 用词错位（CHI2025 Awkward Word Choice 收编：搭配/语域错配；
+  与套话分界=有无模板血统）；
+- voiceFlat 声音同腔（窗口内多角色对白同质化，判官可做的窗口内层）；
+- surfaceError 表层瑕疵（标点/错字；规则层可查的照判，标注值兼作规则校准统计）。
 
 来源：prose-quality.ts rubric 种子 + CHI2025（arXiv:2409.14509）七类缺陷分类交叉验证
-+ 网文领域补充（uniformSyntax / vagueSpecificity / flatAffect）。
++ 网文领域补充（uniformSyntax / vagueSpecificity）+ 试标期"其他"观察（v3）。
 标注 prompt（annotate.py）由本文件单一来源生成，保证清单与 rubric 一字对应。
 """
 
@@ -9,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-LABELS_VERSION = "v1"
+LABELS_VERSION = "v3"
 
 
 @dataclass(frozen=True)
@@ -90,25 +102,107 @@ PROSE_GATE_LABELS: tuple[LabelDef, ...] = (
 		boundary="承上启下的过渡段、极简对话段天然短虚，看是否\"该具体处不具体\"。",
 	),
 	LabelDef(
-		key="flatAffect",
-		label="情绪无波动",
+		key="logicJump",
+		label="逻辑断裂",
 		rubric=(
-			"该段处于情绪强度无起伏的连续串中——整个窗口情绪一条直线（紧张度无升降、"
-			"无蓄势与释放），且非有意留白蓄势。必须看整个窗口的情绪走向判定。"
+			"该段与上下文的因果/转折/时序衔接断裂：连接词空转（\"却/但/因此\"无对应逻辑支撑，"
+			"对比轴未建立）、事件跳步需读者自行补桥、指代悬空（\"这件事\"无先行）。必须看上下文判定。"
 		),
-		examples=("整窗 8 段读下来紧张度始终居中，无任何升降与转折",),
+		examples=(
+			"他暑假练了三个月的架子还算稳，可一想到要上台自我介绍，胃里就像塞了块凉铁。（\"可\"对比的身体/心态轴未点明）",
+		),
+		boundary="有意的悬念/倒叙留白不算；网文省略常识性过渡（\"三日后\"）不算；快节奏蒙太奇不算。",
+	),
+	LabelDef(
+		key="awkwardDiction",
+		label="用词错位",
+		rubric=(
+			"词语与语境不合：搭配不地道（书面语/学术腔焊在口语或身体感受上）、语域错配"
+			"（跨文体进货，如言情腔进武道文）、生造词、明显别字近音字。"
+		),
+		examples=("心跳失序。", "他周身的气场骤然坍缩。"),
 		boundary=(
-			"克制白描把情绪藏在动作物象里≠无情绪（判走向变化，不判形容词浓淡）；"
-			"过渡/铺垫段天然低强度不算；与\"空泛不具体\"独立（细节具体也可能情绪平直）。"
+			"有模板血统的现成件判套话（clicheExpression），纯搭配/语域错位才判本标签；"
+			"人物口癖/方言/有意玩梗不算；网络流行语按本书风格基准判。"
 		),
+	),
+	LabelDef(
+		key="voiceFlat",
+		label="声音同腔",
+		rubric=(
+			"窗口内多个角色的对白说话方式无差异——都像叙述腔念引号（用词习惯/句长/语气词/"
+			"吐槽方式趋同），遮住署名分不清谁在说话。必须看窗口内多角色对白判定。"
+		),
+		examples=("甲：\"这个问题需要从长计议。\"乙：\"你的想法有一定道理。\"——两个损友聊成了两个客服。",),
+		boundary="单角色/无对白窗口不判；同角色连续发言不算；角色设定本就少言/正式（老师、长官）不算；旁白转述不算对白。",
+	),
+	LabelDef(
+		key="surfaceError",
+		label="表层瑕疵",
+		rubric="表层文字错误：重复或缺失标点（\"。。\"）、引号不配对、半全角混用、错别字、明显漏字。",
+		examples=("脚步却在那扇场馆正门前慢了下来。。", "\"你走吧。——引号未闭合"),
+		boundary="只判表层不判风格（标点风格设计如一句一段的句号流不算）；规则层可机器查到的照判——标注值兼作规则校准与统计。",
 	),
 )
 
 LABEL_KEYS: tuple[str, ...] = tuple(d.key for d in PROSE_GATE_LABELS)
 
 
+# ---------- 情绪线（v2 新增：逐段绝对强度，描述不评价） ----------
+
+EMOTION_MAX = 3
+
+
+@dataclass(frozen=True)
+class EmotionLevel:
+	"""情绪线档位：value 为强度、name 为展示名、anchor 为标注锚（内容锚定，非评价）。"""
+
+	value: int
+	name: str
+	short: str
+	anchor: str
+
+
+EMOTION_LEVELS: tuple[EmotionLevel, ...] = (
+	EmotionLevel(0, "平静", "平", "无情绪电荷：环境、过渡、纯信息段。"),
+	EmotionLevel(1, "微澜", "微", "轻微冷暖：日常对话里的小嗔小喜、隐隐不安。"),
+	EmotionLevel(2, "明显", "显", "明确情绪：怒、惧、狂喜，有身体反应与语气变化。"),
+	EmotionLevel(3, "剧烈", "剧", "顶点：爆发、崩溃、生死时刻。"),
+)
+
+# 派生平直（窗口级，代码可调不进标注）：情绪线极差 ≤ FLAT_RANGE_MAX 判平直。
+# 覆盖低位平直（全程死水）与高位平直（全程爆发=没有爆发）两种形态。
+FLAT_RANGE_MAX = 1
+
+# 派生转折（相邻差分）：|Δ| ≥ TURN_DELTA_MIN 视为一次有效情绪转折。
+TURN_DELTA_MIN = 1
+
+
+def clamp_emotion(value: object) -> int:
+	"""任意输入 → 合法档位（非法/越界收到 0-3）。"""
+	try:
+		return max(0, min(EMOTION_MAX, int(value)))  # type: ignore[arg-type]
+	except (TypeError, ValueError):
+		return 0
+
+
+def derive_flat(emotion: list[int]) -> bool:
+	"""窗口平直 = max(情绪线) - min(情绪线) <= FLAT_RANGE_MAX。"""
+	if not emotion:
+		return False
+	return max(emotion) - min(emotion) <= FLAT_RANGE_MAX
+
+
+def derive_turns(emotion: list[int]) -> list[int]:
+	"""转折线（派生）：相邻差分，|Δ| >= TURN_DELTA_MIN 记一次转折。"""
+	turns = []
+	for prev, cur in zip(emotion, emotion[1:]):
+		turns.append(cur - prev if abs(cur - prev) >= TURN_DELTA_MIN else 0)
+	return turns
+
+
 def label_by_key(key: str) -> LabelDef:
 	for d in PROSE_GATE_LABELS:
 		if d.key == key:
 			return d
-	raise KeyError(f"未知标签 key: {key}（labels v{LABELS_VERSION}）")
+	raise KeyError(f"未知标签 key: {key}（labels {LABELS_VERSION}）")

@@ -31,7 +31,7 @@ const FIXTURE_PATH = path.join(
   "..",
   "protocol",
   "fixtures",
-  "definition-novel-1.5.0.json",
+  "definition-novel-1.6.0.json",
 );
 
 function toolGroupsForMain(): ToolGroupRef[] {
@@ -48,17 +48,17 @@ function exportBundle(): DefinitionBundle {
 }
 
 describe("定义包导出器", () => {
-  it("1.5.0 全策略面导出：结构完整", () => {
+  it("1.6.0 全策略面导出：结构完整", () => {
     const bundle = exportBundle();
     expect(bundle.bundleSchemaVersion).toBe(1);
-    expect(bundle.definitionVersion).toBe("1.5.0");
+    expect(bundle.definitionVersion).toBe("1.6.0");
     expect(bundle.agentType).toBe("novel");
-    // 15 段 recipe：6 static + 9 dynamic
+    // 16 段 recipe：6 static + 10 dynamic（1.6.0 + novel.stylelib 风格示例段）
     const statics = bundle.prompt.recipe.filter((i) => i.kind === "static");
     const dynamics = bundle.prompt.recipe.filter((i) => i.kind === "dynamic");
-    expect(bundle.prompt.recipe).toHaveLength(15);
+    expect(bundle.prompt.recipe).toHaveLength(16);
     expect(statics).toHaveLength(6);
-    expect(dynamics).toHaveLength(9);
+    expect(dynamics).toHaveLength(10);
     // static 文案可提取且非空（core.runtime.protocol 允许空串）
     const identity = statics.find((s) => s.sectionId === "novel.identity");
     expect(identity?.content.length).toBeGreaterThan(0);
@@ -104,7 +104,7 @@ describe("定义包导出器", () => {
     expect(req.toolGroups).toHaveLength(7);
   });
 
-  it("golden 基线：与 fixtures/definition-novel-1.5.0.json 逐字节一致", () => {
+  it("golden 基线：与 fixtures/definition-novel-1.6.0.json 逐字节一致", () => {
     const json = JSON.stringify(exportBundle(), null, 2) + "\n";
     if (process.env.WRITE_FIXTURE === "1") {
       mkdirSync(path.dirname(FIXTURE_PATH), { recursive: true });

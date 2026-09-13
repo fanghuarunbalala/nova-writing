@@ -6,6 +6,7 @@ import type {
   DynamicPromptSectionInput,
   NovelConstraintsProvider,
   SkillsIndexSnapshot,
+  StylelibProvider,
 } from "../prompt/PromptSection.js";
 import { CompactPolicyChainImpl } from "../compact/CompactPolicyChainImpl.js";
 import { reorderToolResults } from "./toolSequenceGuard.js";
@@ -60,6 +61,8 @@ export class LoopContext implements ReadonlyLoopContext {
   private readonly novelConstraintsProvider: NovelConstraintsProvider;
   /** 案例引导提供者（每 provider call 前调用；缺省空——规范段仅省略案例小节） */
   private readonly caseGuideProvider: CaseGuideProvider;
+  /** 风格示例注入提供者（每 provider call 前调用，焦点指纹缓存；缺省空——段省略） */
+  private readonly stylelibProvider: StylelibProvider;
   /** 技能索引快照（构造注入一次，会话期静态；缺省空——skill.index 段省略） */
   private readonly skillsIndex?: SkillsIndexSnapshot;
   /** 每次 provider call 发起前回调（mode pending→active 晋升；缺省 no-op） */
@@ -81,6 +84,7 @@ export class LoopContext implements ReadonlyLoopContext {
     platform?: string;
     novelConstraintsProvider?: NovelConstraintsProvider;
     caseGuideProvider?: CaseGuideProvider;
+    stylelibProvider?: StylelibProvider;
     skillsIndex?: SkillsIndexSnapshot;
     beforeProviderCall?: () => void | Promise<void>;
   }) {
@@ -90,6 +94,7 @@ export class LoopContext implements ReadonlyLoopContext {
     this.platform = opts.platform;
     this.novelConstraintsProvider = opts.novelConstraintsProvider ?? (async () => undefined);
     this.caseGuideProvider = opts.caseGuideProvider ?? (async () => undefined);
+    this.stylelibProvider = opts.stylelibProvider ?? (async () => undefined);
     this.skillsIndex = opts.skillsIndex;
     this.beforeProviderCall = opts.beforeProviderCall ?? (async () => {});
     for (const policy of opts.agentCapability.compactPolicies) {
@@ -227,6 +232,7 @@ export class LoopContext implements ReadonlyLoopContext {
     // ③ 动态段输入：LoopContext 自组装 + 宿主注入约束内容（每调用重读）
     const constraints = await this.novelConstraintsProvider();
     const guide = await this.caseGuideProvider();
+    const stylelib = await this.stylelibProvider();
     const dynamicInput: DynamicPromptSectionInput = {
       environment:
         this.platform === undefined || this.platform.trim().length === 0
@@ -238,6 +244,7 @@ export class LoopContext implements ReadonlyLoopContext {
             },
       ...(constraints === undefined ? {} : { novelGlobalConstraints: constraints }),
       ...(guide === undefined ? {} : { caseGuide: guide }),
+      ...(stylelib === undefined ? {} : { stylelib }),
       ...(this.skillsIndex !== undefined ? { skills: this.skillsIndex } : {}),
     };
     // ④ 组装基础请求（system / tools / messages / sampling；messages 快照含 ② 注入；

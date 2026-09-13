@@ -33,6 +33,7 @@ import {
   createNovelApiServer,
   createProcessSpawner,
   BookImportService,
+  StylelibBuildRunner,
   createLibraryFace,
   LibraryService,
   RemoteNovelStore,
@@ -891,6 +892,9 @@ async function main(): Promise<void> {
   // CMS spawnConversation 派生（task/extraEnv 契约直接适配），analyst journal 需已开工作区。
   const libraryRoot = process.env.NOVEL_LIBRARY_ROOT ?? join(app.getPath("userData"), "library");
   mkdirSync(libraryRoot, { recursive: true });
+  // 书库根写进 main env（NOVEL_PROVIDER_* 同款先例）：全部子进程（conversation /
+  // stylelib 建库 worker）经 spawn env 继承——风格示例注入与建库据此定位书库
+  process.env.NOVEL_LIBRARY_ROOT = libraryRoot;
   let libraryService = new LibraryService({ libraryRoot });
   // 解析进度 journal 信号：spawn 时记录 bookId → conversationId（storedir = storedirRoot/<cid>）
   const analystConversationOf = new Map<string, string>();
@@ -927,12 +931,24 @@ async function main(): Promise<void> {
   };
   // 导入源白名单（pickBookFile 登记；importBook 仅接受白名单路径——同 workspace 引用白名单模式）
   const allowedBookSources = new Set<string>();
+  // 风格示例库建库后台执行器（PRD 检索式形态示例）：stylelib-worker.mjs 一次性子进程
+  // 承载策展 LLM 与 ONNX 嵌入，meta.stylelib 状态由 runner 维护；随导入 fire-and-forget
+  const stylelibRunner = new StylelibBuildRunner({
+    service: () => libraryService,
+    workerScript: join(baseDir, "..", "..", "..", "core", "scripts", "stylelib-worker.mjs"),
+  });
   const libraryFace = createLibraryFace({
     service: () => libraryService,
     workspaceRoot: () => currentWorkspaceRoot,
     importer: () =>
       canSpawnAnalysis()
-        ? new BookImportService({ service: libraryService, spawner: analysisSpawner, libraryRoot })
+        ? new BookImportService({
+            service: libraryService,
+            spawner: analysisSpawner,
+            // 建库需 provider 配置（策展 LLM）；与解析会话同一可用性判据
+            ...(canSpawnAnalysis() ? { stylelib: stylelibRunner } : {}),
+            libraryRoot,
+          })
         : undefined,
     pickFile: async () => {
       const result = await openDialogModal({

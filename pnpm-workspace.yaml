@@ -9,9 +9,14 @@ packages:
 allowBuilds:
   better-sqlite3: true
   esbuild: true
+  # stylelib 嵌入推理（@huggingface/transformers 文本后端）：postinstall 校验/装载原生绑定
+  onnxruntime-node: true
+  protobufjs: false
+  sharp: false
   zeromq: true
 
 onlyBuiltDependencies:
   - zeromq
   - esbuild
   - better-sqlite3
+  - onnxruntime-node

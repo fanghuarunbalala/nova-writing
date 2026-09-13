@@ -86,7 +86,7 @@ class DynamicRendererParityTest {
     @Test
     fun fullAssemblyUsesLegacySeparator() = runTest {
         // golden 包 static 拼接遵循 legacy 规则：单 \n，空 static 段保留占位（core.runtime.protocol 为空串）
-        val bundlePath = Path.of(javaClass.classLoader.getResource("definition-novel-1.5.0.json")!!.toURI())
+        val bundlePath = Path.of(javaClass.classLoader.getResource("definition-novel-1.6.0.json")!!.toURI())
         val assembler = DefinitionAssembler(DefinitionBundleCodec.decode(Files.readString(bundlePath)))
         val prompt = assembler.assembleSystemPrompt()
         val statics = DefinitionBundleCodec.decode(Files.readString(bundlePath))

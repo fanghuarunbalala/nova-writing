@@ -8,7 +8,7 @@ import kotlinx.serialization.json.JsonObject
 /**
  * 定义包（docs/PRD/定义包-agent策略统一.md）——Agent 完整策略面的可序列化载体。
  * 与 core TS 侧 `runtime/definition/bundle.ts` 同一 JSON 契约；
- * golden 夹具 core/src/runtime/definition/fixtures/definition-novel-1.5.0.json 双端共用（对拍种子）。
+ * golden 夹具 core/src/runtime/definition/fixtures/definition-novel-1.6.0.json 双端共用（对拍种子）。
  *
  * 数据化分层：纯数据全量进包（static 段文案/工具组清单/compact 参数）；
  * 代码引用只留 id（rendererId/trigger/policyId），端能力声明必须覆盖——

@@ -13,6 +13,7 @@ import type { NovelMutation } from "../novel/contract/mutation.js";
 import type { PublicationVolumeId } from "../novel/model/id.js";
 import { parseBookText } from "./BookTextParser.js";
 import { readLibraryAllowlist } from "./LibraryAccessPolicy.js";
+import type { StylelibStatus } from "./stylelib/types.js";
 import {
 	analysisFilePath,
 	bookDbPath,
@@ -86,6 +87,8 @@ export interface BookMeta {
 	readonly status: BookStatus;
 	/** 状态说明（失败原因等；缺省无） */
 	readonly statusReason?: string;
+	/** 风格示例库状态（导入后台建库步，PRD 检索式形态示例；缺省 = 未建） */
+	readonly stylelib?: StylelibStatus;
 	/** 统计 */
 	readonly stats: {
 		readonly volumes: number;

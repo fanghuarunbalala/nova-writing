@@ -51,15 +51,16 @@ class AppRepository(
     val currentProject: CloudProject?
         get() = projects.value.firstOrNull { it.id == currentProjectId.value }
 
-    fun login(username: String, password: String, deviceName: String) {
+    fun login(username: String, password: String, deviceName: String, serverUrl: String = DEMO_SERVER) {
         auth.value = AuthUiState.LoggingIn
         scope.launch {
             sleep(700)
-            auth.value = AuthUiState.Online(username, DEMO_SERVER)
+            auth.value = AuthUiState.Online(username, serverUrl)
         }
     }
 
-    fun register(username: String, password: String, deviceName: String) = login(username, password, deviceName)
+    fun register(username: String, password: String, deviceName: String, serverUrl: String = DEMO_SERVER) =
+        login(username, password, deviceName, serverUrl)
 
     fun logout() {
         auth.value = AuthUiState.NeedRelogin
@@ -102,60 +103,47 @@ class AppRepository(
     }
 
     companion object {
-        const val DEMO_SERVER = "https://nova.example.net"
+        /** demo（L1482/1582）：fang@192.168.1.8 */
+        const val DEMO_SERVER = "https://192.168.1.8:8787"
 
         private fun demoProjects() = listOf(
-            CloudProject("p-1", "长夜余烬", "3 分钟前", 412_300, "12 / 30 章"),
-            CloudProject("p-2", "雾河纪年", "昨天 21:14", 88_500, "4 / 12 章"),
-            CloudProject("p-3", "巴别塔维修手册", "上周三", 152_000, "9 / 9 卷 · 完结"),
+            CloudProject("p-1", "长夜余烬", "今天 21:02", 184_000, "卷一 12/26 章 · 今天 21:02 更新"),
+            CloudProject("p-2", "雾都异闻录", "3 天前", 96_000, "第 8 章 · 停更 3 天"),
         )
 
         private fun demoDevices() = listOf(
-            DeviceUi("d-1", "Pixel 9 Pro", "Android 16", current = true, lastActiveLabel = "当前会话"),
-            DeviceUi("d-2", "MacBook Pro 14", "macOS · 桌面端", current = false, lastActiveLabel = "2 小时前"),
-            DeviceUi("d-3", "旧手机 · 备机", "Android 13", current = false, lastActiveLabel = "6 天前"),
+            DeviceUi("d-1", "Pixel 9", "Android", current = true, lastActiveLabel = "当前设备 · 在线"),
+            DeviceUi("d-2", "MacBook Pro · 桌面端", "macOS", current = false, lastActiveLabel = "dev_mb14 · 2 小时前活跃 · 持有 conv_2 租约"),
+            DeviceUi("d-3", "iPad · 阅读端", "iPadOS", current = false, lastActiveLabel = "dev_ip02 · 3 天前活跃"),
         )
 
+        /** 审批中心（demo renderCenter：三张卡各成一条，点击开整批 Sheet）；askedAt 取构造时刻 */
         private fun demoCenterApprovals() = listOf(
             ApprovalUi(
-                requestId = "center-1",
-                askedAt = 0,
-                cards = listOf(
-                    ApprovalCardUi(
-                        id = "cc-1", op = ApprovalOp.EDIT, toolName = "novel_edit_outline",
-                        title = "第7章大纲节点 · 雾河渡口",
-                        current = "渡口老者指引主角南下，交出信物。",
-                        change = "渡口老者实为雾河会哨探；信物为饵，指引即陷阱——第8章反押开始。",
-                        originChip = "桌面端 · 14:02",
-                    ),
-                ),
+                requestId = "approval:conv_2:47:b2",
+                askedAt = System.currentTimeMillis() - 34_000,
+                cards = listOf(centerCard("cc-1", ApprovalOp.EDIT, "NovelEdit", "沈砚 · 角色档案（v2 → v3）")),
             ),
             ApprovalUi(
-                requestId = "center-2",
-                askedAt = 0,
-                cards = listOf(
-                    ApprovalCardUi(
-                        id = "cc-2", op = ApprovalOp.ADD, toolName = "novel_add_character",
-                        title = "新人物 · 雾河会「三姐」",
-                        current = null,
-                        change = "渡口情报网的接头人；只闻其声不见其人，与老者构成明暗一对。",
-                        originChip = "桌面端 · 13:47",
-                    ),
-                ),
+                requestId = "approval:conv_2:47:b2",
+                askedAt = System.currentTimeMillis() - 34_000,
+                cards = listOf(centerCard("cc-2", ApprovalOp.ADD, "NovelWrite", "正文 · 第 2 章 · 追逃段（草稿 812 字）")),
             ),
             ApprovalUi(
-                requestId = "center-3",
-                askedAt = 0,
-                cards = listOf(
-                    ApprovalCardUi(
-                        id = "cc-3", op = ApprovalOp.DELETE, toolName = "novel_remove_location",
-                        title = "移除地点 · 旧渡口仓库",
-                        current = "第2章用作藏身点，此后未再出场。",
-                        change = "与雾河渡口职能重叠；其「藏身」职能并入渡船底舱。",
-                        originChip = "桌面端 · 11:20",
-                    ),
-                ),
+                requestId = "approval:conv_2:47:b2",
+                askedAt = System.currentTimeMillis() - 34_000,
+                cards = listOf(centerCard("cc-3", ApprovalOp.DELETE, "NovelDelete", "地点 · 废弃渡口碑（v1）")),
             ),
+        )
+
+        private fun centerCard(id: String, op: ApprovalOp, tool: String, title: String) = ApprovalCardUi(
+            id = id,
+            op = op,
+            toolName = tool,
+            title = title,
+            current = null,
+            change = "（在审批 Sheet 中查看完整变更）",
+            originChip = "桌面端 · dev_mb14",
         )
     }
 }

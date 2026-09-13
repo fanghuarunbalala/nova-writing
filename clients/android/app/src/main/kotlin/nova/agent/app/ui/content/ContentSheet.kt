@@ -73,7 +73,7 @@ fun ContentSheet(
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text(project?.name ?: "未打开项目", style = NovaTypography.titleSmall)
                 Text(
-                    "${project?.progress ?: "—"} · 已续写至 12 章",
+                    project?.progress ?: "—",
                     style = NovaText.mono12.copy(color = palette.muted),
                     modifier = Modifier.padding(top = 2.dp),
                 )

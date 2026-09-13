@@ -39,6 +39,7 @@ fun DevicesScreen(vm: nova.agent.app.ui.vm.AppViewModel, onBack: () -> Unit) {
     val palette = LocalNovaPalette.current
     val devices by vm.devices.collectAsStateWithLifecycle()
     var kickTarget by remember { mutableStateOf<DeviceUi?>(null) }
+    val feedback = nova.agent.app.ui.common.rememberFeedback()
 
     ScreenScaffold(title = "设备管理", onBack = onBack) {
         LazyColumn(
@@ -69,7 +70,7 @@ fun DevicesScreen(vm: nova.agent.app.ui.vm.AppViewModel, onBack: () -> Unit) {
                                 )
                             }
                         }
-                        Text("${device.platform} · ${device.lastActiveLabel}", style = NovaText.mono12.copy(color = palette.faint))
+                        Text(device.lastActiveLabel, style = NovaText.mono12.copy(color = palette.faint))
                     }
                     if (!device.current) {
                         Text(
@@ -95,6 +96,7 @@ fun DevicesScreen(vm: nova.agent.app.ui.vm.AppViewModel, onBack: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     vm.kick(target.id)
+                    feedback("已踢出 ${target.name}——该设备的 refresh token 已吊销")
                     kickTarget = null
                 }) { Text("踢出", color = palette.danger) }
             },

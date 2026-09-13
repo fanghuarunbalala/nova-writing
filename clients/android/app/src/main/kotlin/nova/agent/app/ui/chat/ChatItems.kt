@@ -311,10 +311,10 @@ fun AskCardView(item: ChatItem.AskCard) {
     }
 }
 
-/* ============ 载入更早（触顶自动 + 手动兜底） ============ */
+/* ============ 载入更早（触顶自动 + 手动兜底；耗尽落「已至开头」终态） ============ */
 
 @Composable
-fun LoadOlderRow(loading: Boolean, onClick: () -> Unit) {
+fun LoadOlderRow(loading: Boolean, hasMore: Boolean, remaining: Int, onClick: () -> Unit) {
     val palette = LocalNovaPalette.current
     Row(
         Modifier
@@ -322,10 +322,11 @@ fun LoadOlderRow(loading: Boolean, onClick: () -> Unit) {
             .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.Center,
     ) {
-        if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.5.dp, color = palette.muted)
-        } else {
-            Row(
+        when {
+            loading -> {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.5.dp, color = palette.muted)
+            }
+            hasMore -> Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier
@@ -334,8 +335,16 @@ fun LoadOlderRow(loading: Boolean, onClick: () -> Unit) {
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Icon(Icons.Outlined.History, contentDescription = null, tint = palette.muted, modifier = Modifier.size(13.dp))
-                Text("载入更早的对话", style = NovaTypography.labelMedium.copy(color = palette.muted, fontWeight = FontWeight.Normal))
+                Text(
+                    "加载更早的对话 · 剩 $remaining 轮",
+                    style = NovaTypography.labelMedium.copy(color = palette.muted, fontWeight = FontWeight.Normal),
+                )
             }
+            else -> Text(
+                "已至开头 · 8 月 28 日开卷",
+                style = NovaText.mono11.copy(color = palette.faint),
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
         }
     }
 }

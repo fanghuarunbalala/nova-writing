@@ -8,6 +8,8 @@ data class ChatUiState(
     /** 打字机草稿：AssistantDelta 的累计文本原样替换（源端已 32ms 合并，UI 不做二次节流） */
     val draft: String = "",
     val hasMoreOlder: Boolean = true,
+    /** 更早对话剩余轮数（demo 按钮文案「加载更早的对话 · 剩 8 轮」） */
+    val olderRunsRemaining: Int = 8,
     val runStatus: RunStatus = RunStatus.Idle,
     val lease: ReadOnlyLease? = null,
     val input: String = "",
@@ -31,7 +33,7 @@ data class ChatUiState(
  */
 sealed interface ChatUiEvent {
     data class Submitted(val text: String, val ts: Long) : ChatUiEvent
-    data class RunStarted(val runSeq: Int, val ts: Long) : ChatUiEvent
+    data class RunStarted(val runSeq: Int, val ts: Long, val roundLabel: String? = null) : ChatUiEvent
     data class DeltaArrived(val textSoFar: String, val ts: Long) : ChatUiEvent
     data class AssistantClosed(val runSeq: Int, val text: String, val reasoning: String?, val ts: Long) : ChatUiEvent
     data class ToolStarted(val callId: String, val name: String, val ts: Long) : ChatUiEvent
@@ -43,7 +45,7 @@ sealed interface ChatUiEvent {
     data class RunClosed(val reason: RunEndReason, val error: String?, val ts: Long) : ChatUiEvent
     /** 历史/回放的用户消息（runSeq 幂等，避免与交互 Submitted 重复） */
     data class UserEchoed(val runSeq: Int, val text: String, val ts: Long) : ChatUiEvent
-    data class OlderLoaded(val prepend: List<ChatItem>, val hasMore: Boolean) : ChatUiEvent
+    data class OlderLoaded(val prepend: List<ChatItem>, val hasMore: Boolean, val remaining: Int = 0) : ChatUiEvent
     data class InputChanged(val text: String) : ChatUiEvent
     data class ExecModeChanged(val mode: ExecMode) : ChatUiEvent
     data class LeaseObserved(val lease: ReadOnlyLease?) : ChatUiEvent

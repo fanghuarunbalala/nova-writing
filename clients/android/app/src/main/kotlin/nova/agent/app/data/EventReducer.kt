@@ -21,11 +21,18 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
     }
 
     is ChatUiEvent.RunStarted -> {
-        // 幽灵晋升：排队消息全部转为正式用户消息（顺序保持），随后进入 Thinking
+        // 幽灵晋升：排队消息全部转为正式用户消息（顺序保持），随后进入 Thinking；
+        // 带轮次标签时，分隔线插在本轮首条用户消息（原幽灵）之前
         val promoted = items.map { item ->
             if (item is ChatItem.GhostItem) ChatItem.UserMsg(item.id, item.text) else item
         }
-        copy(items = promoted, runStatus = RunStatus.Thinking, draft = "", runStartedAt = event.ts)
+        val withLabel = event.roundLabel?.let { label ->
+            val firstGhost = items.indexOfFirst { it is ChatItem.GhostItem }
+            val roundLabel = ChatItem.RoundLabel("r-${event.runSeq}", label)
+            if (firstGhost >= 0) promoted.take(firstGhost) + roundLabel + promoted.drop(firstGhost)
+            else promoted + roundLabel
+        } ?: promoted
+        copy(items = withLabel, runStatus = RunStatus.Thinking, draft = "", runStartedAt = event.ts)
     }
 
     is ChatUiEvent.DeltaArrived -> {
@@ -120,7 +127,7 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
     }
 
     is ChatUiEvent.OlderLoaded ->
-        copy(items = event.prepend + items, hasMoreOlder = event.hasMore)
+        copy(items = event.prepend + items, hasMoreOlder = event.hasMore, olderRunsRemaining = event.remaining)
 
     is ChatUiEvent.InputChanged -> copy(input = event.text)
 

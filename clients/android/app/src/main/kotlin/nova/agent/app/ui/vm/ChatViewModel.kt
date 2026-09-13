@@ -35,10 +35,23 @@ class ChatViewModel private constructor(
     private val _oneShot = MutableSharedFlow<ChatOneShot>(extraBufferCapacity = 16)
     val oneShot: SharedFlow<ChatOneShot> = _oneShot.asSharedFlow()
 
+    /** VM 侧发起的操作反馈（snackbar 文案），ChatScreen 收集后走全局 SnackbarHost */
+    private val _feedback = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val feedback: SharedFlow<String> = _feedback.asSharedFlow()
+
+    /** 顶栏第二行（会话上下文，demo「第 2 章 · 追逃段修订 · 第 3 轮」） */
+    val sessionSubtitle: String get() = repo.sessionSubtitle
+
     init {
         viewModelScope.launch {
             repo.events.collect { event ->
-                mapLoopEvent(event) { System.currentTimeMillis() }?.let(::dispatch)
+                val mapped = mapLoopEvent(event) { System.currentTimeMillis() }
+                // RunStart 补轮次标签（demo roundDivider）
+                if (mapped is ChatUiEvent.RunStarted) {
+                    dispatch(mapped.copy(roundLabel = repo.roundLabelFor(mapped.runSeq)))
+                } else {
+                    mapped?.let(::dispatch)
+                }
             }
         }
         viewModelScope.launch {
@@ -60,7 +73,14 @@ class ChatViewModel private constructor(
         repo.submit(text)
     }
 
-    fun stop() = repo.stop()
+    fun stop() {
+        if (repo.running.value) {
+            repo.stop()
+        } else {
+            // demo 首屏伪运行（历史快照停在「生成中」）没有真实 job：本地复位五态条
+            dispatch(ChatUiEvent.RunClosed(nova.agent.loop.RunEndReason.ABORTED, null, System.currentTimeMillis()))
+        }
+    }
 
     /** 只读接续（demo）：真实语义 = 申请租约，409 时弹冲突；阶段3 接 LeaseClient */
     fun resumeLease() {
@@ -82,7 +102,14 @@ class ChatViewModel private constructor(
 
     fun loadOlder() {
         viewModelScope.launch {
-            repo.loadOlder()?.let { dispatch(ChatUiEvent.OlderLoaded(it.prepend, it.hasMore)) }
+            val page = repo.loadOlder()
+            if (page != null) {
+                dispatch(ChatUiEvent.OlderLoaded(page.prepend, page.hasMore, page.remainingRuns))
+                _feedback.tryEmit("已加载更早 1 段（分段懒加载 · 前插锚点不跳）")
+            } else {
+                // 耗尽：置 hasMoreOlder=false，按钮落「已至开头」终态（修复残留失效按钮）
+                dispatch(ChatUiEvent.OlderLoaded(emptyList(), hasMore = false, remaining = 0))
+            }
         }
     }
 

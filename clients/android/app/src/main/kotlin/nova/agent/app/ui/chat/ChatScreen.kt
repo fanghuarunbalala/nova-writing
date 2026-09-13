@@ -41,6 +41,12 @@ import nova.agent.app.ui.vm.ChatViewModel
 fun ChatScreen(vm: ChatViewModel) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
+    // VM 侧操作反馈（如「已加载更早 1 段」）→ 全局 snackbar（2.6s）
+    val feedback = nova.agent.app.ui.common.rememberFeedback()
+    LaunchedEffect(vm) {
+        vm.feedback.collect { feedback(it) }
+    }
+
     ChatBody(
         state = state,
         onInputChange = vm::inputChange,
@@ -206,9 +212,14 @@ fun ChatBody(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (state.hasMoreOlder) {
+            if (state.hasMoreOlder || state.olderRunsRemaining == 0) {
                 item(key = "load-older") {
-                    LoadOlderRow(loading = loadingOlder) { onLoadOlder() }
+                    LoadOlderRow(
+                        loading = loadingOlder,
+                        hasMore = state.hasMoreOlder,
+                        remaining = state.olderRunsRemaining,
+                        onClick = { onLoadOlder() },
+                    )
                 }
             }
             items(state.items, key = { it.id }) { item ->

@@ -45,9 +45,12 @@ class FakeChatRepositoryTest {
     @Test
     fun `init 零延时回放历史`() = runTest {
         withHarness { repo, events ->
-            assertTrue(events.any { it is LoopEvent.UserMessage && it.content.contains("卷名") })
+            assertTrue(events.any { it is LoopEvent.UserMessage && it.content.contains("火漆印") })
             assertTrue(events.any { it is LoopEvent.AssistantMessage })
             assertTrue(events.any { it is LoopEvent.ToolCallResponse })
+            // demo 首屏快照：第 3 轮未收口——NovelWrite RUN + 草稿已流出，无 RunEnd/收口正文
+            assertTrue(events.any { it is LoopEvent.AssistantDelta })
+            assertEquals(1, events.filterIsInstance<LoopEvent.RunEnd>().size)
             assertEquals(false, repo.running.value)
         }
     }
@@ -78,10 +81,10 @@ class FakeChatRepositoryTest {
             assertEquals(3, asked.calls.size)
             assertEquals(true, repo.running.value)
 
-            // 裁决通过 → 工具 OK + 收口正文 + RunEnd COMPLETED
+            // 裁决通过 → 悬挂的 NovelWrite 行收口 + 工具 OK + 收口正文 + RunEnd COMPLETED
             repo.resolveApproval(asked.requestId, approved = true)
             advanceUntilIdle()
-            assertEquals(3, events.filterIsInstance<LoopEvent.ToolCallResponse>().size)
+            assertEquals(4, events.filterIsInstance<LoopEvent.ToolCallResponse>().size)
             assertNotNull(events.filterIsInstance<LoopEvent.AssistantMessage>().singleOrNull())
             assertEquals(RunEndReason.COMPLETED, events.filterIsInstance<LoopEvent.RunEnd>().last().reason)
             assertEquals(false, repo.running.value)
@@ -151,12 +154,16 @@ class FakeChatRepositoryTest {
         withHarness { repo, _ ->
             val page1 = repo.loadOlder()
             assertNotNull(page1)
-            assertEquals(100, page1.prepend.size) // 50 runs × 2 项
+            assertEquals(3, page1.prepend.size) // 段0 = demo「第 1 轮 · 开卷核对」：label + user + ai
+            assertTrue(page1.prepend.first() is ChatItem.RoundLabel)
             assertTrue(page1.hasMore)
+            assertEquals(7, page1.remainingRuns)
 
             val page2 = repo.loadOlder()
             assertNotNull(page2)
+            assertEquals(14, page2.prepend.size) // 段1 = 模板归档 7 run × 2 项
             assertEquals(false, page2.hasMore)
+            assertEquals(0, page2.remainingRuns)
 
             assertNull(repo.loadOlder())
         }

@@ -50,12 +50,21 @@ fun mapLoopEvent(event: LoopEvent, now: () -> Long): ChatUiEvent? {
 
 /** 工具调用 arguments 里的审批载荷（demo 与阶段3真实工具共用此通道） */
 @Serializable
+private data class PayloadRow(val k: String, val v: String)
+
+@Serializable
 private data class ApprovalPayload(
     val op: String = "edit",
     val title: String = "更新既有内容",
     val current: String? = null,
     val change: String = "（无变更说明）",
     val origin: String? = null,
+    /** 变更键值行（demo chgDl）；优先于 change 渲染 */
+    val changeRows: List<PayloadRow>? = null,
+    /** 当前内容键值行（demo delete 卡 curBox dl） */
+    val currentRows: List<PayloadRow>? = null,
+    /** 版本过期 [基线, 当前]（demo verBanner） */
+    val stale: List<String>? = null,
 )
 
 private val approvalJson = Json { ignoreUnknownKeys = true }
@@ -75,6 +84,10 @@ private fun approvalCardOf(call: ToolCall): ApprovalCardUi {
         title = payload?.title ?: "更新既有内容",
         current = payload?.current,
         change = payload?.change ?: "（待解析的变更说明）",
+        changeRows = payload?.changeRows.orEmpty().map { it.k to it.v },
+        currentRows = payload?.currentRows.orEmpty().map { it.k to it.v },
+        baseVersion = payload?.stale?.getOrNull(0),
+        staleVersion = payload?.stale?.getOrNull(1),
         originChip = payload?.origin,
     )
 }

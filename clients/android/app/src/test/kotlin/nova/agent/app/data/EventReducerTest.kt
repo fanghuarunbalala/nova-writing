@@ -45,6 +45,17 @@ class EventReducerTest {
     }
 
     @Test
+    fun `RunStart 带轮次标签时分隔线插在本轮用户消息前`() {
+        var s = busyState()
+            .reduce(ChatUiEvent.Submitted("排队A", ts = 1))
+            .reduce(ChatUiEvent.Submitted("排队B", ts = 2))
+        s = s.reduce(ChatUiEvent.RunStarted(runSeq = 4, ts = 3, roundLabel = "第 4 轮 · 续写"))
+        assertEquals("r-4", s.items.first().id)
+        assertEquals("第 4 轮 · 续写", (s.items.first() as ChatItem.RoundLabel).text)
+        assertEquals(listOf("g-1", "g-2"), s.items.drop(1).map { it.id })
+    }
+
+    @Test
     fun `首个 delta 触发思考到生成的切换`() {
         val s = ChatUiState(runStatus = RunStatus.Thinking)
             .reduce(ChatUiEvent.DeltaArrived("扶栏的凉", ts = 1))
@@ -133,9 +144,10 @@ class EventReducerTest {
     fun `loadOlder 前插并更新 hasMore`() {
         val older = listOf(ChatItem.UserMsg("h-0-u", "旧"), ChatItem.AssistantMsg("h-0-a", "旧答"))
         val s = ChatUiState(items = listOf(ChatItem.UserMsg("u-1", "新")))
-            .reduce(ChatUiEvent.OlderLoaded(older, hasMore = false))
+            .reduce(ChatUiEvent.OlderLoaded(older, hasMore = false, remaining = 0))
         assertEquals(listOf("h-0-u", "h-0-a", "u-1"), s.items.map { it.id })
         assertEquals(false, s.hasMoreOlder)
+        assertEquals(0, s.olderRunsRemaining)
     }
 
     @Test
@@ -196,6 +208,22 @@ class LoopEventMappingTest {
         assertNull(add.current)
         assertEquals(ApprovalOp.DELETE, delete.op)
         assertEquals("c-e1", edit.id)
+    }
+
+    @Test
+    fun `审批载荷解析键值行与版本过期`() {
+        val call = ToolCall(
+            "e9", "NovelEdit",
+            """{"op":"edit","title":"沈砚 · 角色档案（v2 → v3）","current":"旧","change":"x",""" +
+                """"changeRows":[{"k":"现状","v":"火漆印"}],"currentRows":[{"k":"名称","v":"废弃渡口碑"}],"stale":["v2","v3"],"origin":"桌面端 · dev_mb14"}""",
+        )
+        val asked = mapLoopEvent(LoopEvent.ApprovalRequested("c", 1, "req", listOf(call)), now) as ChatUiEvent.ApprovalAsked
+        val card = asked.approval.cards.single()
+        assertEquals(listOf("现状" to "火漆印"), card.changeRows)
+        assertEquals(listOf("名称" to "废弃渡口碑"), card.currentRows)
+        assertEquals("v2", card.baseVersion)
+        assertEquals("v3", card.staleVersion)
+        assertEquals("桌面端 · dev_mb14", card.originChip)
     }
 
     @Test

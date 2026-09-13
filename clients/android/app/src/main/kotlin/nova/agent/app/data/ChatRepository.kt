@@ -13,6 +13,12 @@ interface ChatRepository {
     val events: SharedFlow<LoopEvent>
     val running: StateFlow<Boolean>
 
+    /** 会话上下文（顶栏第二行，demo「第 2 章 · 追逃段修订 · 第 3 轮」） */
+    val sessionSubtitle: String get() = ""
+
+    /** runSeq → 轮次分隔线文案；null = 不插 */
+    fun roundLabelFor(runSeq: Int): String? = null
+
     /** 空闲时开新 run；运行中入队（UI 侧以 Submitted 事件即时上幽灵） */
     fun submit(text: String)
 
@@ -32,4 +38,6 @@ interface ChatRepository {
 data class OlderPage(
     val prepend: List<ChatItem>,
     val hasMore: Boolean,
+    /** 加载后剩余轮数（demo「剩 N 轮」口径） */
+    val remainingRuns: Int = 0,
 )

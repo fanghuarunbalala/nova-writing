@@ -52,10 +52,12 @@ class DemoTriggers {
 
     fun readonlyLease() {
         _lease.value = ReadOnlyLease(
-            deviceId = "d-2",
-            deviceName = "MacBook Pro 14",
-            expiresAt = System.currentTimeMillis() + 55_000,
-            seq = 1_284,
+            deviceId = "dev_mb14",
+            deviceName = "桌面端 · MacBook Pro",
+            expiresAt = System.currentTimeMillis() + 46_000,
+            seq = 213,
+            ttlSec = 60,
+            heartbeatSec = 20,
         )
     }
 

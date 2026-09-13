@@ -66,12 +66,14 @@ enum class ExecMode(val label: String, val hint: String) {
     DISCUSS("仅讨论", "本轮不执行任何工具调用"),
 }
 
-/** 只读态（他端持有租约）：设备名 + 剩余秒 + SSE 进度 */
+/** 只读态（他端持有租约）：设备名 + 剩余秒 + SSE 进度 + 租约参数（demo：TTL 60s / 心跳 20s） */
 data class ReadOnlyLease(
     val deviceId: String,
     val deviceName: String,
     val expiresAt: Long,
     val seq: Long,
+    val ttlSec: Int = 60,
+    val heartbeatSec: Int = 20,
 )
 
 /** 审批卡三型（demo apCard：edit=+ / add=~ / delete=−） */
@@ -92,6 +94,13 @@ data class ApprovalCardUi(
     val current: String?,
     /** 变更说明（add/edit 的目标内容；delete 为删除理由） */
     val change: String,
+    /** 变更键值行（demo chgDl：「现状→…」「简介→…」）；优先于 [change] 渲染 */
+    val changeRows: List<Pair<String, String>> = emptyList(),
+    /** 当前内容键值行（demo delete 卡 curBox 为 dl 行） */
+    val currentRows: List<Pair<String, String>> = emptyList(),
+    /** 版本过期（demo verBanner）：基线版本 → 当前版本，非 null 时 edit 卡渲染黄条 */
+    val baseVersion: String? = null,
+    val staleVersion: String? = null,
     val originChip: String? = null,
     val decision: ApprovalDecision = ApprovalDecision.PENDING,
 )

@@ -36,12 +36,17 @@ class FakeChatRepository(
     private val _running = MutableStateFlow(false)
     override val running: StateFlow<Boolean> = _running
 
+    override val sessionSubtitle: String get() = script.sessionSubtitle
+
     private var runSeq = 0
     private val queue = ArrayDeque<String>()
     private var job: Job? = null
     private var olderSegmentsLeft = 2
     private var approvalGate: CompletableDeferred<Pair<Boolean, String?>>? = null
     private var approvalRequestId: String? = null
+
+    /** demo 首屏进行中的工具行（NovelWrite RUN 态）；下次 run 开始时以「提请审批」收口 */
+    private var danglingTool: ToolCall? = null
 
     init {
         scope.launch { replayHistory() }
@@ -53,24 +58,35 @@ class FakeChatRepository(
             runSeq = seq
             emit(LoopEvent.RunStart(script.conversationId, seq))
             emit(LoopEvent.UserMessage(script.conversationId, seq, run.userText))
-            if (run.toolName != null) {
-                emit(
-                    LoopEvent.ToolCallRequest(
-                        script.conversationId, seq,
-                        ToolCall(id = "h-$i-tool", name = run.toolName, arguments = "{}"),
-                    ),
-                )
+            run.tools.forEachIndexed { ti, tool ->
+                val callId = "h-$seq-tool-$ti"
+                emit(LoopEvent.ToolCallRequest(script.conversationId, seq, ToolCall(callId, tool.name)))
                 emit(
                     LoopEvent.ToolCallResponse(
                         script.conversationId, seq,
-                        toolCallId = "h-$i-tool", name = run.toolName, content = run.toolSummary,
+                        toolCallId = callId, name = tool.name, content = tool.summary,
                     ),
                 )
             }
-            emit(LoopEvent.AssistantMessage(script.conversationId, seq, LLMessage.Assistant(content = run.assistantText)))
-            emit(LoopEvent.RunEnd(script.conversationId, seq, RunEndReason.COMPLETED))
+            if (run.runningTool != null) {
+                // demo 首屏快照：NovelWrite 进行中 + 草稿已流出（五态条停在「生成中」），未收口
+                val call = ToolCall("call-run-47", run.runningTool.name)
+                danglingTool = call
+                emit(LoopEvent.ToolCallRequest(script.conversationId, seq, call))
+                emit(LoopEvent.AssistantDelta(script.conversationId, seq, script.draftText))
+            } else {
+                emit(
+                    LoopEvent.AssistantMessage(
+                        script.conversationId, seq,
+                        LLMessage.Assistant(content = run.assistantText.orEmpty()),
+                    ),
+                )
+                emit(LoopEvent.RunEnd(script.conversationId, seq, RunEndReason.COMPLETED))
+            }
         }
     }
+
+    override fun roundLabelFor(runSeq: Int): String? = script.roundLabelFor(runSeq)
 
     private suspend fun emit(event: LoopEvent) {
         _events.emit(event)
@@ -90,6 +106,17 @@ class FakeChatRepository(
             val self = coroutineContext[Job]!!
             var seq = ++runSeq
             try {
+                // demo run #47 的接续：先收掉首屏悬挂的 NovelWrite 行（「第 2 章 · 追逃段 · 提请审批」）
+                danglingTool?.let { call ->
+                    danglingTool = null
+                    emit(
+                        LoopEvent.ToolCallResponse(
+                            script.conversationId, seq - 1,
+                            toolCallId = call.id, name = call.name,
+                            content = "第 2 章 · 追逃段 · 提请审批",
+                        ),
+                    )
+                }
                 playRun(seq)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 withContext(NonCancellable) {
@@ -133,8 +160,9 @@ class FakeChatRepository(
         }
         sleep(280)
 
-        // 审批征询（120s 窗口由 VM 倒计时；此处等待裁决）
-        val requestId = "req-$seq"
+        // 审批征询（120s 窗口由 VM 倒计时；此处等待裁决）。批次 id 对齐 demo；
+        // 后续 run 追加序号避免与已留痕的 b2 批次 id 幂等冲突
+        val requestId = if (seq == 3) script.approvalRequestId else "${script.approvalRequestId}-r$seq"
         approvalRequestId = requestId
         val gate = CompletableDeferred<Pair<Boolean, String?>>()
         approvalGate = gate
@@ -152,9 +180,9 @@ class FakeChatRepository(
                         cid, seq,
                         toolCallId = call.id, name = call.name,
                         content = when (call.name) {
-                            "novel_edit_outline" -> "大纲节点已更新（diff 12 行）"
-                            "novel_add_location" -> "地点卡已新建 · 负三层泄洪闸"
-                            else -> "人物卡已移除 · 夜巡乙"
+                            "NovelEdit" -> "角色档案 v3 已写入"
+                            "NovelWrite" -> "正文草稿已生成 · 待转入正式稿"
+                            else -> "地点卡已移除 · 废弃渡口碑"
                         },
                     ),
                 )
@@ -191,6 +219,11 @@ class FakeChatRepository(
         val seg = 2 - olderSegmentsLeft
         olderSegmentsLeft--
         sleep(350) // 假装网络往返
-        return OlderPage(prepend = olderSegment(seg), hasMore = olderSegmentsLeft > 0)
+        // 段0 = demo「第 1 轮 · 开卷核对」1 轮；段1 = 模板归档 7 轮 → 剩余口径对齐 demo「剩 8 轮」
+        return OlderPage(
+            prepend = olderSegment(seg),
+            hasMore = olderSegmentsLeft > 0,
+            remainingRuns = olderSegmentsLeft * 7,
+        )
     }
 }

@@ -32,11 +32,11 @@ class AppViewModel internal constructor(
     val theme: StateFlow<NovaThemeKind> = container.themeStore.theme
         .stateIn(viewModelScope, SharingStarted.Eagerly, NovaThemeKind.PAPER)
 
-    fun login(username: String, password: String, deviceName: String) =
-        repo.login(username, password, deviceName)
+    fun login(username: String, password: String, deviceName: String, serverUrl: String = AppRepository.DEMO_SERVER) =
+        repo.login(username, password, deviceName, serverUrl)
 
-    fun register(username: String, password: String, deviceName: String) =
-        repo.register(username, password, deviceName)
+    fun register(username: String, password: String, deviceName: String, serverUrl: String = AppRepository.DEMO_SERVER) =
+        repo.register(username, password, deviceName, serverUrl)
 
     fun logout() = repo.logout()
 

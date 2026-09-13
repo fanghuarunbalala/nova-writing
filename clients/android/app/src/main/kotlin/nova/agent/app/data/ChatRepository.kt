@@ -36,6 +36,9 @@ interface ChatRepository {
 
     /** 翻更旧的一页；null = 已无更旧段落 */
     suspend fun loadOlder(): OlderPage?
+
+    /** 演示触发器·生成失败注入（demo replay fail）；真实实现无此操作 */
+    fun injectDemoFailure() {}
 }
 
 data class OlderPage(

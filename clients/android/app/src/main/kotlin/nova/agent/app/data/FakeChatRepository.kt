@@ -210,6 +210,21 @@ class FakeChatRepository(
         job?.cancel()
     }
 
+    /** 演示触发器：生成失败（demo fail 重放——provider 超时 + FailedRetry 重试链） */
+    override fun injectDemoFailure() {
+        scope.launch {
+            job?.cancel()
+            danglingTool = null
+            _events.emit(
+                LoopEvent.RunEnd(
+                    script.conversationId, runSeq,
+                    reason = RunEndReason.FAILED,
+                    error = "provider 超时（120s）：上游无响应",
+                ),
+            )
+        }
+    }
+
     override fun resolveApproval(requestId: String, approved: Boolean, comment: String?) {
         if (requestId != approvalRequestId) return
         approvalGate?.complete(Pair(approved, comment))

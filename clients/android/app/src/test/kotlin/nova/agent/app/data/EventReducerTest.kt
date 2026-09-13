@@ -155,6 +155,47 @@ class EventReducerTest {
     }
 
     @Test
+    fun `超时全批过期留痕并关弹层`() {
+        val approval = ApprovalUi(
+            requestId = "req-t",
+            askedAt = 1,
+            cards = listOf(
+                ApprovalCardUi("c-1", ApprovalOp.EDIT, "NovelEdit", "标题（v2 → v3）", "当前", "变更"),
+                ApprovalCardUi("c-2", ApprovalOp.ADD, "NovelWrite", "标题二", null, "变更"),
+            ),
+        )
+        var s = ChatUiState().reduce(ChatUiEvent.ApprovalAsked(approval, ts = 2))
+        s = s.reduce(ChatUiEvent.ApprovalTimedOut("req-t", ts = 3))
+        assertNull(s.pendingApproval)
+        val line = s.items.last() as ChatItem.SysLine
+        assertEquals("审批超时 · 本批 2 项自动拒绝（120s）——AI 将收到拒绝回执并继续", line.text)
+        // repo 侧随后的 resolve（ApprovalResolved）被幂等吞掉
+        val again = s.reduce(ChatUiEvent.ApprovalSettled("req-t", approved = false, ts = 999))
+        assertEquals(s, again)
+    }
+
+    @Test
+    fun `超时速演缩短 deadline`() {
+        val approval = ApprovalUi(
+            requestId = "req-s",
+            askedAt = 1,
+            cards = listOf(ApprovalCardUi("c-1", ApprovalOp.EDIT, "t", "题", "cur", "chg")),
+        )
+        var s = ChatUiState().reduce(ChatUiEvent.ApprovalAsked(approval, ts = 2))
+        s = s.reduce(ChatUiEvent.ApprovalDeadlineShortened("req-s", 6_000, ts = 100))
+        assertEquals(6_000L, s.pendingApproval?.deadlineMs)
+        assertEquals(100L, s.pendingApproval?.askedAt)
+    }
+
+    @Test
+    fun `离线排队态提交走幽灵`() {
+        var s = ChatUiState().reduce(ChatUiEvent.OfflineQueueToggled(true))
+        assertTrue(s.offlineQueued)
+        s = s.reduce(ChatUiEvent.Submitted("排队消息", ts = 1))
+        assertIs<ChatItem.GhostItem>(s.items.single())
+    }
+
+    @Test
     fun `RunClosed 五态映射`() {
         assertEquals(RunStatus.Idle, busyState().reduce(ChatUiEvent.RunClosed(RunEndReason.COMPLETED, null, 1)).runStatus)
         assertEquals(RunStatus.Idle, busyState().reduce(ChatUiEvent.RunClosed(RunEndReason.ABORTED, null, 1)).runStatus)

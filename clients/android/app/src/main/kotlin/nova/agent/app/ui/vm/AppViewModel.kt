@@ -53,6 +53,13 @@ class AppViewModel internal constructor(
 
     fun switchProject(id: String) = repo.switchProject(id)
 
+    /** 演示：断线降级/等待恢复/四态循环（阶段2补 FR5/FR9） */
+    fun demoGoOffline() = repo.demoGoOffline()
+
+    fun demoWaitRecover(onRestored: () -> Unit = {}) = repo.demoWaitRecover(onRestored)
+
+    fun demoCycleConnection() = repo.demoCycleConnection()
+
     fun setTheme(theme: NovaThemeKind) {
         viewModelScope.launch { container.themeStore.setTheme(theme) }
     }

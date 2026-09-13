@@ -12,7 +12,7 @@ import nova.agent.loop.RunEndReason
 fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
     is ChatUiEvent.Submitted -> {
         val nextId = localId + 1
-        val item: ChatItem = if (isBusy) {
+        val item: ChatItem = if (isBusy || offlineQueued) {
             ChatItem.GhostItem("g-$nextId", event.text, event.ts)
         } else {
             ChatItem.UserMsg("u-$nextId", event.text)
@@ -145,6 +145,32 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
         runStatus = RunStatus.Idle,
         runStartedAt = null,
     )
+
+    is ChatUiEvent.ApprovalTimedOut -> {
+        val pa = pendingApproval ?: return this
+        if (pa.requestId != event.requestId) this
+        else {
+            // demo（L2340）：sysLine 留痕 + Sheet 收起（卡上的过期态由留痕与 snackbar 表达）
+            val line = ChatItem.SysLine(
+                "l-${event.requestId}",
+                "审批超时 · 本批 ${pa.cards.size} 项自动拒绝（120s）——AI 将收到拒绝回执并继续",
+            )
+            val merged = if (items.any { it.id == line.id }) items else items + line
+            copy(
+                items = merged,
+                pendingApproval = null,
+                runStatus = if (runStatus == RunStatus.WaitingApproval) RunStatus.Generating else runStatus,
+            )
+        }
+    }
+
+    is ChatUiEvent.ApprovalDeadlineShortened -> {
+        val pa = pendingApproval ?: return this
+        if (pa.requestId != event.requestId) this
+        else copy(pendingApproval = pa.copy(askedAt = event.ts, deadlineMs = event.deadlineMs))
+    }
+
+    is ChatUiEvent.OfflineQueueToggled -> copy(offlineQueued = event.queued)
 
     is ChatUiEvent.RunClosed -> when (event.reason) {
         RunEndReason.COMPLETED, RunEndReason.ABORTED, RunEndReason.MAX_TURNS ->

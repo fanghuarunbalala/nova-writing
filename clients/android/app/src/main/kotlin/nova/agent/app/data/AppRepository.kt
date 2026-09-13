@@ -88,6 +88,37 @@ class AppRepository(
         projects.value = projects.value.filterNot { it.id == id }
     }
 
+    // ---- 演示：断线降级/恢复/四态循环（阶段2补 FR5/FR9；阶段3 换真实 SSE 语义） ----
+
+    private var lastOnline: AuthUiState.Online? = null
+
+    /** 断线降级（demo offlineDlg）：Offline 态，hero/顶栏胶囊联动 */
+    fun demoGoOffline() {
+        (auth.value as? AuthUiState.Online)?.let { lastOnline = it }
+        if (auth.value is AuthUiState.Online || auth.value is AuthUiState.Offline) {
+            auth.value = AuthUiState.Offline
+        }
+    }
+
+    /** 等待恢复：重连退避 1/2/5/10s 模拟后恢复 Online，回调供补推 */
+    fun demoWaitRecover(onRestored: () -> Unit = {}) {
+        val target = lastOnline ?: AuthUiState.Online("fang", DEMO_SERVER)
+        scope.launch {
+            listOf(1_000L, 2_000L, 5_000L, 10_000L).forEach { sleep(it) }
+            auth.value = target
+            onRestored()
+        }
+    }
+
+    /** 连接四态循环（演示触发器）：在线 → 离线 → 需重登（登录门）→ 在线 */
+    fun demoCycleConnection() {
+        auth.value = when (auth.value) {
+            is AuthUiState.Online -> AuthUiState.Offline
+            AuthUiState.Offline -> AuthUiState.NeedRelogin
+            else -> AuthUiState.Online("fang", DEMO_SERVER)
+        }
+    }
+
     /** 审批中心条目的本地裁决（demo：不回写服务器，阶段3走真实 pending 流） */
     fun resolveCenterApproval(requestId: String) {
         approvals.value = approvals.value.filterNot { it.requestId == requestId }

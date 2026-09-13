@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.DevicesOther
 import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.MenuBook
@@ -70,9 +71,11 @@ fun AppDrawer(
 ) {
     val palette = LocalNovaPalette.current
     val context = LocalContext.current
+    val feedback = nova.agent.app.ui.common.rememberFeedback()
     val projects by vm.projects.collectAsStateWithLifecycle()
     val currentId by vm.currentProjectId.collectAsStateWithLifecycle()
     val approvalCount by vm.approvals.collectAsStateWithLifecycle()
+    val devices by vm.devices.collectAsStateWithLifecycle()
     val current = projects.firstOrNull { it.id == currentId }
 
     var createOpen by rememberSaveable { mutableStateOf(false) }
@@ -106,7 +109,8 @@ fun AppDrawer(
                     )
                 }
                 Text(
-                    "${current?.progress ?: "—"} · ${(current?.words ?: 0) / 10_000} 万字",
+                    // demo 副行（L1611-1619）：「第 2 章 · 追逃段 · 18.4 万字」
+                    "${current?.updatedAtLabel ?: "—"} · %.1f 万字".format((current?.words ?: 0) / 10_000f),
                     style = NovaText.mono12.copy(color = palette.muted),
                     modifier = Modifier.padding(start = 26.dp, top = 4.dp),
                 )
@@ -166,7 +170,13 @@ fun AppDrawer(
 
             DrawerEntry(Icons.Outlined.FactCheck, "审批中心", badge = approvalCount.size) { onNavigate(Screen.ApprovalCenter) }
             DrawerEntry(Icons.Outlined.CollectionsBookmark, "书库") { onNavigate(Screen.Library) }
-            DrawerEntry(Icons.Outlined.Settings, "设置") { onNavigate(Screen.Settings) }
+            DrawerEntry(Icons.Outlined.Settings, "设置", sub = "server · BYOK") { onNavigate(Screen.Settings) }
+
+            // ---- 账号组（demo L1621-1623：设备管理指向设置页） ----
+            HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), color = palette.border)
+            DrawerEntry(Icons.Outlined.DevicesOther, "设备管理", sub = "${devices.size} 台") {
+                feedback("设备管理在设置页 · 「服务器」分组内")
+            }
 
             // ---- 演示控制（仅 debug；覆盖层/只读租约的入口在这里最易发现） ----
             if (BuildConfig.DEBUG) {
@@ -187,10 +197,21 @@ fun AppDrawer(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     DemoTriggerChip("409 冲突") { demoTriggers.conflict() }
-                    DemoTriggerChip("SSE 断线") { demoTriggers.disconnect() }
+                    DemoTriggerChip("SSE 断线") {
+                        vm.demoGoOffline()
+                        demoTriggers.disconnect()
+                    }
                     DemoTriggerChip(if (leaseActive == null) "注入只读租约" else "清除只读") {
                         if (leaseActive == null) demoTriggers.readonlyLease() else demoTriggers.clearLease()
                     }
+                }
+                Row(
+                    Modifier.padding(start = 18.dp, top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    DemoTriggerChip("连接四态循环") { vm.demoCycleConnection() }
+                    DemoTriggerChip("审批超时速演") { demoTriggers.speedUpApproval() }
+                    DemoTriggerChip("生成失败注入") { demoTriggers.failGeneration() }
                 }
                 Row(Modifier.padding(start = 18.dp, top = 6.dp)) {
                     DemoTriggerChip("重置演示（进程重启）") { restartApp(context) }
@@ -198,7 +219,10 @@ fun AppDrawer(
             }
 
             Spacer(Modifier.weight(1f))
-            DrawerEntry(Icons.Outlined.Logout, "退出登录", tint = palette.danger) { onLogout() }
+            DrawerEntry(Icons.Outlined.Logout, "退出登录", tint = palette.danger) {
+                feedback("已登出——双令牌已吊销，本地数据保留")
+                onLogout()
+            }
         }
     }
 
@@ -255,6 +279,7 @@ private fun DemoTriggerChip(label: String, onClick: () -> Unit) {
 private fun DrawerEntry(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    sub: String? = null,
     badge: Int? = null,
     tint: androidx.compose.ui.graphics.Color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
     onClick: () -> Unit,
@@ -270,7 +295,12 @@ private fun DrawerEntry(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
-        Text(label, style = NovaTypography.bodyLarge)
+        Column(Modifier.weight(1f)) {
+            Text(label, style = NovaTypography.bodyLarge)
+            if (sub != null) {
+                Text(sub, style = NovaTypography.labelSmall.copy(color = palette.faint))
+            }
+        }
         if (badge != null && badge > 0) {
             Box(
                 Modifier

@@ -86,7 +86,8 @@ enum class ApprovalOp(val symbol: String, val label: String) {
     DELETE("−", "删除 · 将被删除"),
 }
 
-enum class ApprovalDecision { PENDING, APPROVED, REJECTED }
+/** 卡裁决四态（demo 卡 chip L2219）：待批准 / 已批准 / 已拒绝 / 已过期（120s server 懒过期） */
+enum class ApprovalDecision { PENDING, APPROVED, REJECTED, EXPIRED }
 
 data class ApprovalCardUi(
     val id: String,

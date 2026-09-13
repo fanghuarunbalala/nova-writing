@@ -18,6 +18,8 @@ data class ChatUiState(
     val pendingExecMode: ExecMode? = null,
     /** 审批 sheet 数据；非 null 即弹层 */
     val pendingApproval: ApprovalUi? = null,
+    /** 断线降级·排队发送（demo offlineDlg）：新指令只入幽灵队列，恢复后按序补推 */
+    val offlineQueued: Boolean = false,
     /** 当前 run 起始时间戳（思考态计秒用） */
     val runStartedAt: Long? = null,
     /** 最近一次提交文本（FailedRetry 重试用） */
@@ -46,6 +48,12 @@ sealed interface ChatUiEvent {
     data class ApprovalCardDecided(val requestId: String, val cardId: String, val approved: Boolean, val comment: String? = null) : ChatUiEvent
     /** 清空上下文 · 新一轮（demo ⋯ 菜单） */
     data object ContextCleared : ChatUiEvent
+    /** 120s 无决策·超时（demo server 懒过期）：全卡 EXPIRED + 留痕 + 关 Sheet */
+    data class ApprovalTimedOut(val requestId: String, val ts: Long) : ChatUiEvent
+    /** 演示触发器·超时速演（demo 6s 倒计时） */
+    data class ApprovalDeadlineShortened(val requestId: String, val deadlineMs: Long, val ts: Long) : ChatUiEvent
+    /** 断线降级·排队发送开关 */
+    data class OfflineQueueToggled(val queued: Boolean) : ChatUiEvent
     data class RunClosed(val reason: RunEndReason, val error: String?, val ts: Long) : ChatUiEvent
     /** 历史/回放的用户消息（runSeq 幂等，避免与交互 Submitted 重复） */
     data class UserEchoed(val runSeq: Int, val text: String, val ts: Long) : ChatUiEvent

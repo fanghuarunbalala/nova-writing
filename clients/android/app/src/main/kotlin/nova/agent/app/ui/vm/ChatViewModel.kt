@@ -72,6 +72,17 @@ class ChatViewModel private constructor(
                 dispatch(ChatUiEvent.LeaseObserved(it))
             }
         }
+        viewModelScope.launch {
+            triggers.demoEvents.collect { signal ->
+                when (signal) {
+                    nova.agent.app.di.DemoSignal.FailGeneration -> repo.injectDemoFailure()
+                    nova.agent.app.di.DemoSignal.SpeedApproval -> _uiState.value.pendingApproval?.let { pa ->
+                        dispatch(ChatUiEvent.ApprovalDeadlineShortened(pa.requestId, 6_000, System.currentTimeMillis()))
+                    }
+                    nova.agent.app.di.DemoSignal.CycleConnection -> Unit // 由 AppViewModel.demoCycleConnection 处理
+                }
+            }
+        }
     }
 
     private fun dispatch(event: ChatUiEvent) {
@@ -165,21 +176,50 @@ class ChatViewModel private constructor(
     }
 
     fun decideApproval(requestId: String, approved: Boolean, comment: String? = null) {
+        val pa = _uiState.value.pendingApproval
+        if (pa != null) {
+            val n = pa.cards.size
+            val ok = if (approved) n else 0
+            _feedback.tryEmit("整批${if (approved) "批准" else "驳回"} $ok/$n——两段式决议已持久化")
+        }
         repo.resolveApproval(requestId, approved, comment)
     }
 
-    /** 卡级裁决：视觉盖章 + 驳回意见留痕；全部落定后自动触发批级 settle */
+    /** 卡级裁决：视觉盖章 + 驳回意见留痕；全部落定后自动触发批级 settle 与回填反馈 */
     fun decideCard(requestId: String, cardId: String, approved: Boolean, comment: String? = null) {
         dispatch(ChatUiEvent.ApprovalCardDecided(requestId, cardId, approved, comment))
         val pa = _uiState.value.pendingApproval ?: return
         if (pa.cards.none { it.decision == nova.agent.app.data.ApprovalDecision.PENDING }) {
-            repo.resolveApproval(requestId, pa.cards.all { it.decision == nova.agent.app.data.ApprovalDecision.APPROVED }, null)
+            val approvedCount = pa.cards.count { it.decision == nova.agent.app.data.ApprovalDecision.APPROVED }
+            val rejectedCount = pa.cards.size - approvedCount
+            _feedback.tryEmit("本批 ${pa.cards.size} 项已处理（$approvedCount 批准 / $rejectedCount 拒绝）——SSE approval_resolved 已回填运行中的会话")
+            repo.resolveApproval(requestId, approvedCount == pa.cards.size, null)
         }
     }
 
-    /** 120s 倒计时归零：自动驳回 */
+    /** 120s 倒计时归零：全批「已过期」（demo server 懒过期）+ 留痕 + snackbar */
     fun approvalTimeout(requestId: String) {
+        dispatch(ChatUiEvent.ApprovalTimedOut(requestId, System.currentTimeMillis()))
+        _feedback.tryEmit("120s 无决策——本批已自动拒绝")
         repo.resolveApproval(requestId, approved = false, comment = "超时未裁决，自动驳回")
+    }
+
+    /** 断线降级·排队发送（demo offlineDlg）：新指令只入幽灵队列 */
+    fun setOfflineQueued(queued: Boolean) {
+        dispatch(ChatUiEvent.OfflineQueueToggled(queued))
+        if (queued) _feedback.tryEmit("离线排队中——指令进待发队列（上限 10k），恢复后按序补推")
+    }
+
+    /** 重连恢复（AppRepository 退避完成后回调）：按序补推幽灵队列 */
+    fun onConnectionRestored() {
+        val ghosts = _uiState.value.items.filterIsInstance<nova.agent.app.data.ChatItem.GhostItem>()
+        dispatch(ChatUiEvent.OfflineQueueToggled(false))
+        if (ghosts.isNotEmpty()) {
+            _feedback.tryEmit("已重连——待发队列按序补推 ${ghosts.size} 条")
+            ghosts.forEach { repo.submit(it.text) }
+        } else {
+            _feedback.tryEmit("已重连")
+        }
     }
 
     companion object {

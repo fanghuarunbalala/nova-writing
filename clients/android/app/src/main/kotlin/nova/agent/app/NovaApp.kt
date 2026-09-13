@@ -105,7 +105,10 @@ fun NovaApp(container: AppContainer) {
                             appViewModel.setTheme(next)
                         },
                         onConflict = { container.demoTriggers.conflict() },
-                        onDisconnect = { container.demoTriggers.disconnect() },
+                        onDisconnect = {
+                            appViewModel.demoGoOffline()
+                            container.demoTriggers.disconnect()
+                        },
                         onLease = {
                             if (container.demoTriggers.lease.value == null) container.demoTriggers.readonlyLease()
                             else container.demoTriggers.clearLease()
@@ -177,6 +180,7 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
                     sheetState = sheetState,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                     onOpenSettings = { nav.push(Screen.Settings) },
+                    onWaitRecover = { appViewModel.demoWaitRecover { chatViewModel.onConnectionRestored() } },
                 )
                 Screen.Settings -> nova.agent.app.ui.settings.SettingsScreen(
                     vm = appViewModel,
@@ -203,6 +207,7 @@ private fun ChatBase(
     sheetState: androidx.compose.material3.SheetState,
     onOpenDrawer: () -> Unit,
     onOpenSettings: () -> Unit,
+    onWaitRecover: () -> Unit,
 ) {
     val palette = LocalNovaPalette.current
     val scope = rememberCoroutineScope()
@@ -299,6 +304,7 @@ private fun ChatBase(
                     contentTab = tab
                     scope.launch { sheetState.expand() }
                 },
+                onWaitRecover = onWaitRecover,
             )
         }
     }

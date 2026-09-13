@@ -33,12 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,8 +46,8 @@ import nova.agent.app.data.ApprovalCardUi
 import nova.agent.app.data.ApprovalDecision
 import nova.agent.app.data.ApprovalOp
 import nova.agent.app.data.ApprovalUi
+import nova.agent.app.ui.common.rememberFeedback
 import nova.agent.app.ui.theme.FwMedium
-import nova.agent.app.ui.theme.FwSemibold
 import nova.agent.app.ui.theme.LocalNovaPalette
 import nova.agent.app.ui.theme.NovaDimens
 import nova.agent.app.ui.theme.NovaText
@@ -57,8 +55,11 @@ import nova.agent.app.ui.theme.NovaTypography
 import nova.agent.app.ui.theme.brandBrush
 
 /**
- * 审批 BottomSheet（demo .apSheet）：120s 倒计时 + 三型卡（编辑~/新建+/删除−）
- * + 逐卡批准/驳回（驳回可附意见）+ 整批裁决行。裁决回填走 reducer（SysPill）。
+ * 审批 BottomSheet（demo apSheet L1648-1669 逐字对齐）：
+ * 头部「审批 N」+ 倒计时（≤15s 变 danger）+ meta 子标题；
+ * 整批行「本批 N 项 / 全部批准 / 全部驳回」；三型卡（edit~ / add+ / delete−）
+ * 含 curBox（键值行）、变更带（键值行）、verBanner 版本过期黄条；
+ * 驳回**必须附意见**（空意见拦截）；裁决留痕走 reducer（SysLine）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,9 +73,12 @@ fun ApprovalSheet(
     val palette = LocalNovaPalette.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    // 倒计时（≤15s 变 danger，demo cdChip；deadlineMs 变化时重算——速演触发器用）
     val deadline = approval.askedAt + approval.deadlineMs
-    var left by remember(approval.requestId) { mutableLongStateOf((deadline - System.currentTimeMillis()) / 1000) }
-    LaunchedEffect(approval.requestId) {
+    var left by remember(approval.requestId, approval.deadlineMs) {
+        mutableLongStateOf((deadline - System.currentTimeMillis()) / 1000)
+    }
+    LaunchedEffect(approval.requestId, approval.deadlineMs) {
         var last = (deadline - System.currentTimeMillis()) / 1000
         while (isActive && last > 0) {
             left = last
@@ -108,44 +112,60 @@ fun ApprovalSheet(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 28.dp),
         ) {
-            // 标题 + 倒计时 chip（<10s 变 danger）
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("审批请求", style = NovaTypography.titleSmall, modifier = Modifier.weight(1f))
+            // 头部：审批 + 待批数徽标 + 倒计时 chip（demo L1651-1661）
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("审批", style = NovaTypography.titleSmall)
+                Text(
+                    approval.cards.size.toString(),
+                    style = NovaTypography.labelSmall,
+                    color = palette.warn,
+                    modifier = Modifier
+                        .background(palette.warnBg, RoundedCornerShape(99.dp))
+                        .padding(horizontal = 7.dp, vertical = 1.dp),
+                )
+                Spacer(Modifier.weight(1f))
                 Text(
                     "${left}s",
                     style = NovaText.mono11,
-                    color = if (left < 10) palette.danger else palette.warn,
+                    color = if (left <= 15) palette.danger else palette.warn,
                 )
             }
             Text(
-                "以下工具变更将写入项目数据；驳回可附意见供模型修正。",
-                style = NovaTypography.bodySmall.copy(color = palette.muted),
+                "${approval.requestId} · 一次工具调用一批 · 批量决策作用于整批",
+                style = NovaText.mono11.copy(color = palette.faint),
                 modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
             )
 
+            // 整批裁决行（demo batchRow L1663-1667）
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "本批 ${approval.cards.size} 项",
+                    style = NovaTypography.labelMedium.copy(color = palette.muted),
+                    modifier = Modifier.weight(1f),
+                )
+                GradientPillButton("全部批准") { onBatchDecided(approval.requestId, true) }
+                OutlinedDangerButton("全部驳回") { onBatchDecided(approval.requestId, false) }
+            }
+
             approval.cards.forEach { card ->
+                Spacer(Modifier.height(10.dp))
                 ApprovalCard(
                     card = card,
                     onDecide = { approved, comment ->
                         onCardDecided(approval.requestId, card.id, approved, comment)
                     },
                 )
-                Spacer(Modifier.height(10.dp))
             }
-
-            // 整批裁决
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
-                GradientPillButton("全部批准", Modifier.weight(1f)) { onBatchDecided(approval.requestId, true) }
-                OutlinedDangerButton("全部驳回", Modifier.weight(1f)) { onBatchDecided(approval.requestId, false) }
-            }
+            Spacer(Modifier.height(6.dp))
         }
     }
 }
 
-/** 三型审批卡（demo .apCard） */
+/** 三型审批卡（demo apCard；verBanner 版本过期 + 键值行 + 驳回必附意见） */
 @Composable
 fun ApprovalCard(card: ApprovalCardUi, onDecide: (approved: Boolean, comment: String?) -> Unit) {
     val palette = LocalNovaPalette.current
+    val feedback = rememberFeedback()
     var opinionOpen by remember(card.id) { mutableStateOf(false) }
     var opinion by remember(card.id) { mutableStateOf("") }
     val decided = card.decision != ApprovalDecision.PENDING
@@ -157,11 +177,18 @@ fun ApprovalCard(card: ApprovalCardUi, onDecide: (approved: Boolean, comment: St
             .border(1.dp, palette.border, RoundedCornerShape(NovaDimens.radiusMd))
             .padding(horizontal = 13.dp, vertical = 12.dp),
     ) {
-        // 工具名 + 状态 chip + 来源
+        // 工具名 + 来源 chip + 状态 chip
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(card.toolName, style = NovaText.mono11, color = palette.muted, modifier = Modifier.weight(1f))
             card.originChip?.let {
-                Text(it, style = NovaTypography.labelSmall.copy(color = palette.faint))
+                Text(
+                    it,
+                    style = NovaTypography.labelSmall,
+                    color = palette.faint,
+                    modifier = Modifier
+                        .background(palette.surface2, RoundedCornerShape(99.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                )
             }
             DecisionChip(card.decision)
         }
@@ -189,9 +216,23 @@ fun ApprovalCard(card: ApprovalCardUi, onDecide: (approved: Boolean, comment: St
             modifier = Modifier.padding(start = 23.dp),
         )
 
-        // 当前内容框（curBox：edit/delete 实色警示边；add 虚线）
-        card.current?.let { current ->
-            Box(
+        // 版本过期黄条（demo verBanner L2229：edit 卡 stale v2→v3）
+        if (card.baseVersion != null && card.staleVersion != null) {
+            Text(
+                "版本已过期：正式稿已被其他修改更新（基线 ${card.baseVersion} → 当前 ${card.staleVersion}），批准后此操作可能执行失败。",
+                style = NovaTypography.labelSmall.copy(color = palette.warn),
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .background(palette.warnBg, RoundedCornerShape(NovaDimens.radiusSm))
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
+            )
+        }
+
+        // 当前内容框（curBox：edit/delete 实色警示边；add 虚线；小节标题按 op 语义）
+        val currentText = card.current
+        if (currentText != null || card.currentRows.isNotEmpty()) {
+            Column(
                 Modifier
                     .padding(top = 10.dp)
                     .fillMaxWidth()
@@ -204,14 +245,32 @@ fun ApprovalCard(card: ApprovalCardUi, onDecide: (approved: Boolean, comment: St
                     .curBoxBorder(card.op, palette.borderStrong, palette.danger, palette.warn)
                     .padding(10.dp),
             ) {
-                Column {
-                    Text("当前内容", style = NovaTypography.labelSmall.copy(color = palette.faint))
-                    Text(current, style = NovaText.approvalBody.copy(color = palette.fg), modifier = Modifier.padding(top = 2.dp))
+                Text(
+                    when (card.op) {
+                        ApprovalOp.EDIT -> "当前内容 · 将被覆盖"
+                        ApprovalOp.ADD -> "当前内容 · 无既有数据 · 此操作为新建"
+                        ApprovalOp.DELETE -> "当前内容 · 将被删除"
+                    },
+                    style = NovaTypography.labelSmall.copy(color = palette.faint),
+                )
+                if (card.currentRows.isNotEmpty()) {
+                    card.currentRows.forEach { (k, v) ->
+                        Row(Modifier.padding(top = 3.dp)) {
+                            Text(k, style = NovaText.mono11.copy(color = palette.muted), modifier = Modifier.width(44.dp))
+                            Text(v, style = NovaText.approvalBody.copy(color = palette.fg))
+                        }
+                    }
+                } else {
+                    Text(
+                        currentText.orEmpty(),
+                        style = NovaText.approvalBody.copy(color = palette.fg),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
             }
         }
 
-        // 变更带（chgBand 色语义）
+        // 变更带（chgBand 色语义 + 键值行）
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -231,45 +290,84 @@ fun ApprovalCard(card: ApprovalCardUi, onDecide: (approved: Boolean, comment: St
             ) {
                 Text(
                     when (card.op) {
-                        ApprovalOp.ADD -> "新增"
-                        ApprovalOp.DELETE -> "删除"
-                        ApprovalOp.EDIT -> "修改"
+                        ApprovalOp.ADD -> "写入内容"
+                        ApprovalOp.DELETE -> "删除参数"
+                        ApprovalOp.EDIT -> "变更后"
                     },
-                    style = TextStyle(fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = when (card.op) {
-                        ApprovalOp.ADD -> palette.success
-                        ApprovalOp.DELETE -> palette.danger
-                        ApprovalOp.EDIT -> palette.accentInk
-                    }),
+                    style = TextStyle(
+                        fontSize = 10.5.sp, fontWeight = FontWeight.Bold,
+                        color = when (card.op) {
+                            ApprovalOp.ADD -> palette.success
+                            ApprovalOp.DELETE -> palette.danger
+                            ApprovalOp.EDIT -> palette.accentInk
+                        },
+                    ),
                 )
             }
             Text("变更说明", style = NovaTypography.labelSmall.copy(color = palette.muted))
         }
-        Text(
-            card.change,
-            style = NovaText.approvalBody.copy(color = palette.fg),
-            modifier = Modifier.padding(top = 4.dp),
-        )
+        if (card.changeRows.isNotEmpty()) {
+            card.changeRows.forEach { (k, v) ->
+                Row(Modifier.padding(top = 4.dp)) {
+                    Text(k, style = NovaText.mono11.copy(color = palette.muted), modifier = Modifier.width(44.dp))
+                    Text(v, style = NovaText.approvalBody.copy(color = palette.fg))
+                }
+            }
+        } else {
+            Text(
+                card.change,
+                style = NovaText.approvalBody.copy(color = palette.fg),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
 
-        // 裁决按钮 / 结果盖章
+        // 裁决区：意见必填（demo L2234-2238）；裁决后落结果行（apDone 三态）
         if (!decided) {
             if (opinionOpen) {
                 OutlinedTextField(
                     value = opinion,
                     onValueChange = { opinion = it },
-                    placeholder = { Text("驳回意见（可选）", style = NovaTypography.bodySmall) },
+                    placeholder = { Text("驳回意见会作为 tool 消息回填给运行中的会话…", style = NovaTypography.bodySmall) },
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                     minLines = 2,
                 )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
-                GradientPillButton("批准", Modifier.weight(1f)) { onDecide(true, null) }
-                OutlinedDangerButton(
-                    if (opinionOpen) "驳回并附意见" else "驳回",
-                    Modifier.weight(1f),
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 ) {
-                    if (opinionOpen) onDecide(false, opinion.ifBlank { null }) else opinionOpen = true
+                    OutlinedDangerButton("取消", Modifier.weight(1f)) { opinionOpen = false }
+                    GradientPillButton("提交驳回意见", Modifier.weight(1f)) {
+                        if (opinion.isBlank()) {
+                            feedback("驳回请附意见——它会回填给运行中的会话")
+                        } else {
+                            onDecide(false, opinion.trim())
+                        }
+                    }
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
+                    GradientPillButton("批准", Modifier.weight(1f)) { onDecide(true, null) }
+                    OutlinedDangerButton("驳回并附意见", Modifier.weight(1f)) { opinionOpen = true }
                 }
             }
+        } else {
+            Text(
+                when (card.decision) {
+                    ApprovalDecision.APPROVED -> "已处理 · 已批准——放行并通知会话继续"
+                    ApprovalDecision.REJECTED -> "已处理 · 已拒绝"
+                    ApprovalDecision.EXPIRED -> "已过期 · 120s 无决策自动拒绝（server 懒过期）"
+                    ApprovalDecision.PENDING -> ""
+                },
+                style = NovaTypography.labelSmall.copy(
+                    color = when (card.decision) {
+                        ApprovalDecision.APPROVED -> palette.success
+                        ApprovalDecision.REJECTED -> palette.danger
+                        ApprovalDecision.EXPIRED -> palette.warn
+                        ApprovalDecision.PENDING -> palette.faint
+                    },
+                ),
+                modifier = Modifier.padding(top = 10.dp),
+            )
         }
     }
 }
@@ -278,9 +376,10 @@ fun ApprovalCard(card: ApprovalCardUi, onDecide: (approved: Boolean, comment: St
 private fun DecisionChip(decision: ApprovalDecision) {
     val palette = LocalNovaPalette.current
     val (bg, fg, label) = when (decision) {
-        ApprovalDecision.PENDING -> Triple(palette.warnBg, palette.warn, "待裁决")
+        ApprovalDecision.PENDING -> Triple(palette.warnBg, palette.warn, "待批准")
         ApprovalDecision.APPROVED -> Triple(palette.successBg, palette.success, "已批准")
-        ApprovalDecision.REJECTED -> Triple(palette.dangerBg, palette.danger, "已驳回")
+        ApprovalDecision.REJECTED -> Triple(palette.dangerBg, palette.danger, "已拒绝")
+        ApprovalDecision.EXPIRED -> Triple(palette.warnBg, palette.warn, "已过期")
     }
     Text(
         label,

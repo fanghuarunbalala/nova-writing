@@ -34,20 +34,47 @@ class AppContainer(private val appContext: Context) {
     val demoTriggers = DemoTriggers()
 }
 
+/** 演示信号（抽屉演示控制区 FR9）：ChatViewModel / AppViewModel 消费 */
+sealed interface DemoSignal {
+    /** 生成失败注入（工具行 FAIL + 五态条 FailedRetry） */
+    data object FailGeneration : DemoSignal
+
+    /** 审批超时速演（120s → 6s） */
+    data object SpeedApproval : DemoSignal
+
+    /** 连接四态循环（AppViewModel 处理） */
+    data object CycleConnection : DemoSignal
+}
+
 /** 覆盖层视觉验收的触发源（chat VM 收集） */
 class DemoTriggers {
     private val _oneShots = MutableSharedFlow<ChatOneShot>(extraBufferCapacity = 8)
     val oneShots: SharedFlow<ChatOneShot> = _oneShots
 
+    private val _demoEvents = MutableSharedFlow<DemoSignal>(extraBufferCapacity = 8)
+    val demoEvents: SharedFlow<DemoSignal> = _demoEvents
+
     private val _lease = MutableStateFlow<ReadOnlyLease?>(null)
     val lease: StateFlow<ReadOnlyLease?> = _lease
 
     fun conflict() {
-        _oneShots.tryEmit(ChatOneShot.Conflict409("MacBook Pro 14"))
+        _oneShots.tryEmit(ChatOneShot.Conflict409("dev_mb14"))
     }
 
     fun disconnect() {
         _oneShots.tryEmit(ChatOneShot.Disconnected)
+    }
+
+    fun failGeneration() {
+        _demoEvents.tryEmit(DemoSignal.FailGeneration)
+    }
+
+    fun speedUpApproval() {
+        _demoEvents.tryEmit(DemoSignal.SpeedApproval)
+    }
+
+    fun cycleConnection() {
+        _demoEvents.tryEmit(DemoSignal.CycleConnection)
     }
 
     fun readonlyLease() {

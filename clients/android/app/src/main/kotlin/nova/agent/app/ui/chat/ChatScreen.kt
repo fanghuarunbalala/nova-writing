@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,7 +39,7 @@ import nova.agent.app.ui.vm.ChatViewModel
  * 状态驱动渲染在 [ChatBody]（可直接组合截图）；一次性事件与审批弹层在这里接线。
  */
 @Composable
-fun ChatScreen(vm: ChatViewModel, onOpenEntity: (tab: Int) -> Unit = {}) {
+fun ChatScreen(vm: ChatViewModel, onOpenEntity: (tab: Int) -> Unit = {}, onWaitRecover: () -> Unit = {}) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
     // VM 侧操作反馈（如「已加载更早 1 段」）→ 全局 snackbar（2.6s）
@@ -85,33 +86,63 @@ fun ChatScreen(vm: ChatViewModel, onOpenEntity: (tab: Int) -> Unit = {}) {
                 is ChatOneShot.Conflict409 -> conflictHolder = shot.holderDevice
                 ChatOneShot.Disconnected -> disconnected = true
                 is ChatOneShot.LeaseTakeover -> Unit // 阶段3：顶到后台提示
-                ChatOneShot.ApprovalExpired -> Unit
+                ChatOneShot.ApprovalExpired -> Unit // 超时留痕走 reducer（ApprovalTimedOut）
             }
         }
     }
     val palette = LocalNovaPalette.current
-    conflictHolder?.let { holder ->
+    conflictHolder?.let { _ ->
+        // demo conflictDlg（L1825-1837 逐字）：两选裁决 + M4 边界注
         AlertDialog(
             onDismissRequest = { conflictHolder = null },
             containerColor = palette.surface,
-            title = { Text("会话被其他设备持有", style = NovaTypography.titleSmall) },
-            text = { Text("「$holder」持有写作租约。可等待其释放，或从该设备退出会话后再接续。", style = NovaTypography.bodyMedium) },
+            title = { Text("补推冲突 · 需人工裁决", style = NovaTypography.titleSmall) },
+            text = {
+                Text(
+                    "恢复连接后补推积压时命中 409：桌面端在离线期间写过 沈砚 · 角色档案（v3），与你本地的积压改动同源。租约需重新申请。\n\n" +
+                        "M4 只提示不合并——完整的冲突合并 UI 属 M6（跨端续跑向导）。",
+                    style = NovaTypography.bodyMedium,
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { conflictHolder = null }) { Text("知道了", color = palette.accent) }
+                TextButton(onClick = {
+                    conflictHolder = null
+                    feedback("已保留服务器版本——本地积压的 2 条变更已丢弃，租约重新申请成功")
+                }) { Text("保留服务器版本（丢弃本地积压）", color = palette.accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    conflictHolder = null
+                    feedback("已保留本地版本——覆盖服务器（expectedLastSeq 校验通过），桌面端将收到 409 转只读")
+                }) { Text("保留本地版本（覆盖服务器）", color = palette.muted) }
             },
         )
     }
     if (disconnected) {
+        // demo offlineDlg（L1809-1821 逐字）：排队发送 / 等待恢复
         AlertDialog(
             onDismissRequest = { disconnected = false },
             containerColor = palette.surface,
-            title = { Text("连接已断开", style = NovaTypography.titleSmall) },
-            text = { Text("SSE 通道断线（demo 旁路）。重连后将从游标续拉，期间输入进入本地积压。", style = NovaTypography.bodyMedium) },
+            title = { Text("服务器不可达", style = NovaTypography.titleSmall) },
+            text = {
+                Text(
+                    "重连 4 次未成功（退避 1/2/5/10s 封顶）→ 降级离线。本地性能缓存（journal 镜像 + 域快照）仍可完整查看已同步内容；" +
+                        "新指令进待发队列（上限 10k 行），恢复后按序补推。\n\n纯云端架构：没有「本地项目」可切——离线只读缓存 + 排队。",
+                    style = NovaTypography.bodyMedium,
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { disconnected = false }) { Text("重连", color = palette.accent) }
+                TextButton(onClick = {
+                    disconnected = false
+                    vm.setOfflineQueued(true)
+                }) { Text("排队发送（恢复后补推）", color = palette.accent) }
             },
             dismissButton = {
-                TextButton(onClick = { disconnected = false }) { Text("稍后", color = palette.muted) }
+                TextButton(onClick = {
+                    disconnected = false
+                    feedback("等待恢复——只读查看（SSE 断线，进度停在 seq 213）")
+                    onWaitRecover()
+                }) { Text("等待恢复（只读缓存）", color = palette.muted) }
             },
         )
     }
@@ -239,6 +270,19 @@ fun ChatBody(
                     TypewriterDraftPanel(state.draft)
                 }
             }
+        }
+
+        // 断线排队态：积压计数行（demo offlineDlg 队列语义）
+        if (state.offlineQueued) {
+            val ghosts = state.items.count { it is ChatItem.GhostItem }
+            Text(
+                "本地积压 $ghosts 条 · 上限 10,000 行 · 恢复后按序补推",
+                style = nova.agent.app.ui.theme.NovaText.mono11.copy(color = palette.warn),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(palette.warnBg)
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+            )
         }
 
         // 只读态：roFooter 替换输入区（demo 2376-2380：composer 隐藏）

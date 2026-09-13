@@ -3,10 +3,13 @@ package nova.agent.app.data
 /**
  * 聊天列表项（UI 投影模型，纯 Kotlin）。
  * id 约定：UserMsg u-* / AssistantMsg a-<runSeq> / ToolLine t-<callId> /
- * GhostItem g-* / SysPill s-* / AskCard q-<runSeq>；前插历史段 h-<seg>-<n>。
+ * GhostItem g-* / SysPill s-* / SysLine l-* / RoundLabel r-<runSeq> / AskCard q-<runSeq>；前插历史段 h-<seg>-<n>。
  */
 sealed interface ChatItem {
     val id: String
+
+    /** 轮次分隔线（demo roundDivider：「第 N 轮 · 标签」） */
+    data class RoundLabel(override val id: String, val text: String) : ChatItem
 
     data class UserMsg(override val id: String, val text: String) : ChatItem
 

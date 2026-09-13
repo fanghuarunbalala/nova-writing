@@ -236,6 +236,7 @@ fun ChatBody(
 @Composable
 private fun ChatItemView(item: ChatItem, onToggleReasoning: (String) -> Unit) {
     when (item) {
+        is ChatItem.RoundLabel -> RoundLabelView(item)
         is ChatItem.UserMsg -> UserBubble(item)
         is ChatItem.AssistantMsg -> AssistantBlock(item, onToggleReasoning = { onToggleReasoning(item.id) })
         is ChatItem.ToolLine -> ToolRow(item)

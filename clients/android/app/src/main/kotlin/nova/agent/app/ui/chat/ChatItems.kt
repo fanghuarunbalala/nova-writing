@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import nova.agent.app.data.ChatItem
 import nova.agent.app.data.PillKind
 import nova.agent.app.data.ToolPhase
@@ -56,6 +58,34 @@ import nova.agent.app.ui.theme.NovaDimens
 import nova.agent.app.ui.theme.NovaText
 import nova.agent.app.ui.theme.NovaTypography
 import nova.agent.app.ui.theme.NovaDimens.CARET_BLINK_MS
+
+/* ============ 轮次分隔线（demo roundDivider：细线夹 mono 小字） ============ */
+
+@Composable
+fun RoundLabelView(item: ChatItem.RoundLabel) {
+    val palette = LocalNovaPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(palette.borderStrong),
+        )
+        Text(item.text, style = NovaText.mono11.copy(color = palette.faint, fontSize = 10.5.sp))
+        Box(
+            Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(palette.borderStrong),
+        )
+    }
+}
 
 /* ============ 用户气泡（demo .msgUser：右侧、82% 宽、accent-9 底、尾角 4dp） ============ */
 

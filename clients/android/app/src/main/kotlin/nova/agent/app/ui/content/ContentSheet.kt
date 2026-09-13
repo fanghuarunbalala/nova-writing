@@ -17,10 +17,6 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,11 +33,16 @@ import nova.agent.app.ui.theme.NovaTypography
 /**
  * 内容页骨架（PRD FR11）：BottomSheetScaffold 的 sheetContent。
  * 折叠时露出 peek 卡（书名 + 进度 + go，点击/上拉展开）；展开后四 tab（大纲/正文/人物/地点），内容 = 阶段4占位。
+ * tab 为受控状态（宿主持有）：实体胶囊（entChip）点击跳转对应 tab 依赖此设计（PRD FR2.2）。
  */
 @Composable
-fun ContentSheet(project: CloudProject?, onExpand: () -> Unit = {}) {
+fun ContentSheet(
+    project: CloudProject?,
+    tab: Int = 0,
+    onTabChange: (Int) -> Unit = {},
+    onExpand: () -> Unit = {},
+) {
     val palette = LocalNovaPalette.current
-    var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("大纲", "正文", "人物", "地点")
 
     Column(
@@ -100,10 +101,12 @@ fun ContentSheet(project: CloudProject?, onExpand: () -> Unit = {}) {
                         .weight(1f)
                         .padding(horizontal = 2.dp)
                         .height(32.dp)
+                        .clip(RoundedCornerShape(NovaDimens.radiusSm))
                         .background(
                             if (selected) palette.surface else androidx.compose.ui.graphics.Color.Transparent,
                             RoundedCornerShape(NovaDimens.radiusSm),
-                        ),
+                        )
+                        .clickable { if (!selected) onTabChange(i) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

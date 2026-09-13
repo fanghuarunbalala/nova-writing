@@ -37,8 +37,11 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -75,34 +78,37 @@ fun NovaApp(container: AppContainer) {
     val theme by appViewModel.theme.collectAsStateWithLifecycle()
 
     NovaTheme(theme) {
-        val auth by appViewModel.auth.collectAsStateWithLifecycle()
-        // 键盘弹起时藏掉演示浮条（避免盖住输入区）
-        val imeVisible = WindowInsets.isImeVisible
-        Box(Modifier.fillMaxSize()) {
-            when (auth) {
-                AuthUiState.Unconfigured, AuthUiState.NeedRelogin -> LoginScreen(appViewModel)
-                else -> MainScaffold(container, appViewModel)
-            }
-            if (BuildConfig.DEBUG && !imeVisible && auth !is AuthUiState.Unconfigured && auth !is AuthUiState.NeedRelogin) {
-                val leaseActive by container.demoTriggers.lease.collectAsStateWithLifecycle()
-                nova.agent.app.ui.demo.DemoReplayBar(
-                    theme = theme,
-                    leaseActive = leaseActive != null,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(bottom = 108.dp),
-                    onCycleTheme = {
-                        val next = NovaThemeKind.entries[(NovaThemeKind.entries.indexOf(theme) + 1) % NovaThemeKind.entries.size]
-                        appViewModel.setTheme(next)
-                    },
-                    onConflict = { container.demoTriggers.conflict() },
-                    onDisconnect = { container.demoTriggers.disconnect() },
-                    onLease = {
-                        if (container.demoTriggers.lease.value == null) container.demoTriggers.readonlyLease()
-                        else container.demoTriggers.clearLease()
-                    },
-                )
+        // 全局 snackbar 宿主（PRD FR8）：登录门/主界面/演示浮条都在其内
+        nova.agent.app.ui.common.FeedbackHost {
+            val auth by appViewModel.auth.collectAsStateWithLifecycle()
+            // 键盘弹起时藏掉演示浮条（避免盖住输入区）
+            val imeVisible = WindowInsets.isImeVisible
+            Box(Modifier.fillMaxSize()) {
+                when (auth) {
+                    AuthUiState.Unconfigured, AuthUiState.NeedRelogin -> LoginScreen(appViewModel)
+                    else -> MainScaffold(container, appViewModel)
+                }
+                if (BuildConfig.DEBUG && !imeVisible && auth !is AuthUiState.Unconfigured && auth !is AuthUiState.NeedRelogin) {
+                    val leaseActive by container.demoTriggers.lease.collectAsStateWithLifecycle()
+                    nova.agent.app.ui.demo.DemoReplayBar(
+                        theme = theme,
+                        leaseActive = leaseActive != null,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 108.dp),
+                        onCycleTheme = {
+                            val next = NovaThemeKind.entries[(NovaThemeKind.entries.indexOf(theme) + 1) % NovaThemeKind.entries.size]
+                            appViewModel.setTheme(next)
+                        },
+                        onConflict = { container.demoTriggers.conflict() },
+                        onDisconnect = { container.demoTriggers.disconnect() },
+                        onLease = {
+                            if (container.demoTriggers.lease.value == null) container.demoTriggers.readonlyLease()
+                            else container.demoTriggers.clearLease()
+                        },
+                    )
+                }
             }
         }
     }
@@ -192,6 +198,8 @@ private fun ChatBase(
 ) {
     val palette = LocalNovaPalette.current
     val scope = rememberCoroutineScope()
+    // 内容 sheet 的 tab 受控状态：实体胶囊（entChip）点击可指定跳转 tab（PRD FR2.2）
+    var contentTab by rememberSaveable { mutableIntStateOf(0) }
 
     // 键盘弹起时整体收掉内容 sheet：否则 peek 高度 + 导航栏内边距会垫在输入法与输入条之间
     // （真机实测的大段空白，PRD 开放问题④的落地）；键盘收起后回落 peek。
@@ -208,7 +216,12 @@ private fun ChatBase(
         sheetShape = RoundedCornerShape(topStart = NovaDimens.radiusSheet, topEnd = NovaDimens.radiusSheet),
         sheetDragHandle = null,
         sheetContent = {
-            ContentSheet(currentProject, onExpand = { scope.launch { sheetState.expand() } })
+            ContentSheet(
+                project = currentProject,
+                tab = contentTab,
+                onTabChange = { contentTab = it },
+                onExpand = { scope.launch { sheetState.expand() } },
+            )
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {

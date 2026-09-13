@@ -17,7 +17,12 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
         } else {
             ChatItem.UserMsg("u-$nextId", event.text)
         }
-        copy(items = items + item, input = "", lastSubmitted = event.text, localId = nextId)
+        // 待生效执行模式随本条消息落地（demo applyModeIfPending）
+        val mode = pendingExecMode ?: execMode
+        copy(
+            items = items + item, input = "", lastSubmitted = event.text, localId = nextId,
+            execMode = mode, pendingExecMode = null,
+        )
     }
 
     is ChatUiEvent.RunStarted -> {
@@ -75,7 +80,13 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
     }
 
     is ChatUiEvent.ApprovalAsked -> {
-        val pill = ChatItem.SysPill("s-${event.approval.requestId}", "审批请求 · ${event.approval.cards.size} 项变更待确认", PillKind.WARN)
+        // demo sysPill 文案（L1219）：「角色写入 · 沈砚 等 3 项待审批 —— 点击查看」
+        val first = event.approval.cards.firstOrNull()?.title?.substringBefore(" · ") ?: "变更"
+        val pill = ChatItem.SysPill(
+            "s-${event.approval.requestId}",
+            "角色写入 · $first 等 ${event.approval.cards.size} 项待审批 —— 点击查看",
+            PillKind.WARN,
+        )
         val merged = if (items.any { it.id == pill.id }) items else items + pill
         copy(items = merged, pendingApproval = event.approval, runStatus = RunStatus.WaitingApproval)
     }
@@ -85,12 +96,13 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
             // 过期/失序的裁决（如超时自动驳回后本地又到一次）——幂等吞掉
             this
         } else {
-            val pill = ChatItem.SysPill(
-                "s-${event.requestId}-done",
-                if (event.approved) "已批准 · 工具继续执行" else "已驳回 · 附意见",
-                if (event.approved) PillKind.SUCCESS else PillKind.DANGER,
+            // demo sysLine（L2314）：整批决策单行 mono 留痕
+            val count = pendingApproval?.cards?.size ?: 0
+            val line = ChatItem.SysLine(
+                "l-${event.requestId}",
+                if (event.approved) "整批决策：$count 项全部批准" else "整批决策：$count 项全部驳回",
             )
-            val merged = if (items.any { it.id == pill.id }) items else items + pill
+            val merged = if (items.any { it.id == line.id }) items else items + line
             copy(
                 items = merged,
                 pendingApproval = null,
@@ -102,16 +114,37 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
     is ChatUiEvent.ApprovalCardDecided -> {
         val pa = pendingApproval ?: return this
         if (pa.requestId != event.requestId) this
-        else copy(
-            pendingApproval = pa.copy(
-                cards = pa.cards.map { card ->
-                    if (card.id == event.cardId && card.decision == ApprovalDecision.PENDING) {
-                        card.copy(decision = if (event.approved) ApprovalDecision.APPROVED else ApprovalDecision.REJECTED)
-                    } else card
+        else {
+            val card = pa.cards.firstOrNull { it.id == event.cardId && it.decision == ApprovalDecision.PENDING }
+                ?: return this
+            // demo 只给逐项「驳回」留 sysLine（L2292）；批准仅卡内盖章
+            val line = if (event.approved) null else ChatItem.SysLine(
+                "l-${event.cardId}",
+                buildString {
+                    append("已驳回 ${card.toolName} · ${card.title.substringBefore("（")}")
+                    if (!event.comment.isNullOrBlank()) append(" · 意见：${event.comment}")
                 },
-            ),
-        )
+            )
+            val merged = line?.let { if (items.any { l -> l.id == it.id }) items else items + it } ?: items
+            copy(
+                items = merged,
+                pendingApproval = pa.copy(
+                    cards = pa.cards.map { c ->
+                        if (c.id == card.id) c.copy(decision = if (event.approved) ApprovalDecision.APPROVED else ApprovalDecision.REJECTED) else c
+                    },
+                ),
+            )
+        }
     }
+
+    is ChatUiEvent.ContextCleared -> copy(
+        items = listOf(ChatItem.SysLine("l-clear", "已清空上下文 · 新一轮开始——此前档案与正文保留")),
+        draft = "",
+        hasMoreOlder = false,
+        olderRunsRemaining = 0,
+        runStatus = RunStatus.Idle,
+        runStartedAt = null,
+    )
 
     is ChatUiEvent.RunClosed -> when (event.reason) {
         RunEndReason.COMPLETED, RunEndReason.ABORTED, RunEndReason.MAX_TURNS ->
@@ -131,7 +164,8 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
 
     is ChatUiEvent.InputChanged -> copy(input = event.text)
 
-    is ChatUiEvent.ExecModeChanged -> copy(execMode = event.mode)
+    // 切换只挂「待生效」（demo pendModeChip）；实际生效点在 Submitted
+    is ChatUiEvent.ExecModeChanged -> copy(pendingExecMode = event.mode)
 
     is ChatUiEvent.LeaseObserved -> copy(lease = event.lease)
 

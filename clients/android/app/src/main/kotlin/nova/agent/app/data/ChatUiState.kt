@@ -14,6 +14,8 @@ data class ChatUiState(
     val lease: ReadOnlyLease? = null,
     val input: String = "",
     val execMode: ExecMode = ExecMode.NEED_APPROVAL,
+    /** 「待生效」执行模式（demo pendModeChip）：切换不立即生效，随下一条消息应用 */
+    val pendingExecMode: ExecMode? = null,
     /** 审批 sheet 数据；非 null 即弹层 */
     val pendingApproval: ApprovalUi? = null,
     /** 当前 run 起始时间戳（思考态计秒用） */
@@ -40,8 +42,10 @@ sealed interface ChatUiEvent {
     data class ToolFinished(val callId: String, val name: String, val ok: Boolean, val summary: String, val error: String?, val ts: Long) : ChatUiEvent
     data class ApprovalAsked(val approval: ApprovalUi, val ts: Long) : ChatUiEvent
     data class ApprovalSettled(val requestId: String, val approved: Boolean, val ts: Long) : ChatUiEvent
-    /** 卡级裁决（sheet 内单卡批准/驳回的视觉盖章；全卡落定由 VM 触发批级 settle） */
-    data class ApprovalCardDecided(val requestId: String, val cardId: String, val approved: Boolean) : ChatUiEvent
+    /** 卡级裁决（sheet 内单卡批准/驳回的视觉盖章；全卡落定由 VM 触发批级 settle）；驳回意见随事件留痕 */
+    data class ApprovalCardDecided(val requestId: String, val cardId: String, val approved: Boolean, val comment: String? = null) : ChatUiEvent
+    /** 清空上下文 · 新一轮（demo ⋯ 菜单） */
+    data object ContextCleared : ChatUiEvent
     data class RunClosed(val reason: RunEndReason, val error: String?, val ts: Long) : ChatUiEvent
     /** 历史/回放的用户消息（runSeq 幂等，避免与交互 Submitted 重复） */
     data class UserEchoed(val runSeq: Int, val text: String, val ts: Long) : ChatUiEvent

@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,7 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -125,7 +128,6 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
     val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded)
     val projects by appViewModel.projects.collectAsStateWithLifecycle()
     val currentId by appViewModel.currentProjectId.collectAsStateWithLifecycle()
-    val approvals by appViewModel.approvals.collectAsStateWithLifecycle()
     val currentProject = projects.firstOrNull { it.id == currentId } ?: CloudProject("p-0", "—", "—", 0, "—")
 
     // 返回键优先级（单一 BackHandler + 纯函数判定）：sheet > 抽屉 > 路由栈 > 退出
@@ -168,9 +170,14 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
     ) {
         Crossfade(targetState = nav.current, animationSpec = tween(NovaDimens.DUR_BASE), label = "route") { screen ->
             when (screen) {
-                Screen.Chat -> ChatBase(chatViewModel, approvals.size, currentProject, sheetState) {
-                    scope.launch { drawerState.open() }
-                }
+                Screen.Chat -> ChatBase(
+                    chatViewModel = chatViewModel,
+                    currentProject = currentProject,
+                    auth = appViewModel.auth.collectAsStateWithLifecycle().value,
+                    sheetState = sheetState,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onOpenSettings = { nav.push(Screen.Settings) },
+                )
                 Screen.Settings -> nova.agent.app.ui.settings.SettingsScreen(
                     vm = appViewModel,
                     onNavigate = { nav.push(it) },
@@ -191,15 +198,19 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
 @Composable
 private fun ChatBase(
     chatViewModel: ChatViewModel,
-    approvalCount: Int,
     currentProject: CloudProject,
+    auth: AuthUiState,
     sheetState: androidx.compose.material3.SheetState,
     onOpenDrawer: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val palette = LocalNovaPalette.current
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val feedback = nova.agent.app.ui.common.rememberFeedback()
     // 内容 sheet 的 tab 受控状态：实体胶囊（entChip）点击可指定跳转 tab（PRD FR2.2）
     var contentTab by rememberSaveable { mutableIntStateOf(0) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     // 键盘弹起时整体收掉内容 sheet：否则 peek 高度 + 导航栏内边距会垫在输入法与输入条之间
     // （真机实测的大段空白，PRD 开放问题④的落地）；键盘收起后回落 peek。
@@ -225,7 +236,7 @@ private fun ChatBase(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            // 顶栏（demo --topbar-h 56dp）
+            // 顶栏（demo L1113-1140）：☰ + 左对齐双行标题 + 连接胶囊 + ⋯ 菜单
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -238,33 +249,106 @@ private fun ChatBase(
                 IconButton(onClick = onOpenDrawer) {
                     Icon(Icons.Outlined.Menu, contentDescription = "打开侧栏", tint = palette.fg)
                 }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.weight(1f)) {
                     Text(currentProject.name, style = NovaTypography.titleSmall)
                     Text(
-                        currentProject.progress,
+                        chatViewModel.sessionSubtitle,
                         style = NovaText.mono12.copy(color = palette.muted, fontSize = 11.sp),
                     )
                 }
+                ConnChip(auth = auth, onClick = onOpenSettings)
                 Box {
-                    IconButton(onClick = { /* 审批中心入口由抽屉/路由承担，顶栏铃铛留演示位 */ }) {
-                        Icon(Icons.Outlined.Notifications, contentDescription = "审批中心", tint = palette.fg)
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "会话菜单", tint = palette.fg)
                     }
-                    if (approvalCount > 0) {
-                        Box(
-                            Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 8.dp, end = 8.dp)
-                                .size(16.dp)
-                                .background(palette.warn, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(approvalCount.toString(), color = palette.surface, fontSize = 10.sp)
-                        }
+                    androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("会话信息", style = NovaTypography.bodyMedium)
+                                    Text(chatViewModel.sessionMeta, style = NovaText.mono11.copy(color = palette.faint))
+                                }
+                            },
+                            onClick = {
+                                menuOpen = false
+                                feedback("会话 conv_2 · run #47 · 模式 需审核 · journal seq 213")
+                            },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("导出本轮 Markdown", style = NovaTypography.bodyMedium) },
+                            onClick = {
+                                menuOpen = false
+                                exportCurrentRound(context, chatViewModel.uiState.value.items)
+                                feedback("已导出 Markdown：长夜余烬-追逃段-第3轮.md（分享面板 demo）")
+                            },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("清空上下文 · 新一轮", style = NovaTypography.bodyMedium) },
+                            onClick = {
+                                menuOpen = false
+                                chatViewModel.clearContext()
+                            },
+                        )
                     }
                 }
                 Spacer(Modifier.width(8.dp))
             }
-            ChatScreen(vm = chatViewModel)
+            ChatScreen(
+                vm = chatViewModel,
+                onOpenEntity = { tab ->
+                    contentTab = tab
+                    scope.launch { sheetState.expand() }
+                },
+            )
         }
     }
+}
+
+/** 连接状态胶囊（demo connChip L1117-1119）：状态点 + 文案；点击进设置页 */
+@Composable
+private fun ConnChip(auth: AuthUiState, onClick: () -> Unit) {
+    val palette = LocalNovaPalette.current
+    val (dot, label) = when (auth) {
+        is AuthUiState.Online -> palette.success to "在线"
+        AuthUiState.Offline -> palette.danger to "离线"
+        AuthUiState.NeedRelogin -> palette.warn to "需重登"
+        AuthUiState.LoggingIn -> palette.warn to "连接中"
+        AuthUiState.Unconfigured -> palette.faint to "未配置"
+    }
+    Row(
+        Modifier
+            .background(palette.surface2, RoundedCornerShape(99.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Box(Modifier.size(6.dp).background(dot, CircleShape))
+        Text(label, style = NovaTypography.labelSmall)
+    }
+}
+
+/** 导出本轮 Markdown（demo ⋯ 菜单：本地拼接 + 系统分享面板，不涉网络） */
+private fun exportCurrentRound(context: android.content.Context, items: List<nova.agent.app.data.ChatItem>) {
+    val md = buildString {
+        appendLine("# 长夜余烬 · 追逃段 · 第 3 轮")
+        appendLine()
+        items.forEach { item ->
+            when (item) {
+                is nova.agent.app.data.ChatItem.RoundLabel -> {
+                    appendLine(); appendLine("## ${item.text}"); appendLine()
+                }
+                is nova.agent.app.data.ChatItem.UserMsg -> appendLine("**我**：${item.text}\n")
+                is nova.agent.app.data.ChatItem.AssistantMsg -> appendLine("${item.text}\n")
+                is nova.agent.app.data.ChatItem.ToolLine -> appendLine("- `${item.name}` ${item.summary}")
+                else -> Unit
+            }
+        }
+    }
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/markdown"
+        putExtra(android.content.Intent.EXTRA_TEXT, md)
+        putExtra(android.content.Intent.EXTRA_TITLE, "长夜余烬-追逃段-第3轮.md")
+    }
+    context.startActivity(android.content.Intent.createChooser(send, null))
 }

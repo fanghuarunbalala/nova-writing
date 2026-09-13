@@ -16,6 +16,9 @@ interface ChatRepository {
     /** 会话上下文（顶栏第二行，demo「第 2 章 · 追逃段修订 · 第 3 轮」） */
     val sessionSubtitle: String get() = ""
 
+    /** ⋯ 菜单「会话信息」副行（demo：conv_2 · 需审核模式 · seq 213） */
+    val sessionMeta: String get() = ""
+
     /** runSeq → 轮次分隔线文案；null = 不插 */
     fun roundLabelFor(runSeq: Int): String? = null
 

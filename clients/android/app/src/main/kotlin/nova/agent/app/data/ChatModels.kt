@@ -31,8 +31,11 @@ sealed interface ChatItem {
     /** 运行中提交的排队消息；下一次 run 开始时晋升为 [UserMsg]（纯数据变更） */
     data class GhostItem(override val id: String, val text: String, val enqueuedAt: Long) : ChatItem
 
-    /** 居中系统胶囊（审批到达/裁决回填等） */
+    /** 居中系统胶囊（审批到达引导等） */
     data class SysPill(override val id: String, val text: String, val kind: PillKind) : ChatItem
+
+    /** 单行 mono 留痕（demo sysLine：驳回/整批决策/超时/清空上下文等写入会话流） */
+    data class SysLine(override val id: String, val text: String) : ChatItem
 
     /** 追问卡（AskUserQuestion；阶段4接真实交互，先占位展示） */
     data class AskCard(
@@ -59,11 +62,11 @@ enum class RunStatus {
     val isBusy: Boolean get() = this != Idle && this != FailedRetry
 }
 
-/** 输入条三档执行模式 */
+/** 输入条三档执行模式（demo L2054-2058 文案逐字） */
 enum class ExecMode(val label: String, val hint: String) {
-    NEED_APPROVAL("需审核", "工具调用与写作变更均需审批"),
-    FAST("快速执行", "低风险操作直通，高风险仍审批"),
-    DISCUSS("仅讨论", "本轮不执行任何工具调用"),
+    NEED_APPROVAL("需审核", "工具调用与档案写入均生成审批，逐项确认后执行"),
+    FAST("直接执行", "不经审批直接执行工具，信任较高时使用"),
+    DISCUSS("设计", "产出设计草稿，不直接改动档案与正文"),
 }
 
 /** 只读态（他端持有租约）：设备名 + 剩余秒 + SSE 进度 + 租约参数（demo：TTL 60s / 心跳 20s） */

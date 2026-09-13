@@ -37,6 +37,7 @@ class FakeChatRepository(
     override val running: StateFlow<Boolean> = _running
 
     override val sessionSubtitle: String get() = script.sessionSubtitle
+    override val sessionMeta: String get() = script.sessionMeta
 
     private var runSeq = 0
     private val queue = ArrayDeque<String>()

@@ -21,45 +21,90 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import nova.agent.app.data.ReadOnlyLease
+import nova.agent.app.ui.theme.FwMedium
 import nova.agent.app.ui.theme.LocalNovaPalette
 import nova.agent.app.ui.theme.NovaText
 import nova.agent.app.ui.theme.NovaTypography
 
 /**
- * 只读态横幅（PRD FR7.7）：他端持有租约 → 设备名 + 剩余秒倒计时 + SSE 进度（seq 增长）+ 接续按钮。
- * 「接续」demo：点击触发 409 冲突对话框（Step 7 旁路按钮同样走 oneShot）。
+ * 只读态横幅（demo roBanner L1142-1153 逐字）：本会话正由他端编辑 + 租约参数行 +
+ * 双动作「接续（申请租约）」「只看进度」。
  */
 @Composable
-fun ReadOnlyBanner(lease: ReadOnlyLease, onResume: () -> Unit) {
+fun ReadOnlyBanner(lease: ReadOnlyLease, onResume: () -> Unit, onFollow: () -> Unit) {
     val palette = LocalNovaPalette.current
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 4.dp)
             .background(palette.warnBg, RoundedCornerShape(9.dp))
-            .padding(horizontal = 10.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text("本会话正由 ${lease.deviceName} 编辑", style = NovaTypography.labelMedium.copy(fontWeight = FwMedium))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+            Text("租约持有 ${lease.deviceId} · ", style = NovaText.mono11.copy(color = palette.warn))
+            CountDown(lease.expiresAt)
+            Text(" · 实时同步对方进度（SSE）· 当前 seq ${lease.seq}", style = NovaText.mono11.copy(color = palette.warn))
+        }
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "接续（申请租约）",
+                style = NovaTypography.labelMedium,
+                color = palette.warn,
+                modifier = Modifier
+                    .background(palette.warn40, RoundedCornerShape(99.dp))
+                    .clickable { onResume() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+            Text(
+                "只看进度",
+                style = NovaTypography.labelMedium,
+                color = palette.fg,
+                modifier = Modifier
+                    .background(palette.surface, RoundedCornerShape(99.dp))
+                    .clickable { onFollow() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 只读底部栏（demo roFooter L1274-1280）：只读态替换输入区——「接续（申请租约）」「刷新进度」。
+ */
+@Composable
+fun ReadOnlyFooter(lease: ReadOnlyLease, onResume: () -> Unit, onRefresh: () -> Unit) {
+    val palette = LocalNovaPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text("只读 · ${lease.deviceName} 正在写作", style = NovaTypography.labelMedium)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                CountDown(lease.expiresAt)
-                Text("·", color = palette.warn40)
-                Text("SSE seq ${lease.seq}", style = NovaText.mono11)
-            }
-        }
         Text(
-            "接续",
-            style = NovaTypography.labelMedium,
+            "接续（申请租约）",
+            style = NovaTypography.labelLarge,
             color = palette.warn,
             modifier = Modifier
-                .background(palette.warn40, RoundedCornerShape(99.dp))
+                .weight(1f)
+                .background(palette.warnBg, RoundedCornerShape(99.dp))
                 .clickable { onResume() }
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+                .padding(vertical = 12.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Text(
+            "刷新进度 · seq ${lease.seq}",
+            style = NovaTypography.labelLarge,
+            color = palette.fg,
+            modifier = Modifier
+                .weight(1f)
+                .background(palette.surface, RoundedCornerShape(99.dp))
+                .clickable { onRefresh() }
+                .padding(vertical = 12.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }
@@ -77,5 +122,5 @@ private fun CountDown(expiresAt: Long) {
             delay(1000)
         }
     }
-    Text("剩余 ${left}s", style = NovaText.mono12.copy(color = palette.warn))
+    Text("剩余 ${left}s", style = NovaText.mono11.copy(color = palette.warn))
 }

@@ -117,12 +117,41 @@ class EventReducerTest {
         s = s.reduce(ChatUiEvent.ApprovalSettled("req-1", approved = true, ts = 3))
         assertNull(s.pendingApproval)
         assertEquals(RunStatus.Generating, s.runStatus)
-        val pill = s.items.last() as ChatItem.SysPill
-        assertEquals(PillKind.SUCCESS, pill.kind)
+        val line = s.items.last() as ChatItem.SysLine
+        assertEquals("整批决策：1 项全部批准", line.text)
 
         // 过期/失序的第二次裁决幂等吞掉
         val again = s.reduce(ChatUiEvent.ApprovalSettled("req-1", approved = false, ts = 999))
         assertEquals(s, again)
+    }
+
+    @Test
+    fun `卡级驳回留 sysLine 且意见并入文本`() {
+        val approval = ApprovalUi(
+            requestId = "req-9",
+            askedAt = 1,
+            cards = listOf(ApprovalCardUi("c-1", ApprovalOp.EDIT, "NovelEdit", "沈砚 · 角色档案（v2 → v3）", "当前", "变更")),
+        )
+        var s = ChatUiState().reduce(ChatUiEvent.ApprovalAsked(approval, ts = 2))
+        s = s.reduce(ChatUiEvent.ApprovalCardDecided("req-9", "c-1", approved = false, comment = "现状改动幅度太大"))
+        val line = s.items.last() as ChatItem.SysLine
+        assertEquals("已驳回 NovelEdit · 沈砚 · 角色档案 · 意见：现状改动幅度太大", line.text)
+        assertEquals(ApprovalDecision.REJECTED, s.pendingApproval?.cards?.single()?.decision)
+    }
+
+    @Test
+    fun `清空上下文落单行留痕并复位`() {
+        val s = ChatUiState(
+            items = listOf(ChatItem.UserMsg("u-1", "旧")),
+            hasMoreOlder = true,
+            olderRunsRemaining = 8,
+            runStatus = RunStatus.Generating,
+        ).reduce(ChatUiEvent.ContextCleared)
+        val line = s.items.single() as ChatItem.SysLine
+        assertTrue(line.text.startsWith("已清空上下文"))
+        assertEquals(false, s.hasMoreOlder)
+        assertEquals(0, s.olderRunsRemaining)
+        assertEquals(RunStatus.Idle, s.runStatus)
     }
 
     @Test
@@ -158,7 +187,13 @@ class EventReducerTest {
 
         s = s.reduce(ChatUiEvent.InputChanged("新输入")).reduce(ChatUiEvent.ExecModeChanged(ExecMode.DISCUSS))
         assertEquals("新输入", s.input)
+        // 切换只挂「待生效」（demo pendModeChip），不立即生效
+        assertEquals(ExecMode.NEED_APPROVAL, s.execMode)
+        assertEquals(ExecMode.DISCUSS, s.pendingExecMode)
+
+        s = s.reduce(ChatUiEvent.Submitted("下一条", ts = 2))
         assertEquals(ExecMode.DISCUSS, s.execMode)
+        assertEquals(null, s.pendingExecMode)
     }
 
     @Test

@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -105,10 +106,28 @@ fun UserBubble(item: ChatItem.UserMsg) {
     }
 }
 
-/* ============ 正文块（demo .aiProse：衬线 15.5/1.85 + 可展开推理） ============ */
+/* ============ 系统留痕行（demo sysLine：单行 mono） ============ */
 
 @Composable
-fun AssistantBlock(item: ChatItem.AssistantMsg, onToggleReasoning: () -> Unit) {
+fun SysLineView(item: ChatItem.SysLine) {
+    val palette = LocalNovaPalette.current
+    Text(
+        item.text,
+        style = NovaText.mono11.copy(color = palette.faint),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.dp),
+    )
+}
+
+/* ============ 正文块（demo .aiProse：衬线 15.5/1.85 + 可展开推理 + 实体胶囊） ============ */
+
+@Composable
+fun AssistantBlock(
+    item: ChatItem.AssistantMsg,
+    onToggleReasoning: () -> Unit,
+    onOpenEntity: (tab: Int) -> Unit = {},
+) {
     val palette = LocalNovaPalette.current
     Column(Modifier.widthIn(max = 360.dp)) {
         if (item.reasoning != null) {
@@ -144,7 +163,60 @@ fun AssistantBlock(item: ChatItem.AssistantMsg, onToggleReasoning: () -> Unit) {
                 )
             }
         }
-        Text(item.text, style = NovaText.prose.copy(color = palette.fg))
+        val entities = remember(item.id) { nova.agent.app.data.DemoScript.ENTITY_MARKS[item.id].orEmpty() }
+        if (entities.isEmpty()) {
+            Text(item.text, style = NovaText.prose.copy(color = palette.fg))
+        } else {
+            EntityProse(item.text, entities, onOpenEntity)
+        }
+    }
+}
+
+/** 正文段落（demo entChip：「沈砚」「北桥渡口」内联可点胶囊 → 内容 sheet 对应 tab） */
+private sealed interface EntitySegment {
+    data class Plain(val text: String) : EntitySegment
+    data class Entity(val name: String, val tab: Int) : EntitySegment
+}
+
+private fun splitByEntities(text: String, entities: List<Pair<String, Int>>): List<EntitySegment> = buildList {
+    var i = 0
+    while (i < text.length) {
+        val hit = entities
+            .mapNotNull { (name, tab) -> text.indexOf(name, i).takeIf { it >= 0 }?.let { at -> Triple(at, name, tab) } }
+            .minByOrNull { it.first }
+        if (hit == null) {
+            add(EntitySegment.Plain(text.substring(i)))
+            break
+        }
+        val (at, name, tab) = hit
+        if (at > i) add(EntitySegment.Plain(text.substring(i, at)))
+        add(EntitySegment.Entity(name, tab))
+        i = at + name.length
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun EntityProse(text: String, entities: List<Pair<String, Int>>, onOpenEntity: (Int) -> Unit) {
+    val palette = LocalNovaPalette.current
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        splitByEntities(text, entities).forEach { segment ->
+            when (segment) {
+                is EntitySegment.Plain -> Text(segment.text, style = NovaText.prose.copy(color = palette.fg))
+                is EntitySegment.Entity -> Text(
+                    segment.name,
+                    style = NovaText.prose.copy(color = palette.accent),
+                    modifier = Modifier
+                        .background(palette.accent9, RoundedCornerShape(6.dp))
+                        .clickable { onOpenEntity(segment.tab) }
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+            }
+        }
     }
 }
 

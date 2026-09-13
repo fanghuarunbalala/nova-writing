@@ -11,7 +11,7 @@ data class DemoScript(
     val conversationId: String = "conv_2",
     /** 顶栏第二行（会话上下文） */
     val sessionSubtitle: String = "第 2 章 · 追逃段修订 · 第 3 轮",
-    /** 会话信息（⋯菜单/顶栏） */
+    /** 会话信息（⋯菜单副行） */
     val sessionMeta: String = "conv_2 · 需审核模式 · seq 213",
     val userPrompt: String = "沈砚在雾夜里认出了那枚火漆印——把他袖口的轮廓写清楚一点，顺便推进到渡口对峙。",
     /** 打字机草稿 = demo DRAFT_TEXT（L2153，114 字；「812 字」是审批卡/阅读视图的叙事元数据） */

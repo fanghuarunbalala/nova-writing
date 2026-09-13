@@ -3,12 +3,15 @@ package nova.agent.app.ui.vm
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import nova.agent.app.data.ChatOneShot
 import nova.agent.app.data.ChatRepository
@@ -42,6 +45,12 @@ class ChatViewModel private constructor(
     /** 顶栏第二行（会话上下文，demo「第 2 章 · 追逃段修订 · 第 3 轮」） */
     val sessionSubtitle: String get() = repo.sessionSubtitle
 
+    /** ⋯ 菜单「会话信息」副行（demo：conv_2 · 需审核模式 · seq 213） */
+    val sessionMeta: String get() = repo.sessionMeta
+
+    /** 只看进度跟随协程（只读态清除时取消） */
+    private var followJob: Job? = null
+
     init {
         viewModelScope.launch {
             repo.events.collect { event ->
@@ -58,7 +67,10 @@ class ChatViewModel private constructor(
             triggers.oneShots.collect { _oneShot.tryEmit(it) }
         }
         viewModelScope.launch {
-            triggers.lease.collect { dispatch(ChatUiEvent.LeaseObserved(it)) }
+            triggers.lease.collect {
+                if (it == null) followJob?.cancel()
+                dispatch(ChatUiEvent.LeaseObserved(it))
+            }
         }
     }
 
@@ -82,10 +94,44 @@ class ChatViewModel private constructor(
         }
     }
 
-    /** 只读接续（demo）：真实语义 = 申请租约，409 时弹冲突；阶段3 接 LeaseClient */
+    /** 只读接续（demo L2392-2399）：申请租约 → 900ms 后 409（TTL/心跳文案）；阶段3 接 LeaseClient */
     fun resumeLease() {
-        val holder = _uiState.value.lease?.deviceName ?: return
-        _oneShot.tryEmit(ChatOneShot.Conflict409(holder))
+        val lease = _uiState.value.lease ?: return
+        viewModelScope.launch {
+            _feedback.emit("申请租约中（acquire conv_2）…")
+            delay(900)
+            _feedback.emit(
+                "409 · 租约仍由 ${lease.deviceId} 持有（TTL ${lease.ttlSec}s / 心跳 ${lease.heartbeatSec}s）" +
+                    "——稍后再试，或先只读看进度",
+            )
+        }
+    }
+
+    /** 只看进度（demo roBanner 第二动作）：只读跟随，seq 每 1.2s 推进 */
+    fun followLease() {
+        if (followJob?.isActive == true) return
+        _feedback.tryEmit("只读跟随中——对方每写一批，这里推进一格")
+        followJob = viewModelScope.launch {
+            while (isActive) {
+                delay(1_200)
+                _uiState.value.lease?.let { dispatch(ChatUiEvent.LeaseObserved(it.copy(seq = it.seq + 1))) }
+            }
+        }
+    }
+
+    /** 刷新进度（demo roFooter）：seq +7 */
+    fun refreshLease() {
+        val lease = _uiState.value.lease ?: return
+        val next = lease.seq + 7
+        dispatch(ChatUiEvent.LeaseObserved(lease.copy(seq = next)))
+        _feedback.tryEmit("已同步到 seq $next")
+    }
+
+    /** 清空上下文 · 新一轮（demo ⋯ 菜单）：停当前 run + 单行留痕 */
+    fun clearContext() {
+        if (repo.running.value) repo.stop()
+        dispatch(ChatUiEvent.ContextCleared)
+        _feedback.tryEmit("已清空上下文 · 新一轮开始——此前档案与正文保留")
     }
 
     /** 失败重试：用户消息已在屏上，只重启 run 不再上屏 */
@@ -96,7 +142,12 @@ class ChatViewModel private constructor(
 
     fun inputChange(text: String) = dispatch(ChatUiEvent.InputChanged(text))
 
-    fun execModeChange(mode: ExecMode) = dispatch(ChatUiEvent.ExecModeChanged(mode))
+    /** 切执行模式 → 只挂「待生效」，随下一条消息生效（demo applyModeIfPending） */
+    fun execModeChange(mode: ExecMode) {
+        val current = _uiState.value.execMode
+        dispatch(ChatUiEvent.ExecModeChanged(mode))
+        if (mode != current) _feedback.tryEmit("执行模式将随下一条消息生效（会话级）")
+    }
 
     fun toggleReasoning(itemId: String) = dispatch(ChatUiEvent.ReasoningToggled(itemId))
 
@@ -117,9 +168,9 @@ class ChatViewModel private constructor(
         repo.resolveApproval(requestId, approved, comment)
     }
 
-    /** 卡级裁决：视觉盖章；全部落定后自动触发批级 settle */
-    fun decideCard(requestId: String, cardId: String, approved: Boolean) {
-        dispatch(ChatUiEvent.ApprovalCardDecided(requestId, cardId, approved))
+    /** 卡级裁决：视觉盖章 + 驳回意见留痕；全部落定后自动触发批级 settle */
+    fun decideCard(requestId: String, cardId: String, approved: Boolean, comment: String? = null) {
+        dispatch(ChatUiEvent.ApprovalCardDecided(requestId, cardId, approved, comment))
         val pa = _uiState.value.pendingApproval ?: return
         if (pa.cards.none { it.decision == nova.agent.app.data.ApprovalDecision.PENDING }) {
             repo.resolveApproval(requestId, pa.cards.all { it.decision == nova.agent.app.data.ApprovalDecision.APPROVED }, null)

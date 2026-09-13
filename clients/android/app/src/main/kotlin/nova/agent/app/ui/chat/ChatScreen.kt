@@ -38,7 +38,7 @@ import nova.agent.app.ui.vm.ChatViewModel
  * 状态驱动渲染在 [ChatBody]（可直接组合截图）；一次性事件与审批弹层在这里接线。
  */
 @Composable
-fun ChatScreen(vm: ChatViewModel) {
+fun ChatScreen(vm: ChatViewModel, onOpenEntity: (tab: Int) -> Unit = {}) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
     // VM 侧操作反馈（如「已加载更早 1 段」）→ 全局 snackbar（2.6s）
@@ -51,19 +51,25 @@ fun ChatScreen(vm: ChatViewModel) {
         state = state,
         onInputChange = vm::inputChange,
         onSend = vm::send,
-        onStop = vm::stop,
+        onStop = {
+            vm.stop()
+            feedback("已暂停——当前轮作废，journal 记录 ABORTED")
+        },
         onRetry = vm::retry,
         onModeChange = vm::execModeChange,
         onToggleReasoning = vm::toggleReasoning,
         onLoadOlder = vm::loadOlder,
         onResumeLease = vm::resumeLease,
+        onFollowLease = vm::followLease,
+        onRefreshLease = vm::refreshLease,
+        onOpenEntity = onOpenEntity,
     )
 
     // ---- 审批 sheet（pendingApproval 非 null 即弹层） ----
     state.pendingApproval?.let { approval ->
         nova.agent.app.ui.approval.ApprovalSheet(
             approval = approval,
-            onCardDecided = { requestId, cardId, approved, _ -> vm.decideCard(requestId, cardId, approved) },
+            onCardDecided = { requestId, cardId, approved, comment -> vm.decideCard(requestId, cardId, approved, comment) },
             onBatchDecided = { requestId, approved -> vm.decideApproval(requestId, approved) },
             onTimeout = { requestId -> vm.approvalTimeout(requestId) },
             onDismiss = { /* 审批等待期不可划走关闭；裁决/超时自动收 */ },
@@ -130,6 +136,9 @@ fun ChatBody(
     onToggleReasoning: (String) -> Unit = {},
     onLoadOlder: () -> Unit = {},
     onResumeLease: () -> Unit = {},
+    onFollowLease: () -> Unit = {},
+    onRefreshLease: () -> Unit = {},
+    onOpenEntity: (tab: Int) -> Unit = {},
 ) {
     val palette = LocalNovaPalette.current
     val listState = rememberLazyListState()
@@ -195,7 +204,7 @@ fun ChatBody(
             .background(palette.bg),
     ) {
         state.lease?.let { lease ->
-            ReadOnlyBanner(lease, onResume = onResumeLease)
+            ReadOnlyBanner(lease, onResume = onResumeLease, onFollow = onFollowLease)
         }
         RunStatusBanner(
             status = state.runStatus,
@@ -223,7 +232,7 @@ fun ChatBody(
                 }
             }
             items(state.items, key = { it.id }) { item ->
-                ChatItemView(item, onToggleReasoning)
+                ChatItemView(item, onToggleReasoning, onOpenEntity)
             }
             if (state.draft.isNotEmpty()) {
                 item(key = "draft-panel") {
@@ -232,27 +241,35 @@ fun ChatBody(
             }
         }
 
-        InputBar(
-            input = state.input,
-            execMode = state.execMode,
-            busy = state.isBusy,
-            onInputChange = onInputChange,
-            onSend = onSend,
-            onStop = onStop,
-            onModeChange = onModeChange,
-        )
+        // 只读态：roFooter 替换输入区（demo 2376-2380：composer 隐藏）
+        val lease = state.lease
+        if (lease != null) {
+            ReadOnlyFooter(lease, onResume = onResumeLease, onRefresh = onRefreshLease)
+        } else {
+            InputBar(
+                input = state.input,
+                execMode = state.execMode,
+                pendingMode = state.pendingExecMode,
+                busy = state.isBusy,
+                onInputChange = onInputChange,
+                onSend = onSend,
+                onStop = onStop,
+                onModeChange = onModeChange,
+            )
+        }
     }
 }
 
 @Composable
-private fun ChatItemView(item: ChatItem, onToggleReasoning: (String) -> Unit) {
+private fun ChatItemView(item: ChatItem, onToggleReasoning: (String) -> Unit, onOpenEntity: (tab: Int) -> Unit) {
     when (item) {
         is ChatItem.RoundLabel -> RoundLabelView(item)
         is ChatItem.UserMsg -> UserBubble(item)
-        is ChatItem.AssistantMsg -> AssistantBlock(item, onToggleReasoning = { onToggleReasoning(item.id) })
+        is ChatItem.AssistantMsg -> AssistantBlock(item, onToggleReasoning = { onToggleReasoning(item.id) }, onOpenEntity = onOpenEntity)
         is ChatItem.ToolLine -> ToolRow(item)
         is ChatItem.GhostItem -> GhostQueueRow(item)
         is ChatItem.SysPill -> SysPillView(item)
+        is ChatItem.SysLine -> SysLineView(item)
         is ChatItem.AskCard -> AskCardView(item)
     }
 }

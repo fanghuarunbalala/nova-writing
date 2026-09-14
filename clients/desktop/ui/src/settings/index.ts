@@ -8,3 +8,4 @@ export * from "./PersistentModelConnectionSettingsPanel.js";
 export * from "./SkillsSettingsPanel.js";
 export * from "./McpSettingsPanel.js";
 export * from "./SettingsDialog.js";
+export * from "./serverAuthChangeBus.js";

@@ -18,13 +18,19 @@ android {
         targetSdk = 36
         versionCode = 3
         versionName = "0.3.0-stage3"
-        // debug 登录预填（真机验证免手输）：local.properties 的 nova.dev.server/user/pass（gitignore，不入库）
+        // debug 登录预填（真机验证免手输）：local.properties 的 nova.dev.user/pass（gitignore，不入库）
         val devProps = Properties().apply {
             val f = rootProject.file("local.properties")
             if (f.exists()) f.inputStream().use { load(it) }
         }
         fun devField(key: String): String = "\"${(devProps.getProperty(key) ?: "").replace("\"", "")}\""
-        buildConfigField("String", "DEV_SERVER", devField("nova.dev.server"))
+        // 固定 server 地址（客户端固定server PRD FR4）：登录页已去地址输入，登录目标 =
+        // 已保存 DataStore 地址 > 此注入值 > 代码 fallback。来源优先级：
+        // -Pnova.server.url 构建属性 > local.properties nova.server.url > 缺省公网部署地址
+        val defaultServerUrl = ((project.findProperty("nova.server.url") as String?)
+            ?: devProps.getProperty("nova.server.url")
+            ?: "http://121.43.61.81:8080").replace("\"", "")
+        buildConfigField("String", "DEFAULT_SERVER", "\"$defaultServerUrl\"")
         buildConfigField("String", "DEV_USER", devField("nova.dev.user"))
         buildConfigField("String", "DEV_PASS", devField("nova.dev.pass"))
         // BYOK 预填（同 local.properties；Android 端 baseUrl 需带 /v1，provider 直拼 /chat/completions）

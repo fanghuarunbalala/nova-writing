@@ -9,6 +9,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { createSecureIpcBridge } from "kkrpc/electron";
 
+/**
+ * 构建期标识符 define（build-minimal.mjs 注入固定 server 地址；与 main 同一常量）。
+ * 不用 process.env.* 键级 define：bundle 内存在 process.env 整体引用时 esbuild 0.28.1
+ * 会放弃键级替换（main 侧实测）；typeof 守卫保源码直跑。
+ */
+declare const __NOVA_DEFAULT_SERVER_URL__: string | undefined;
+
 try {
   const bridge = createSecureIpcBridge({
     ipcRenderer,
@@ -24,6 +31,12 @@ try {
   });
   // renderer 侧 debugLog 开关（浏览器无 process.env）
   contextBridge.exposeInMainWorld("__NOVEL_LOG_LEVEL__", process.env.NOVEL_LOG_LEVEL ?? "info");
+  // 固定 server 地址（客户端固定server PRD FR2）：登录页去地址输入后的登录目标来源；
+  // 空串 = 未注入（web shell / 无 define 构建），ui 回退本地常量
+  contextBridge.exposeInMainWorld(
+    "__NOVEL_DEFAULT_SERVER_URL__",
+    typeof __NOVA_DEFAULT_SERVER_URL__ === "undefined" ? "" : __NOVA_DEFAULT_SERVER_URL__,
+  );
   // debug 标志（gui:debug 注入 NOVEL_DEBUG=1）：试验功能门控
   contextBridge.exposeInMainWorld("__NOVEL_DEBUG__", process.env.NOVEL_DEBUG === "1");
   // 书库视图显式开关（NOVEL_LIBRARY=1 才开启；release/debug 默认均不显示）

@@ -1,7 +1,9 @@
 /**
  * Server 设置面板（docs/PRD/桌面接入-数据通道server化.md FR1）：
- * - server 地址 + 登录（双令牌入 safeStorage 加密文件，面板不接触令牌本体）；
- * - 连接状态指示（未配置 / 在线 / 离线 / 需重登）；
+ * - 登录（双令牌入 safeStorage 加密文件，面板不接触令牌本体）——server 地址固定
+ *   （构建期注入，客户端固定server PRD FR3）：地址输入已退役，登录目标 = 构建期注入
+ *   > 已保存配置地址 > fallback 常量（注入压过 saved：僵尸 url 无界面可修）；
+ * - 连接状态指示（未配置 / 在线 / 离线 / 需重登）+ 当前 server 只读展示；
  * - 设备会话管理（列表 / 踢出）。
  * 纯云端化 ⑥：项目数据都在 server 上——未配置/离线时无法打开云端项目（重新登录即可恢复）。
  */
@@ -9,6 +11,10 @@ import { useCallback, useEffect, useState } from "react";
 import { LogIn, LogOut, RefreshCw, ShieldOff } from "lucide-react";
 import type { ServerAuthState, ServerDeviceInfo } from "@novel/core";
 import type { ApplicationConfigurationClient } from "./ApplicationConfigurationClient.js";
+import { useDefaultServerUrl, useInjectedServerUrl } from "../shared/DefaultServerUrlContext.js";
+
+/** fallback：本机自托管 server（与 LoginPage 一致） */
+const FALLBACK_SERVER_URL = "http://127.0.0.1:8787";
 
 export interface ServerSettingsPanelProps {
   readonly configuration: ApplicationConfigurationClient;
@@ -22,7 +28,8 @@ const STATUS_LABEL: Record<ServerAuthState["status"], string> = {
 
 export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps) {
   const [state, setState] = useState<ServerAuthState>({ status: "unconfigured" });
-  const [url, setUrl] = useState("");
+  const defaultServerUrl = useDefaultServerUrl(FALLBACK_SERVER_URL);
+  const injectedServerUrl = useInjectedServerUrl();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [devices, setDevices] = useState<readonly ServerDeviceInfo[]>([]);
@@ -34,7 +41,6 @@ export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps)
     const next = await configuration.serverAuth();
     if (next === undefined) return;
     setState(next);
-    setUrl(next.url ?? "");
     setStatus(next.needRelogin === true ? "登录已失效，请重新登录" : (STATUS_LABEL[next.status] ?? next.status));
   }, [configuration]);
 
@@ -60,13 +66,16 @@ export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps)
 
   const login = async (): Promise<void> => {
     if (configuration.serverLogin === undefined) return;
-    if (!/^https?:\/\/.+/.test(url.trim())) {
-      setStatus("请填写合法的 http/https server 地址");
+    // 登录目标（v0.1 修正）：构建期注入 > 已保存配置 > fallback（地址输入已退役，
+    // 旧配置僵尸 url 无界面可修；换目标 = 重新构建）
+    const target = (injectedServerUrl ?? state.url ?? FALLBACK_SERVER_URL).trim();
+    if (!/^https?:\/\/.+/.test(target)) {
+      setStatus("服务器地址配置无效（需 http/https URL）");
       return;
     }
     setBusy(true);
     try {
-      await configuration.serverLogin(url.trim(), username.trim(), password);
+      await configuration.serverLogin(target, username.trim(), password);
       setPassword("");
       setStatus("登录成功");
       await refreshAuth();
@@ -123,6 +132,9 @@ export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps)
           状态：<strong>{status}</strong>
           {state.username !== undefined ? `（${state.username}）` : null}
         </p>
+        <p className="novel-set-hint">
+          server：<strong>{(injectedServerUrl ?? state.url ?? defaultServerUrl).replace(/\/+$/, "")}</strong>（固定，随构建分发）
+        </p>
       </div>
       {connected ? (
         <div className="novel-save-bar">
@@ -135,17 +147,6 @@ export function ServerSettingsPanel({ configuration }: ServerSettingsPanelProps)
         </div>
       ) : (
         <div>
-          <div className="novel-set-field">
-            <label className="novel-set-hint">
-              server 地址
-              <input
-                className="novel-set-input"
-                value={url}
-                placeholder="http://127.0.0.1:8787"
-                onChange={(event) => setUrl(event.target.value)}
-              />
-            </label>
-          </div>
           <div className="novel-set-field">
             <label className="novel-set-hint">
               用户名

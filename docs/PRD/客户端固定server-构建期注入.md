@@ -108,3 +108,19 @@ flowchart LR
 - 开源仓库缺省值指向个人公网 server（注册开放，陌生构建用户会连上来）——是否改为仓库默认 `127.0.0.1:8787` + 个人构建用变量覆盖？（当前按「缺省即公网地址」实施）
 - 明文 HTTP 过渡的安全面：公网裸 HTTP 传密码，建议尽快在 nginx 上 TLS 终止后收紧 cleartext
 - 开发者切本地 server 仅剩带参数构建（`NOVA_DEFAULT_SERVER_URL=http://127.0.0.1:8787 pnpm build` / `-Pnova.server.url=...`）或手改配置文件——**已定**：地址输入退役后这是唯一入口，v0.1 现场验证（旧 config 残留本地 url 导致登录连错）确认「注入压过已存」必须成立，否则僵尸配置无解
+
+## 8. v0.1 现场修正记录（僵尸登录态）
+
+首验发现：config 残留 `127.0.0.1:8787` 时登录门不弹、云端操作报「未登录」且无重登入口。根因四层：
+
+1. `ServerAuthSession.state()` 持落盘令牌时**乐观上报 online+username**；`rotate()` 网络失败走 `offline=true` 分支但**保留 username**——僵尸态在数据面上无法与已登录区分；
+2. main 的 `server-auth-changed` 推送（探活失败即广播）在 renderer 侧**无人订阅**——UI 停留在启动一次性拉取的乐观快照；
+3. 登录门/欢迎页只判「有无 username」——僵尸态被当已登录，门不弹、入口卡显示在线、创建项目报「未登录」且无自愈路径。
+
+修正（对应提交）：
+
+- **注入下沉 main**：`minimal.ts` 统一 `serverBaseUrl()`（注入 > config url）——restore / 子进程 env / 定义包 resolve / SSE 起订 / 云项目 list/create/remove / RemoteNovelStore 全链路；旧令牌对公网 server 刷新得 401 → needRelogin 清令牌 → 状态真实降级；
+- **推送接通**：ui 新增 `serverAuthChangeBus`，renderer 订阅 preload 桥 `onServerAuthChange` → NovelApp 实时更新快照（拉取与推送同源写入）；
+- **门条件收紧**：`isAuthed = username && status==="online" && !needRelogin`；登录门统一由 serverAuthState 推导（非已登录可重复弹开，已登录仅拍板 undecided——不打断登录成功屏）；欢迎页入口卡同口径；云端操作「未登录」错误自动弹门自愈。
+
+已知取舍：令牌仍有效但 server 短暂不可达（offline 未清令牌）也会弹登录门——纯云端化下用户此时本就无法工作，登录页等待 server 恢复即可，不做「离线宽限」复杂度。

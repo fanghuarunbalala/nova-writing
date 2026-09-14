@@ -71,8 +71,8 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
   const seedFromState = useCallback((state: ServerAuthState) => {
     // 已保存的配置地址（登录成功后 config.json server.set 落库）——仅在无注入时兜底
     if (state.url !== undefined && state.url !== "") setSavedUrl(state.url);
-    // 已在线（欢迎页入口重开等场景）：直接呈现成功态
-    if (state.username !== undefined && state.status === "online") {
+    // 已在线（欢迎页入口重开等场景）：直接呈现成功态（needRelogin 僵尸态不算在线）
+    if (state.username !== undefined && state.status === "online" && state.needRelogin !== true) {
       setDone({ username: state.username, url: state.url ?? defaultServerUrl });
     }
   }, [defaultServerUrl]);

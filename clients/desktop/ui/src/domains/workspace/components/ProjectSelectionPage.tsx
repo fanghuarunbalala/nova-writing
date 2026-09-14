@@ -63,7 +63,12 @@ export function ProjectSelectionPage({
     snapshot.phase === "selecting" ||
     snapshot.phase === "opening" ||
     snapshot.phase === "closing";
-  const loggedIn = serverAuthState?.username !== undefined;
+  // 真实已登录（v0.1 修正）：offline/needRelogin 的僵尸态不算——入口卡回到「未登录开门」，
+  // 否则云端操作报「未登录」却无重登入口
+  const loggedIn =
+    serverAuthState?.username !== undefined &&
+    serverAuthState.status === "online" &&
+    serverAuthState.needRelogin !== true;
   // 云项目删除确认（danger 二次确认：server 端删除后所有设备不可见）
   const [deleteTarget, setDeleteTarget] = useState<CloudProjectView | undefined>(undefined);
   const [deleteBusy, setDeleteBusy] = useState(false);

@@ -3,10 +3,11 @@
  * 打开后切到工作台壳；登录门强制（未登录必拦，无本地模式跳过）。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NovelApp } from "../../src/app/NovelApp.js";
 import { WorkspaceController } from "../../src/domains/workspace/controller/WorkspaceController.js";
+import { emitServerAuthStateChanged } from "../../src/settings/serverAuthChangeBus.js";
 import type { FrontendPlatform } from "../../src/platform/index.js";
 
 const platform: FrontendPlatform = {
@@ -299,12 +300,17 @@ describe("NovelApp 登录门（纯云端化 ⑥：强制登录）", () => {
   const LOGIN_TITLE = "登录同步服务";
   const WELCOME_TAG = "把一桩旧事，写成一本新书。";
 
-  function buildAuthClient(state: unknown) {
+  /** 有状态 auth client：模拟「启动乐观快照 → main 探活失败降级」的两段返回 */
+  function buildAuthClient(initialState: unknown) {
+    let state = initialState;
     return {
       load: vi.fn(async () => ({ profiles: [], credentials: {}, defaults: {} })),
       mutate: vi.fn(async () => undefined),
       serverAuth: vi.fn(async () => state),
       serverLogin: vi.fn(async () => state),
+      __setAuthState: (next: unknown) => {
+        state = next;
+      },
     } as never;
   }
 
@@ -320,6 +326,33 @@ describe("NovelApp 登录门（纯云端化 ⑥：强制登录）", () => {
       />,
     );
   }
+
+  it("僵尸登录态（推送 offline/needRelogin 仍带 username）→ 登录门自动弹开（v0.1 修正）", async () => {
+    const client = buildAuthClient({ status: "online", url: "http://127.0.0.1:8787", username: "alice" });
+    // 初始乐观快照 online+username：不拦，欢迎页可见
+    renderApp(client);
+    expect(await screen.findByText(WELCOME_TAG)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: LOGIN_TITLE })).not.toBeInTheDocument();
+    // main 探活失败（server-auth-changed → serverAuthChangeBus）：main 侧状态同步降级
+    const degraded = { status: "offline", url: "http://127.0.0.1:8787", username: "alice" };
+    (client as { __setAuthState: (s: unknown) => void }).__setAuthState(degraded);
+    act(() => {
+      emitServerAuthStateChanged(degraded);
+    });
+    expect(await screen.findByRole("heading", { name: LOGIN_TITLE })).toBeInTheDocument();
+  });
+
+  it("needRelogin 推送（401 清令牌）→ 登录门弹开", async () => {
+    const client = buildAuthClient({ status: "online", url: "http://127.0.0.1:8787", username: "alice" });
+    renderApp(client);
+    expect(await screen.findByText(WELCOME_TAG)).toBeInTheDocument();
+    const degraded = { status: "online", url: "http://x", needRelogin: true };
+    (client as { __setAuthState: (s: unknown) => void }).__setAuthState(degraded);
+    act(() => {
+      emitServerAuthStateChanged(degraded);
+    });
+    expect(await screen.findByRole("heading", { name: LOGIN_TITLE })).toBeInTheDocument();
+  });
 
   afterEach(() => {
     cleanup();

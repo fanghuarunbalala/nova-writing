@@ -10,10 +10,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 await mkdir(join(root, "dist/minimal"), { recursive: true });
 
 // 固定 server 地址（客户端固定server PRD FR1）：构建期注入 main/preload 产物，
-// preload 经 __NOVEL_DEFAULT_SERVER_URL__ 桥暴露给 renderer → ui 登录目标。
-// NOVA_DEFAULT_SERVER_URL 覆盖，缺省指向公网部署 server。
+// preload 经 __NOVEL_DEFAULT_SERVER_URL__ 桥暴露给 renderer → ui 登录目标；main 侧
+// restore/env/定义包/SSE/云项目全链路取址。NOVA_DEFAULT_SERVER_URL 覆盖，缺省公网部署。
+// 用标识符 define 而非 process.env.*：esbuild 0.28.1 在 bundle 内存在 process.env 整体
+// 引用（main 的 {...process.env} 子进程 env 展开）时会放弃键级 define（实测）。
 const defaultServerUrl = process.env.NOVA_DEFAULT_SERVER_URL ?? "http://121.43.61.81:8080";
-const define = { "process.env.NOVEL_DEFAULT_SERVER_URL": JSON.stringify(defaultServerUrl) };
+const define = { __NOVA_DEFAULT_SERVER_URL__: JSON.stringify(defaultServerUrl) };
 console.log(`[build-minimal] default server url = ${defaultServerUrl}`);
 
 // 1. main（Electron 主进程，cjs——Electron main 默认 cjs，避免 ESM 下 pino 动态 require 失败）

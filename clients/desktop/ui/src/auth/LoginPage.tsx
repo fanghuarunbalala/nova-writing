@@ -8,7 +8,7 @@
  * 注册入口隐藏、登录给出提示。
  *
  * 固定 server（客户端固定server PRD FR3）：地址输入已退役——登录目标 =
- * 已保存配置地址（config.json）> 构建期注入（DefaultServerUrlContext）> 本地 fallback。
+ * 构建期注入（DefaultServerUrlContext）> 已保存配置地址（config.json）> 本地 fallback。
  */
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Cloud, RefreshCw, Smartphone } from "lucide-react";
@@ -17,7 +17,7 @@ import type { ApplicationConfigurationClient } from "../settings/ApplicationConf
 import { Button } from "../shared/primitives/Button.js";
 import { Icon } from "../shared/primitives/Icon.js";
 import { Input } from "../shared/primitives/Input.js";
-import { useDefaultServerUrl } from "../shared/DefaultServerUrlContext.js";
+import { useDefaultServerUrl, useInjectedServerUrl } from "../shared/DefaultServerUrlContext.js";
 import styles from "./LoginPage.module.css";
 
 /** fallback：本机自托管 server（cloud/server 缺省端口）——无构建期注入时兜底 */
@@ -59,6 +59,7 @@ const MODE_COPY: Record<Mode, { title: string; lede: string; submit: string; pas
 export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
   const [mode, setMode] = useState<Mode>("login");
   const defaultServerUrl = useDefaultServerUrl(DEFAULT_SERVER_URL);
+  const injectedServerUrl = useInjectedServerUrl();
   const [savedUrl, setSavedUrl] = useState<string | undefined>(undefined);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -68,7 +69,7 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
   const [done, setDone] = useState<{ username: string; url: string } | undefined>(undefined);
 
   const seedFromState = useCallback((state: ServerAuthState) => {
-    // 已保存的配置地址（登录成功后 config.json server.set 落库）优先于注入值
+    // 已保存的配置地址（登录成功后 config.json server.set 落库）——仅在无注入时兜底
     if (state.url !== undefined && state.url !== "") setSavedUrl(state.url);
     // 已在线（欢迎页入口重开等场景）：直接呈现成功态
     if (state.username !== undefined && state.status === "online") {
@@ -89,8 +90,9 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
 
   const submit = async (): Promise<void> => {
     const copy = MODE_COPY[mode];
-    // 登录目标：已保存配置地址 > 构建期注入 > fallback（无地址输入，见文件头注释）
-    const target = (savedUrl ?? defaultServerUrl).trim();
+    // 登录目标（v0.1 修正）：构建期注入 > 已保存配置 > fallback（地址输入已退役，
+    // 旧配置的僵尸 url 无界面可修，注入必须压过；换目标 = 重新构建）
+    const target = (injectedServerUrl ?? savedUrl ?? DEFAULT_SERVER_URL).trim();
     const trimmedUser = username.trim();
     if (!URL_PATTERN.test(target)) {
       setError("服务器地址配置无效（需 http/https URL）");

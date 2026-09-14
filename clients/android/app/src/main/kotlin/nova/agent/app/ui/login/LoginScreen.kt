@@ -53,7 +53,7 @@ import nova.agent.app.ui.vm.AppViewModel
 /**
  * 登录门（纯云端，无「先本地使用」逃生口）。
  * 固定 server（客户端固定server PRD FR5）：地址输入已退役——登录目标 =
- * 已保存 DataStore 地址（serverUrlHint）> 构建期注入（BuildConfig.DEFAULT_SERVER）。
+ * 构建期注入（BuildConfig.DEFAULT_SERVER）> 已保存 DataStore 地址。
  */
 @Composable
 fun LoginScreen(vm: AppViewModel) {
@@ -69,8 +69,9 @@ fun LoginScreen(vm: AppViewModel) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     val busy = auth is AuthUiState.LoggingIn
 
-    // 登录目标：已保存地址 > 构建期注入（hint 异步加载中先落到注入值，保存值回流后自然生效）
-    val targetServerUrl = serverUrlHint.ifBlank { BuildConfig.DEFAULT_SERVER }
+    // 登录目标（v0.1 修正）：构建期注入 > 已保存 DataStore 地址（地址输入已退役，
+    // 旧配置僵尸 url 无界面可修，注入必须压过；换目标 = 重新构建）
+    val targetServerUrl = BuildConfig.DEFAULT_SERVER.ifBlank { serverUrlHint }
 
     // debug 预填（local.properties nova.dev.user/pass → BuildConfig；release 恒空串不生效）
     LaunchedEffect(Unit) {

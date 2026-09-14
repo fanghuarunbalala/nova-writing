@@ -82,7 +82,27 @@ describe("设置「Server」面板", () => {
 		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://121.43.61.81:8080", "alice", "pw12345678"));
 	});
 
-	it("登录：无注入 → serverLogin 收到 fallback 地址（凭据修剪）", async () => {
+	it("注入压过已保存：serverAuth 带旧 url + 注入存在 → serverLogin 打到注入值", async () => {
+		const client = makeClient({ authState: { status: "unconfigured", url: "http://192.168.1.5:8787" } });
+		openPanel(client, "http://121.43.61.81:8080");
+		await screen.findByText(/未配置/);
+		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: "alice" } });
+		fireEvent.change(screen.getByLabelText(/^密码$/), { target: { value: "pw12345678" } });
+		fireEvent.click(screen.getByRole("button", { name: /登录/ }));
+		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://121.43.61.81:8080", "alice", "pw12345678"));
+	});
+
+	it("无注入时已保存地址兜底：serverLogin 打到 config 保存的 url", async () => {
+		const client = makeClient({ authState: { status: "unconfigured", url: "http://192.168.1.5:8787" } });
+		openPanel(client);
+		await screen.findByText(/未配置/);
+		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: "alice" } });
+		fireEvent.change(screen.getByLabelText(/^密码$/), { target: { value: "pw12345678" } });
+		fireEvent.click(screen.getByRole("button", { name: /登录/ }));
+		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://192.168.1.5:8787", "alice", "pw12345678"));
+	});
+
+	it("登录：无注入无保存 → serverLogin 收到 fallback 地址（凭据修剪）", async () => {
 		const client = makeClient();
 		openPanel(client);
 		await screen.findByText(/未配置/);

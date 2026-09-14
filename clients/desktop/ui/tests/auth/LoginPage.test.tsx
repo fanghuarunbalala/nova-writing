@@ -102,14 +102,23 @@ describe("LoginPage（固定 server）", () => {
 		);
 	});
 
-	it("已保存地址优先：serverAuth 带 url → 登录打到已保存地址（注入值让位）", async () => {
+	it("注入压过已保存：serverAuth 带旧 url + 注入存在 → 登录打到注入地址（僵尸配置可修）", async () => {
 		const client = makeClient({ authState: { status: "unconfigured", url: "http://192.168.1.5:8787" } });
 		render(
 			<DefaultServerUrlContext.Provider value="http://121.43.61.81:8080">
 				<LoginPage configuration={client} onEnterWorkspace={() => {}} />
 			</DefaultServerUrlContext.Provider>,
 		);
-		// 等 serverAuth 回流完成 seed（savedUrl 是异步 setState），再提交
+		await waitFor(() => expect(client.serverAuth).toHaveBeenCalledTimes(1));
+		fillAndSubmit("alice", "pw12345678");
+		await waitFor(() =>
+			expect(client.serverLogin).toHaveBeenCalledWith("http://121.43.61.81:8080", "alice", "pw12345678"),
+		);
+	});
+
+	it("无注入时已保存地址兜底：serverAuth 带 url → 登录打到已保存地址", async () => {
+		const client = makeClient({ authState: { status: "unconfigured", url: "http://192.168.1.5:8787" } });
+		render(<LoginPage configuration={client} onEnterWorkspace={() => {}} />);
 		await waitFor(() => expect(client.serverAuth).toHaveBeenCalledTimes(1));
 		fillAndSubmit("alice", "pw12345678");
 		await waitFor(() =>

@@ -47,11 +47,11 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A["登录表单提交"] --> B{"已保存地址存在?"}
-    B -- 是 --> C["用已保存地址<br/>（老用户/开发者手改不变连）"]
-    B -- 否 --> D{"构建期注入值存在?"}
-    D -- 是 --> E["用注入值<br/>（gui 桥 / BuildConfig）"]
-    D -- 否 --> F["fallback 常量<br/>127.0.0.1:8787（web shell/单测）"]
+    A["登录表单提交"] --> B{"构建期注入值存在?"}
+    B -- 是 --> C["用注入值<br/>（v0.1 修正：地址输入已退役，<br/>旧配置的僵尸 url 无界面可修——注入压过）"]
+    B -- 否 --> D{"已保存地址存在?"}
+    D -- 是 --> E["用已保存地址<br/>（仅无注入时兜底：web shell/单测）"]
+    D -- 否 --> F["fallback 常量<br/>127.0.0.1:8787"]
 ```
 
 ## 4. 功能明细
@@ -67,16 +67,16 @@ flowchart LR
   - 处理：沿 `__NOVEL_LOG_LEVEL__` 同构模式 `contextBridge.exposeInMainWorld("__NOVEL_DEFAULT_SERVER_URL__", ...)`，空串表示未注入；renderer 读桥值非空经 bootstrap 传入 ui；类型声明同步。
 - **FR3 桌面登录去地址化**：
   - 触发：LoginPage / ServerSettingsPanel 渲染与提交。
-  - 处理：删 URL 输入框、`DEFAULT_SERVER_URL` 预填与已配置回填分支；登录/注册提交 `serverLogin(已存 url ?? 注入值, ...)`；成功态「用户名@server」展示实际连接 host；ServerSettingsPanel 删地址输入，未配置提示与在线态只读展示当前 server，agentMode 切换保留。
+  - 处理：删 URL 输入框、`DEFAULT_SERVER_URL` 预填与已配置回填分支；登录/注册提交 `serverLogin(注入值 ?? 已存 url, ...)`（v0.1 修正：注入压过已存——已存 url 仅在无注入时兜底）；成功态「用户名@server」展示实际连接 host；ServerSettingsPanel 删地址输入，未配置提示与在线态只读展示当前 server（注入值优先），agentMode 切换保留。
   - 输出：表单 = 用户名 + 密码（+注册切换）。
-  - 异常：无桥注入（web shell / 单测）→ fallback `127.0.0.1:8787`；已保存地址优先于注入值（老用户不断连）。
+  - 异常：无桥注入（web shell / 单测）→ 已存 url ?? fallback `127.0.0.1:8787`。
 - **FR4 Android 构建选项**：
   - 触发：`:app` 任意构建。
   - 输入：gradle 属性 `-Pnova.server.url` 或 `local.properties` 键 `nova.server.url`（沿用 `nova.dev.*` 的 local.properties 惯例；属性优先）。
   - 处理：`app/build.gradle.kts` 复用 devField 模式新增 `buildConfigField("String", "DEFAULT_SERVER", ...)`，缺省 `http://121.43.61.81:8080`。
   - 输出：`BuildConfig.DEFAULT_SERVER`；release/debug 均生效。
 - **FR5 Android 登录去地址化**：
-  - 处理：LoginScreen 删「服务器地址」输入框、`http(s)://` 前缀校验与 `DEV_SERVER` debug 预填链路（`DEV_USER`/`DEV_PASS` 保留）；提交 `serverLogin(user, pass, 已存 serverUrl ?: BuildConfig.DEFAULT_SERVER)`；成功态与 SettingsScreen 只读展示实际连接 host。
+  - 处理：LoginScreen 删「服务器地址」输入框、`http(s)://` 前缀校验与 `DEV_SERVER` debug 预填链路（`DEV_USER`/`DEV_PASS` 保留）；提交 `serverLogin(user, pass, BuildConfig.DEFAULT_SERVER.ifBlank { 已存 serverUrl })`（注入压过已存）；成功态与 SettingsScreen 只读展示实际连接 host。
 - **FR6 Android 明文放行（过渡）**：
   - 处理：main AndroidManifest 放开 cleartext（debug 原本就放开，补 release），否则 release 包连不上 `http://` 的固定 server。
   - 异常：属 TLS 上线前的过渡措施，上 TLS 后回收（开放问题②）。
@@ -97,7 +97,7 @@ flowchart LR
 
 - [ ] 桌面：全新 userData 首启登录页无地址输入框，仅账号密码；登录请求打到 `http://121.43.61.81:8080`
 - [ ] 桌面：`NOVA_DEFAULT_SERVER_URL=http://x pnpm build` 后产物 grep 含 `x`，登录打到 x
-- [ ] 桌面：config.json 已配置 url 的用户仍连已配置地址
+- [ ] 桌面：config.json 已存旧 url（如本地联调残留）+ 注入存在 → 登录打到注入地址（v0.1 修正：注入压过僵尸配置）；无注入时已存 url 兜底
 - [ ] 桌面：ServerSettingsPanel 无地址输入，只读展示当前 server；agentMode 可切换
 - [ ] Android：`:app:assembleDebug` 产物 BuildConfig 含注入值；缺省构建含 `http://121.43.61.81:8080`，`-Pnova.server.url=http://x` 含 x
 - [ ] Android：LoginScreen 无地址输入框；release 构建允许明文 http
@@ -107,4 +107,4 @@ flowchart LR
 
 - 开源仓库缺省值指向个人公网 server（注册开放，陌生构建用户会连上来）——是否改为仓库默认 `127.0.0.1:8787` + 个人构建用变量覆盖？（当前按「缺省即公网地址」实施）
 - 明文 HTTP 过渡的安全面：公网裸 HTTP 传密码，建议尽快在 nginx 上 TLS 终止后收紧 cleartext
-- 开发者切本地 server 仅剩手改配置文件（config.json / DataStore）或带参数构建——是否需要保留隐藏的地址调试入口？
+- 开发者切本地 server 仅剩带参数构建（`NOVA_DEFAULT_SERVER_URL=http://127.0.0.1:8787 pnpm build` / `-Pnova.server.url=...`）或手改配置文件——**已定**：地址输入退役后这是唯一入口，v0.1 现场验证（旧 config 残留本地 url 导致登录连错）确认「注入压过已存」必须成立，否则僵尸配置无解

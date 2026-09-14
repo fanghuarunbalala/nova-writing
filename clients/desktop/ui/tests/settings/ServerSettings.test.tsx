@@ -1,12 +1,14 @@
 /**
- * 设置「Server」分类端到端（组件级，FR1）：连接状态指示、登录表单（地址校验/成功态切换）、
- * 设备列表与踢出、登出回退。
+ * 设置「Server」分类端到端（组件级，FR1）：连接状态指示、登录表单（固定 server：
+ * 地址输入已退役，登录目标 = 已保存地址 > DefaultServerUrlContext 注入 > fallback）、
+ * 当前 server 只读展示、设备列表与踢出、登出回退。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ConfigSnapshot, ServerAuthState, ServerDeviceInfo } from "@novel/core";
 import { SettingsDialog } from "../../src/settings/SettingsDialog.js";
 import { ApplicationSettingsStore } from "../../src/settings/ApplicationSettingsStore.js";
+import { DefaultServerUrlContext } from "../../src/shared/DefaultServerUrlContext.js";
 import type { ApplicationConfigurationClient } from "../../src/settings/ApplicationConfigurationClient.js";
 
 function makeClient(options?: {
@@ -39,14 +41,16 @@ function makeClient(options?: {
 	};
 }
 
-function openPanel(client: ApplicationConfigurationClient): void {
+function openPanel(client: ApplicationConfigurationClient, defaultServerUrl?: string): void {
 	render(
-		<SettingsDialog
-			open
-			store={new ApplicationSettingsStore()}
-			configuration={client}
-			onDismiss={() => {}}
-		/>,
+		<DefaultServerUrlContext.Provider value={defaultServerUrl}>
+			<SettingsDialog
+				open
+				store={new ApplicationSettingsStore()}
+				configuration={client}
+				onDismiss={() => {}}
+			/>
+		</DefaultServerUrlContext.Provider>,
 	);
 	fireEvent.click(screen.getByRole("button", { name: "Server" }));
 }
@@ -57,29 +61,52 @@ afterEach(() => {
 });
 
 describe("设置「Server」面板", () => {
-	it("未配置：显示未配置状态 + 登录表单", async () => {
+	it("未配置：显示未配置状态 + 登录表单（无地址输入，server 只读展示 fallback）", async () => {
 		openPanel(makeClient());
 		expect(await screen.findByText(/未配置（登录后使用云端项目）/)).toBeTruthy();
-		expect(screen.getByLabelText(/server 地址/)).toBeTruthy();
+		// 固定 server：地址输入已退役；当前 server 只读展示（无注入 → fallback）
+		expect(screen.queryByLabelText(/server 地址/)).toBeNull();
+		expect(screen.getByText((_, el) => el?.textContent === "server：http://127.0.0.1:8787（固定，随构建分发）" && el.tagName === "P")).toBeTruthy();
+		expect(screen.getByLabelText(/^用户名$/)).toBeTruthy();
 		expect(screen.getByRole("button", { name: /登录/ })).toBeTruthy();
 	});
 
-	it("非法地址被拦（不触网）", async () => {
+	it("注入地址：serverLogin 打到注入值 + 只读展示注入值", async () => {
 		const client = makeClient();
-		openPanel(client);
+		openPanel(client, "http://121.43.61.81:8080");
 		await screen.findByText(/未配置/);
-		fireEvent.change(screen.getByLabelText(/server 地址/), { target: { value: "not-a-url" } });
+		expect(screen.getByText((_, el) => el?.textContent === "server：http://121.43.61.81:8080（固定，随构建分发）" && el.tagName === "P")).toBeTruthy();
+		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: "alice" } });
+		fireEvent.change(screen.getByLabelText(/^密码$/), { target: { value: "pw12345678" } });
 		fireEvent.click(screen.getByRole("button", { name: /登录/ }));
-		expect(await screen.findByText(/请填写合法的 http\/https server 地址/)).toBeTruthy();
-		expect(client.serverLogin).not.toHaveBeenCalled();
+		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://121.43.61.81:8080", "alice", "pw12345678"));
 	});
 
-	it("登录：带修剪后的地址与凭据调用 serverLogin", async () => {
+	it("注入压过已保存：serverAuth 带旧 url + 注入存在 → serverLogin 打到注入值", async () => {
+		const client = makeClient({ authState: { status: "unconfigured", url: "http://192.168.1.5:8787" } });
+		openPanel(client, "http://121.43.61.81:8080");
+		await screen.findByText(/未配置/);
+		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: "alice" } });
+		fireEvent.change(screen.getByLabelText(/^密码$/), { target: { value: "pw12345678" } });
+		fireEvent.click(screen.getByRole("button", { name: /登录/ }));
+		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://121.43.61.81:8080", "alice", "pw12345678"));
+	});
+
+	it("无注入时已保存地址兜底：serverLogin 打到 config 保存的 url", async () => {
+		const client = makeClient({ authState: { status: "unconfigured", url: "http://192.168.1.5:8787" } });
+		openPanel(client);
+		await screen.findByText(/未配置/);
+		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: "alice" } });
+		fireEvent.change(screen.getByLabelText(/^密码$/), { target: { value: "pw12345678" } });
+		fireEvent.click(screen.getByRole("button", { name: /登录/ }));
+		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://192.168.1.5:8787", "alice", "pw12345678"));
+	});
+
+	it("登录：无注入无保存 → serverLogin 收到 fallback 地址（凭据修剪）", async () => {
 		const client = makeClient();
 		openPanel(client);
 		await screen.findByText(/未配置/);
-		fireEvent.change(screen.getByLabelText(/server 地址/), { target: { value: " http://127.0.0.1:8787 " } });
-		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: "alice" } });
+		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: " alice " } });
 		fireEvent.change(screen.getByLabelText(/^密码$/), { target: { value: "pw12345678" } });
 		fireEvent.click(screen.getByRole("button", { name: /登录/ }));
 		await waitFor(() => expect(client.serverLogin).toHaveBeenCalledWith("http://127.0.0.1:8787", "alice", "pw12345678"));
@@ -98,7 +125,8 @@ describe("设置「Server」面板", () => {
 		});
 		openPanel(client);
 		await screen.findByText(/未配置/);
-		fireEvent.change(screen.getByLabelText(/server 地址/), { target: { value: "http://127.0.0.1:8787" } });
+		fireEvent.change(screen.getByLabelText(/^用户名$/), { target: { value: "alice" } });
+		fireEvent.change(screen.getByLabelText(/^密码$/), { target: { value: "pw12345678" } });
 		fireEvent.click(screen.getByRole("button", { name: /登录/ }));
 		expect(await screen.findByText(/登录失败：用户名或密码错误/)).toBeTruthy();
 	});

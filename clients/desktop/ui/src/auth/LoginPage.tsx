@@ -1,11 +1,14 @@
 /**
  * LoginPage（独立登录页 · docs/design-demos/login-page-demo.html 定稿形态）
  *
- * 启动登录门 / 欢迎页入口共用：服务器地址（预填推荐默认）+ 用户名 + 密码的单一主表单；
- * 底部次级入口「注册账号」——注册模式同卡切换（← 返回登录），注册成功即自动登录跳
- * 成功态；成功态展示 用户名@server + 「进入工作台」。纯云端化 ⑥：强制登录——项目
- * 数据都在 server 上，无本地模式跳过入口。老 main 进程（无 serverLogin/serverRegister
- * 方法）降级：注册入口隐藏、登录给出提示。
+ * 启动登录门 / 欢迎页入口共用：用户名 + 密码的单一主表单；底部次级入口「注册账号」
+ * ——注册模式同卡切换（← 返回登录），注册成功即自动登录跳成功态；成功态展示
+ * 用户名@server + 「进入工作台」。纯云端化 ⑥：强制登录——项目数据都在 server 上，
+ * 无本地模式跳过入口。老 main 进程（无 serverLogin/serverRegister 方法）降级：
+ * 注册入口隐藏、登录给出提示。
+ *
+ * 固定 server（客户端固定server PRD FR3）：地址输入已退役——登录目标 =
+ * 构建期注入（DefaultServerUrlContext）> 已保存配置地址（config.json）> 本地 fallback。
  */
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Cloud, RefreshCw, Smartphone } from "lucide-react";
@@ -14,11 +17,21 @@ import type { ApplicationConfigurationClient } from "../settings/ApplicationConf
 import { Button } from "../shared/primitives/Button.js";
 import { Icon } from "../shared/primitives/Icon.js";
 import { Input } from "../shared/primitives/Input.js";
+import { useDefaultServerUrl, useInjectedServerUrl } from "../shared/DefaultServerUrlContext.js";
 import styles from "./LoginPage.module.css";
 
-/** 推荐默认：本机自托管 server（cloud/server 缺省端口） */
+/** fallback：本机自托管 server（cloud/server 缺省端口）——无构建期注入时兜底 */
 const DEFAULT_SERVER_URL = "http://127.0.0.1:8787";
 const URL_PATTERN = /^https?:\/\/[^\s/.][^\s]*$/;
+
+/** 成功态只展示 host（协议+尾斜杠对用户是噪音；解析失败原样返回） */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url.replace(/\/+$/, "");
+  }
+}
 
 export interface LoginPageProps {
   readonly configuration: ApplicationConfigurationClient;
@@ -45,7 +58,9 @@ const MODE_COPY: Record<Mode, { title: string; lede: string; submit: string; pas
 
 export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
   const [mode, setMode] = useState<Mode>("login");
-  const [url, setUrl] = useState(DEFAULT_SERVER_URL);
+  const defaultServerUrl = useDefaultServerUrl(DEFAULT_SERVER_URL);
+  const injectedServerUrl = useInjectedServerUrl();
+  const [savedUrl, setSavedUrl] = useState<string | undefined>(undefined);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -54,12 +69,13 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
   const [done, setDone] = useState<{ username: string; url: string } | undefined>(undefined);
 
   const seedFromState = useCallback((state: ServerAuthState) => {
-    if (state.url !== undefined && state.url !== "") setUrl(state.url);
-    // 已在线（欢迎页入口重开等场景）：直接呈现成功态
-    if (state.username !== undefined && state.status === "online") {
-      setDone({ username: state.username, url: state.url ?? url });
+    // 已保存的配置地址（登录成功后 config.json server.set 落库）——仅在无注入时兜底
+    if (state.url !== undefined && state.url !== "") setSavedUrl(state.url);
+    // 已在线（欢迎页入口重开等场景）：直接呈现成功态（needRelogin 僵尸态不算在线）
+    if (state.username !== undefined && state.status === "online" && state.needRelogin !== true) {
+      setDone({ username: state.username, url: state.url ?? defaultServerUrl });
     }
-  }, [url]);
+  }, [defaultServerUrl]);
 
   useEffect(() => {
     const pending = configuration.serverAuth?.();
@@ -74,10 +90,12 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
 
   const submit = async (): Promise<void> => {
     const copy = MODE_COPY[mode];
-    const trimmedUrl = url.trim();
+    // 登录目标（v0.1 修正）：构建期注入 > 已保存配置 > fallback（地址输入已退役，
+    // 旧配置的僵尸 url 无界面可修，注入必须压过；换目标 = 重新构建）
+    const target = (injectedServerUrl ?? savedUrl ?? DEFAULT_SERVER_URL).trim();
     const trimmedUser = username.trim();
-    if (!URL_PATTERN.test(trimmedUrl)) {
-      setError("服务器地址需为 http/https URL");
+    if (!URL_PATTERN.test(target)) {
+      setError("服务器地址配置无效（需 http/https URL）");
       return;
     }
     if (trimmedUser.length < 3) {
@@ -100,12 +118,12 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
     setBusy(true);
     setError(undefined);
     try {
-      const state = await call(trimmedUrl, trimmedUser, password);
+      const state = await call(target, trimmedUser, password);
       if (state === undefined) {
         setError("当前版本不支持该操作（请更新应用）");
         return;
       }
-      setDone({ username: trimmedUser, url: trimmedUrl });
+      setDone({ username: trimmedUser, url: target });
     } catch (cause) {
       // server 防枚举/校验文案（用户名或密码错误 / 用户名已存在 / 密码至少 8 位）原样呈现
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -127,7 +145,7 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
           <h2 className={styles.successTitle}>已连接同步服务</h2>
           <p className={styles.successMeta}>
             <strong>{done.username}</strong>
-            <span className={styles.mono}>@{done.url.replace(/\/+$/, "")}</span>
+            <span className={styles.mono}>@{hostOf(done.url)}</span>
           </p>
           <div className={styles.successNote}>
             · 本设备的会话数据将实时上推 server（journal / 审批 / 租约）
@@ -191,21 +209,6 @@ export function LoginPage({ configuration, onEnterWorkspace }: LoginPageProps) {
           }}
           noValidate
         >
-          <div className={styles.field}>
-            <div className={styles.fieldLabel}>
-              <label htmlFor="login-server-url">服务器地址</label>
-              <span className={styles.badge}>推荐 · 本机默认</span>
-            </div>
-            <Input
-              id="login-server-url"
-              className={styles.mono}
-              value={url}
-              spellCheck={false}
-              placeholder={DEFAULT_SERVER_URL}
-              onChange={(event) => setUrl(event.currentTarget.value)}
-            />
-            <div className={styles.fieldHint}>自托管数据层 server 的地址；不确定就保持默认</div>
-          </div>
           <div className={styles.field}>
             <div className={styles.fieldLabel}>
               <label htmlFor="login-username">用户名</label>

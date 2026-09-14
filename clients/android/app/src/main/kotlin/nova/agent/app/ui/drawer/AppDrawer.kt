@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.DevicesOther
 import androidx.compose.material.icons.outlined.FactCheck
@@ -76,6 +77,8 @@ fun AppDrawer(
     val currentId by vm.currentProjectId.collectAsStateWithLifecycle()
     val approvalCount by vm.approvals.collectAsStateWithLifecycle()
     val devices by vm.devices.collectAsStateWithLifecycle()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
+    val activeCid by vm.activeConversation.collectAsStateWithLifecycle()
     val current = projects.firstOrNull { it.id == currentId }
 
     var createOpen by rememberSaveable { mutableStateOf(false) }
@@ -166,6 +169,48 @@ fun AppDrawer(
                 Text("新建项目", style = NovaTypography.bodyMedium.copy(color = palette.muted), modifier = Modifier.padding(start = 10.dp))
             }
 
+            // ---- 本项目会话（阶段3 FR3：Registry 本地发现 + 新建；跨端发现挂「未关联」） ----
+            if (conversations.any { it.projectId == currentId || it.projectId == null }) {
+                Text(
+                    "本项目会话",
+                    style = NovaTypography.labelSmall.copy(color = palette.faint),
+                    modifier = Modifier.padding(start = 18.dp, top = 16.dp, bottom = 4.dp),
+                )
+                conversations.filter { it.projectId == currentId || it.projectId == null }.forEach { conv ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { vm.openConversation(conv.conversationId, currentId) }
+                            .padding(start = 18.dp, end = 8.dp)
+                            .height(40.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                conv.title + if (conv.projectId == null) " · 未关联" else "",
+                                style = NovaTypography.bodyMedium,
+                                fontWeight = if (conv.conversationId == activeCid) FwMedium else FontWeight.Normal,
+                                maxLines = 1,
+                            )
+                        }
+                        if (conv.conversationId == activeCid) {
+                            Box(Modifier.size(6.dp).background(palette.accent, CircleShape))
+                        }
+                    }
+                }
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { vm.openConversation(null, currentId) }
+                    .padding(start = 18.dp, top = 2.dp)
+                    .height(40.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.ChatBubbleOutline, null, tint = palette.muted, modifier = Modifier.size(16.dp))
+                Text("新建会话", style = NovaTypography.bodyMedium.copy(color = palette.muted), modifier = Modifier.padding(start = 10.dp))
+            }
+
             HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), color = palette.border)
 
             DrawerEntry(Icons.Outlined.FactCheck, "审批中心", badge = approvalCount.size) { onNavigate(Screen.ApprovalCenter) }
@@ -178,8 +223,8 @@ fun AppDrawer(
                 feedback("设备管理在设置页 · 「服务器」分组内")
             }
 
-            // ---- 演示控制（仅 debug；覆盖层/只读租约的入口在这里最易发现） ----
-            if (BuildConfig.DEBUG) {
+            // ---- 演示控制（仅 debug 且演示数据源；覆盖层/只读租约的入口在这里最易发现） ----
+            if (BuildConfig.DEBUG && vm.demoMode) {
                 HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), color = palette.border)
                 Text(
                     "演示控制（仅 debug 构建）",

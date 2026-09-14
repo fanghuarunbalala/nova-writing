@@ -33,6 +33,7 @@ import {
   createNovelApiServer,
   createProcessSpawner,
   BookImportService,
+  StylelibBuildRunner,
   createLibraryFace,
   LibraryService,
   RemoteNovelStore,
@@ -113,6 +114,13 @@ const CONVERSATION_EVENTS_CHANNEL = "conversation-events";
 const SERVER_AUTH_CHANNEL = "server-auth-changed";
 /** server SSE 流事件转发（journal/approval/lease；renderer 侧进度视图/审批中心消费） */
 const SERVER_EVENTS_CHANNEL = "server-events";
+
+/**
+ * 构建期标识符 define（build-minimal.mjs 注入固定 server 地址）。
+ * 不用 process.env.* 键级 define：本文件含 {...process.env} 子进程 env 展开，
+ * esbuild 0.28.1 实测整体引用存在时会放弃键级替换；typeof 守卫保源码直跑（tsx/smoke）。
+ */
+declare const __NOVA_DEFAULT_SERVER_URL__: string | undefined;
 
 /**
  * 回显 AgentLoop：followup 即时开 run 产 run-start/user.message → assistant.delta×N →
@@ -668,7 +676,17 @@ async function main(): Promise<void> {
     new ServerTokenStore(join(configHome.resolve(), "server-auth.json"), cipher),
     (url) => new ServerAuthClient(url),
   );
-  await serverAuthSession.restore((await configStore.get()).server?.url);
+  // 固定 server（客户端固定server PRD v0.1 修正）：构建期 define 注入的地址压过 config
+  // 残留——main 全链路（restore/子进程 env/定义包/SSE/云项目）统一经 serverBaseUrl() 取址，
+  // 旧配置的僵尸 url（如本地联调遗留 127.0.0.1:8787）不再被使用；登录成功后
+  // onLoginUrlPersist 会把实际地址写回 config。无注入（tsx 直跑/smoke）时回落 config 值
+  //（标识符与 typeof 守卫说明见文件顶部 __NOVA_DEFAULT_SERVER_URL__ 声明处）。
+  const injectedServerUrl =
+    (typeof __NOVA_DEFAULT_SERVER_URL__ === "undefined" ? undefined : __NOVA_DEFAULT_SERVER_URL__)
+      ?.trim() || undefined;
+  const serverBaseUrl = async (): Promise<string | undefined> =>
+    injectedServerUrl ?? (await configStore.get()).server?.url;
+  await serverAuthSession.restore(await serverBaseUrl());
   const configServer = new ConfigServer(configStore, {
     runtimeStatus: () => ({ providerLive }),
     serverAuth: {
@@ -716,7 +734,7 @@ async function main(): Promise<void> {
       return;
     }
     process.env.NOVEL_AGENT_MODE = "bundle";
-    const url = snapshot.server?.url;
+    const url = injectedServerUrl ?? snapshot.server?.url;
     if (url !== undefined) {
       try {
         const token = await serverAuthSession.ensureAccessToken();
@@ -743,7 +761,7 @@ async function main(): Promise<void> {
     if (existsSync(definitionBundlePath)) process.env.NOVEL_DEFINITION_BUNDLE = definitionBundlePath;
   };
   const applyServerEnv = async () => {
-    const url = (await configStore.get()).server?.url;
+    const url = await serverBaseUrl();
     if (url !== undefined) {
       process.env.NOVEL_SERVER_URL = url;
       process.env.NOVEL_SERVER_ACCESS_FILE = serverAccessFile;
@@ -771,7 +789,7 @@ async function main(): Promise<void> {
   let serverEventBridge: ServerEventBridge | undefined;
   const setupServerEventBridge = async (): Promise<void> => {
     if (serverEventBridge !== undefined) return;
-    const url = (await configStore.get()).server?.url;
+    const url = await serverBaseUrl();
     if (url === undefined) return;
     if ((await serverAuthSession.ensureAccessToken()) === undefined) return;
     serverEventBridge = new ServerEventBridge({
@@ -815,7 +833,7 @@ async function main(): Promise<void> {
   // server 模式：会话租约注册表（FR5）+ 审批两段式通道（FR4）——配置了 server 且登录后才激活
   const conversationLeases = new Map<string, { client: LeaseClient; token: string }>();
   const serverChannelActive = async (): Promise<string | undefined> => {
-    const url = (await configStore.get()).server?.url;
+    const url = await serverBaseUrl();
     if (url === undefined) return undefined;
     return (await serverAuthSession.ensureAccessToken()) === undefined ? undefined : url;
   };
@@ -891,6 +909,9 @@ async function main(): Promise<void> {
   // CMS spawnConversation 派生（task/extraEnv 契约直接适配），analyst journal 需已开工作区。
   const libraryRoot = process.env.NOVEL_LIBRARY_ROOT ?? join(app.getPath("userData"), "library");
   mkdirSync(libraryRoot, { recursive: true });
+  // 书库根写进 main env（NOVEL_PROVIDER_* 同款先例）：全部子进程（conversation /
+  // stylelib 建库 worker）经 spawn env 继承——风格示例注入与建库据此定位书库
+  process.env.NOVEL_LIBRARY_ROOT = libraryRoot;
   let libraryService = new LibraryService({ libraryRoot });
   // 解析进度 journal 信号：spawn 时记录 bookId → conversationId（storedir = storedirRoot/<cid>）
   const analystConversationOf = new Map<string, string>();
@@ -927,12 +948,24 @@ async function main(): Promise<void> {
   };
   // 导入源白名单（pickBookFile 登记；importBook 仅接受白名单路径——同 workspace 引用白名单模式）
   const allowedBookSources = new Set<string>();
+  // 风格示例库建库后台执行器（PRD 检索式形态示例）：stylelib-worker.mjs 一次性子进程
+  // 承载策展 LLM 与 ONNX 嵌入，meta.stylelib 状态由 runner 维护；随导入 fire-and-forget
+  const stylelibRunner = new StylelibBuildRunner({
+    service: () => libraryService,
+    workerScript: join(baseDir, "..", "..", "..", "core", "scripts", "stylelib-worker.mjs"),
+  });
   const libraryFace = createLibraryFace({
     service: () => libraryService,
     workspaceRoot: () => currentWorkspaceRoot,
     importer: () =>
       canSpawnAnalysis()
-        ? new BookImportService({ service: libraryService, spawner: analysisSpawner, libraryRoot })
+        ? new BookImportService({
+            service: libraryService,
+            spawner: analysisSpawner,
+            // 建库需 provider 配置（策展 LLM）；与解析会话同一可用性判据
+            ...(canSpawnAnalysis() ? { stylelib: stylelibRunner } : {}),
+            libraryRoot,
+          })
         : undefined,
     pickFile: async () => {
       const result = await openDialogModal({
@@ -1328,7 +1361,7 @@ async function main(): Promise<void> {
       mkdirSync(currentJournalDir, { recursive: true });
       if (cloud !== undefined) {
         const store = new RemoteNovelStore({
-          url: (await configStore.get()).server?.url ?? "",
+          url: (await serverBaseUrl()) ?? "",
           projectId: cloud.projectId,
           sessionTag: `ui-${cloud.projectId}-${process.pid}`,
           getAccessToken: () => serverAuthSession.ensureAccessToken(),
@@ -1379,7 +1412,7 @@ async function main(): Promise<void> {
       list: async (): Promise<
         Array<{ id: string; name: string; lastActivityAt: number | null; archived: boolean; referenceId?: string }>
       > => {
-        const url = (await configStore.get()).server?.url;
+        const url = await serverBaseUrl();
         const token = await serverAuthSession.ensureAccessToken();
         if (url === undefined || token === undefined) return [];
         try {
@@ -1404,7 +1437,7 @@ async function main(): Promise<void> {
       },
       /** 新建云项目：server 建实体 → 本地缓存目录 + 注册表登记（含 cloudProjectId）→ 打开引用 */
       create: async (name: string): Promise<{ referenceId: string; label: string } | undefined> => {
-        const url = (await configStore.get()).server?.url;
+        const url = await serverBaseUrl();
         const token = await serverAuthSession.ensureAccessToken();
         if (url === undefined || token === undefined) throw new Error("未登录 server（先在登录页或设置 → Server 登录）");
         const trimmed = name.trim();
@@ -1430,7 +1463,7 @@ async function main(): Promise<void> {
       /** 删除云项目（纯云端化 FR6）：server 软删（权威）→ 本地缓存与注册表清理。
        *  在用（当前项目或他实例持锁）拒绝；未登记（他端创建未打开）只删 server 侧。 */
       remove: async (projectId: string): Promise<void> => {
-        const url = (await configStore.get()).server?.url;
+        const url = await serverBaseUrl();
         const token = await serverAuthSession.ensureAccessToken();
         if (url === undefined || token === undefined) throw new Error("未登录 server（删除云端项目需登录）");
         const entry = registryEntries.find((e) => e.cloudProjectId === projectId);

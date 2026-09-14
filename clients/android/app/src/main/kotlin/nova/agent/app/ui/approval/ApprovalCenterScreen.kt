@@ -37,12 +37,18 @@ import nova.agent.app.ui.theme.NovaText
 import nova.agent.app.ui.theme.NovaTypography
 import nova.agent.app.ui.vm.AppViewModel
 
-/** 审批中心（demo renderCenter L2353-2372 逐字）：来源 chip + 工具 chip + 待批准 + 倒计时 + meta 行 */
+/**
+ * 审批中心（PRD FR7）：本地会话集 pending 聚合；跨端 resolve 直连（SSE 到达自动刷新）。
+ * 行 UI 对齐 demo renderCenter（L2353-2372）：来源 chip + 工具 chip + 待批准 + 倒计时 + meta 行。
+ */
 @Composable
 fun ApprovalCenterScreen(vm: AppViewModel, onBack: () -> Unit) {
     val palette = LocalNovaPalette.current
     val approvals by vm.approvals.collectAsStateWithLifecycle()
     var openDetail by remember { mutableStateOf<ApprovalUi?>(null) }
+
+    // ON_START 聚合刷新（§1.2-⑨③）
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshApprovals() }
 
     ScreenScaffold(title = "审批中心", onBack = onBack) {
         if (approvals.isEmpty()) {

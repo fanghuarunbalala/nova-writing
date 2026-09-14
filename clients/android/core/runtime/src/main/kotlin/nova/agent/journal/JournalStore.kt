@@ -125,7 +125,7 @@ class JsonlJournalStore(
         lastSeq = seq
         withContext(io) {
             Files.createDirectories(path.toAbsolutePath().parent)
-            Files.writeString(tmp, sb.toString())
+            Files.write(tmp, sb.toString().toByteArray())
             Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         }
         }
@@ -133,7 +133,12 @@ class JsonlJournalStore(
 
     private suspend fun writeLine(line: JournalLine) = withContext(io) {
         Files.createDirectories(path.toAbsolutePath().parent)
-        Files.writeString(path, json.encodeToString(JournalLine.serializer(), line) + "\n", java.nio.file.StandardOpenOption.APPEND, java.nio.file.StandardOpenOption.CREATE)
+        // Files.writeString 需 API 33+；write(bytes) API 26 安全
+        Files.write(
+            path,
+            (json.encodeToString(JournalLine.serializer(), line) + "\n").toByteArray(),
+            java.nio.file.StandardOpenOption.APPEND, java.nio.file.StandardOpenOption.CREATE,
+        )
     }
 
     private fun decode(line: String): JournalLine? = try {

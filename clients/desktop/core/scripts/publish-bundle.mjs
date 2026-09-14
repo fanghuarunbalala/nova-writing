@@ -3,7 +3,7 @@
  *
  *   pnpm -C core run bundle:publish -- [--version 1.6.0] [--server http://127.0.0.1:8787]
  *
- * - 读取 golden 包 fixtures/definition-novel-1.5.0.json；
+ * - 读取 golden 包 fixtures/definition-novel-1.6.0.json；
  * - --version 指定新版本号（改了策略面重新生成 golden 后 bump 发布；缺省用包内版本号）；
  * - 登录（NOVA_ADMIN_USER / NOVA_ADMIN_PASS 环境变量）取 JWT，POST /v1/definitions；
  * - 同版本已存在会 409（不可变），换新版本号重发。
@@ -32,7 +32,7 @@ const fixturePath = path.join(
   "..",
   "protocol",
   "fixtures",
-  "definition-novel-1.5.0.json",
+  "definition-novel-1.6.0.json",
 );
 const bundle = JSON.parse(readFileSync(fixturePath, "utf8"));
 if (versionArg) bundle.definitionVersion = versionArg;

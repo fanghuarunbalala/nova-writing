@@ -113,4 +113,36 @@ describe("BookImportService", () => {
 			rmSync(root, { recursive: true, force: true });
 		}
 	});
+
+	it("装配 stylelib 面：导入成功后 fire-and-forget 建库（不阻塞返回）", async () => {
+		const root = tmpRoot();
+		try {
+			const calls: string[] = [];
+			let release: (() => void) | undefined;
+			const gate = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const importer = new BookImportService({
+				service: new LibraryService({ libraryRoot: root }),
+				spawner: {
+					async spawn() {
+						return { conversationId: "conv-z" };
+					},
+				},
+				stylelib: {
+					build: async (bookId) => {
+						calls.push(bookId);
+						await gate;
+					},
+				},
+				libraryRoot: root,
+			});
+			const result = await importer.importBook({ sourcePath: writeSample(root) });
+			// 建库已发起（同步进入 build）且未阻塞导入返回
+			expect(calls).toEqual([result.bookId]);
+			release?.();
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
 });

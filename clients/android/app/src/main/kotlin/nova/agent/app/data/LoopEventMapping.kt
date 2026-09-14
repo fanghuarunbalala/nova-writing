@@ -69,8 +69,8 @@ private data class ApprovalPayload(
 
 private val approvalJson = Json { ignoreUnknownKeys = true }
 
-/** arguments JSON → 卡片；解析失败回落保守占位（可回放鲁棒） */
-private fun approvalCardOf(call: ToolCall): ApprovalCardUi {
+/** arguments JSON → 卡片；解析失败回落保守占位（可回放鲁棒）。审批中心聚合复用（FR7）。 */
+internal fun approvalCardOf(call: ToolCall): ApprovalCardUi {
     val payload = runCatching { approvalJson.decodeFromString<ApprovalPayload>(call.arguments) }.getOrNull()
     val op = when (payload?.op) {
         "add" -> ApprovalOp.ADD

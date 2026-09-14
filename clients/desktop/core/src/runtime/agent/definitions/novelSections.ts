@@ -38,9 +38,10 @@ import {
   novelProseStandardSection,
   novelPublicationStandardSection,
 } from "../../prompt/sections/novelStandards.js";
+import { novelStylelibSection } from "../../prompt/sections/novelStylelib.js";
 import { skillIndexSection } from "../../skill/skillIndexSection.js";
 
-/** novel 域段注册表（id@version；27 段：main 10 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3 + project-importer 2） */
+/** novel 域段注册表（id@version；28 段：main 10+1 + 共享 3 + 标准 4 + explorer 1 + compose 4 + book-analyst 3 + project-importer 2） */
 export const novelSectionRegistry = new PromptSectionRegistry([
   // main（novel）recipe 段
   novelIdentitySection,
@@ -65,6 +66,9 @@ export const novelSectionRegistry = new PromptSectionRegistry([
   novelOutlineStandardSection,
   novelProseStandardSection,
   novelPublicationStandardSection,
+  // 风格示例注入段（novel.stylelib：书库强风格段 few-shot，仅 main recipe 引用；
+  // 快照经 stylelib provider 注入，缺失/默认关时段省略）
+  novelStylelibSection,
   // explorer 专属段
   novelExplorerSection,
   // compose 专属段（legacy 迁移；案例索引并入共享质量标准段，PRD compose-案例引导 v0.6）

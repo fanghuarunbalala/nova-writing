@@ -12,6 +12,7 @@ import type {
   CaseGuideProvider,
   NovelConstraintsProvider,
   SkillsIndexSnapshot,
+  StylelibProvider,
 } from "../prompt/PromptSection.js";
 import type { ToolDispatcher } from "../tool/ToolDispatcher.js";
 import type { Logger } from "../../log/Logger.js";
@@ -68,6 +69,12 @@ export interface AgentLoopConfig {
    * 返回 undefined → 质量规范段仅省略「参考案例」小节（正文恒渲染）。
    */
   caseGuideProvider?: CaseGuideProvider;
+  /**
+   * 风格示例注入提供者：每 provider call 前调用（node 层按写作焦点从书库示例库
+   * 混合检索派生，焦点指纹缓存）。返回 undefined → novel.stylelib 段省略
+   * （默认关：宿主未接线即零残留）。
+   */
+  stylelibProvider?: StylelibProvider;
   /**
    * 技能索引快照（skill.index 动态段）：装配期从 SkillRegistry.effective() 派生一次
    * （会话期静态，非每调用读盘）。缺省或空清单 → 段整体省略。

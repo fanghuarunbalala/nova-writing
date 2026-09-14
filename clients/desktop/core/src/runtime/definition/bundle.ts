@@ -7,7 +7,7 @@
  * - 不可变：definitionVersion (semver) 为主键，server 全量保留，老端按能力协商取能跑的最新版。
  *
  * 本模块提供：Bundle 类型 + 从现有编译期 AgentDefinition 导出的导出器。
- * golden 包（definition-novel-1.5.0.json）由 bundle.test.ts 以 WRITE_FIXTURE=1 生成，
+ * golden 包（definition-novel-1.6.0.json）由 bundle.test.ts 以 WRITE_FIXTURE=1 生成，
  * 既是导出器的回归基线，也是 Kotlin 端（android :core:runtime）的对拍夹具。
  */
 import type { AgentDefinition } from "../agent/AgentDefinition.js";

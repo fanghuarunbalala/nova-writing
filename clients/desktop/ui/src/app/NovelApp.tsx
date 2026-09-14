@@ -22,6 +22,7 @@ import {
   ApplicationSettingsStore,
   ConfigurationStatusContext,
   isModelConfigured,
+  onServerAuthStateChanged,
   SettingsDialog,
   type ApplicationConfigurationClient,
 } from "../settings/index.js";
@@ -47,6 +48,7 @@ import {
 import type { FrontendPlatform } from "../platform/index.js";
 import type { NovelUiExtensions } from "../extensions/index.js";
 import { ThemeProvider } from "../shared/theme/index.js";
+import { DefaultServerUrlContext } from "../shared/DefaultServerUrlContext.js";
 import {
   InspectorRouter,
   MainViewRouter,
@@ -87,6 +89,12 @@ export interface NovelAppProps {
    * list 拉 server 项目；create/openProject 返回打开引用（经 workspaceController.open）。
    */
   readonly cloudProjects?: CloudProjectsPort;
+  /**
+   * 构建期注入的固定 server 地址（客户端固定server PRD）：gui 宿主经 preload 桥传入，
+   * 经 DefaultServerUrlContext 发布——LoginPage / ServerSettingsPanel 的登录目标；
+   * 未提供（web shell / 单测）时消费方回退本地常量。
+   */
+  readonly defaultServerUrl?: string;
 }
 
 /** 云项目通道（renderer → main workspace-rpc；纯云端化 ⑥：项目列表唯一来源） */
@@ -100,6 +108,20 @@ export interface CloudProjectsPort {
   remove(projectId: string): Promise<void>;
 }
 
+/**
+ * 真实已登录：有用户名且在线且无需重登（v0.1 修正）。
+ * ServerAuthSession 持落盘令牌时乐观上报 online+username，网络失败的 offline 分支也
+ * 保留 username——只看 username 会把僵尸态当已登录（登录门不弹、云端操作报「未登录」）。
+ */
+function isAuthed(state: ServerAuthState | undefined): boolean {
+  return (
+    state !== undefined &&
+    state.username !== undefined &&
+    state.status === "online" &&
+    state.needRelogin !== true
+  );
+}
+
 export function NovelApp(props: NovelAppProps) {
   if (props.workspaceController === undefined) {
     return (
@@ -110,7 +132,9 @@ export function NovelApp(props: NovelAppProps) {
   }
   return (
     <ThemeProvider>
-      <NovelAppReady {...props} workspaceController={props.workspaceController} />
+      <DefaultServerUrlContext.Provider value={props.defaultServerUrl}>
+        <NovelAppReady {...props} workspaceController={props.workspaceController} />
+      </DefaultServerUrlContext.Provider>
     </ThemeProvider>
   );
 }
@@ -180,7 +204,8 @@ function NovelAppReady({
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState<string | undefined>(undefined);
   const refreshCloudProjects = useCallback(async () => {
-    if (cloudProjects === undefined || serverAuthState?.username === undefined) {
+    // 僵尸态（offline/needRelogin 仍带 username）不拉列表——拉了也是空/报错
+    if (cloudProjects === undefined || !isAuthed(serverAuthState)) {
       setCloudList([]);
       return;
     }
@@ -189,10 +214,14 @@ function NovelAppReady({
     } catch {
       setCloudList([]);
     }
-  }, [cloudProjects, serverAuthState?.username]);
+  }, [cloudProjects, serverAuthState]);
   useEffect(() => {
     void refreshCloudProjects();
   }, [refreshCloudProjects]);
+  /** 打开登录门（云端操作「未登录」错误自愈 + 欢迎页入口卡；定义先于云操作回调——闭包引用） */
+  const openLoginGate = useCallback(() => {
+    setLoginGate("open");
+  }, []);
   const createCloudProject = useCallback(async (name: string) => {
     if (cloudProjects === undefined || cloudBusy) return;
     setCloudBusy(true);
@@ -201,20 +230,25 @@ function NovelAppReady({
       const ref = await cloudProjects.create(name);
       if (ref !== undefined) await workspaceController.open(ref);
     } catch (cause) {
-      setCloudError(cause instanceof Error ? cause.message : String(cause));
+      // 未登录自愈：直接弹登录门（错误文案同时保留在列表区）
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setCloudError(message);
+      if (message.includes("未登录")) openLoginGate();
     } finally {
       setCloudBusy(false);
     }
-  }, [cloudProjects, cloudBusy, workspaceController]);
+  }, [cloudProjects, cloudBusy, workspaceController, openLoginGate]);
   const openCloudProject = useCallback(async (project: { id: string; name: string }) => {
     if (cloudProjects === undefined) return;
     try {
       const ref = await cloudProjects.openProject(project.id, project.name);
       await workspaceController.open(ref);
     } catch (cause) {
-      setCloudError(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setCloudError(message);
+      if (message.includes("未登录")) openLoginGate();
     }
-  }, [cloudProjects, workspaceController]);
+  }, [cloudProjects, workspaceController, openLoginGate]);
   /** 删除云端项目（server 软删 + 本地缓存清理）：成功/失败 toast + 刷新列表 */
   const removeCloudProject = useCallback(async (projectId: string): Promise<boolean> => {
     if (cloudProjects === undefined) return false;
@@ -250,53 +284,35 @@ function NovelAppReady({
     try {
       setServerAuthState(await pending);
     } catch {
-      // 查询失败维持现状
+      // 查询失败按未登录处理（弹登录门；server 恢复后登录/刷新即自愈）
+      setServerAuthState({ status: "unconfigured" });
     }
   }, [configurationClient]);
   useEffect(() => {
     void refreshServerAuth();
   }, [refreshServerAuth]);
+  // 认证状态推送（gui 宿主：main → preload 桥 → serverAuthChangeBus）：实时更新快照。
+  // 此前只有启动一次性拉取，offline/needRelogin 翻转后 UI 无感知（僵尸登录态根因之一）。
+  useEffect(() => onServerAuthStateChanged(setServerAuthState), []);
+  // 登录门决策（v0.1 修正）：统一由 serverAuthState 推导（拉取与推送同源写入，避免竞态互踩）。
+  // - 非真实已登录（isAuthed：含 offline/needRelogin 僵尸态排除）→ 弹门（可重复触发）
+  // - 已登录 → 仅拍板 undecided（成功后关门仍由用户点「进入工作台」，不打断登录成功屏）
   useEffect(() => {
-    if (configurationClient === undefined) {
-      setLoginGate("closed");
-      return;
-    }
-    const fetchState = configurationClient.serverAuth;
-    if (fetchState === undefined) {
-      setLoginGate("closed");
-      return;
-    }
-    let cancelled = false;
-    const pending = fetchState();
-    if (pending !== undefined) {
-      void pending
-        .then((state) => {
-          if (cancelled) return;
-          // 强制登录：已登录（username）→ 不拦；否则（含曾配置过 url 的离线/凭据失效）弹登录门
-          if (state !== undefined && state.username !== undefined) {
-            setLoginGate("closed");
-          } else {
-            setLoginGate("open");
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setLoginGate("open");
-        });
+    if (serverAuthState === undefined) return;
+    if (isAuthed(serverAuthState)) {
+      setLoginGate((prev) => (prev === "undecided" ? "closed" : prev));
     } else {
-      // 老 main 进程返回空（方法存在但调用未定义面）按未登录处理
       setLoginGate("open");
     }
-    return () => {
-      cancelled = true;
-    };
+  }, [serverAuthState]);
+  // 无配置客户端 / 无 serverAuth 方法（老 main）的宿主无认证面：不设门
+  useEffect(() => {
+    if (configurationClient === undefined || configurationClient.serverAuth === undefined) setLoginGate("closed");
   }, [configurationClient]);
   const closeLoginGate = useCallback(() => {
     setLoginGate("closed");
     void refreshServerAuth();
   }, [refreshServerAuth]);
-  const openLoginGate = useCallback(() => {
-    setLoginGate("open");
-  }, []);
   // 从文件导入的编排已随本地模式退役（纯云端化 ⑥；云端导入后续单独立项）
   // 模型配置状态（回声模式判定）：无 configurationClient 的宿主恒视为已配置
   const [modelConfigured, setModelConfigured] = useState(true);

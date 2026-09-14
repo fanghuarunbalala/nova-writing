@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -81,24 +82,21 @@ fun NovaApp(container: AppContainer) {
     val theme by appViewModel.theme.collectAsStateWithLifecycle()
 
     NovaTheme(theme) {
-        // 全局 snackbar 宿主（PRD FR8）：登录门/主界面/演示浮条都在其内
+        // 全局 snackbar 宿主（阶段2补 FR8）：登录门/主界面/演示浮条都在其内
         nova.agent.app.ui.common.FeedbackHost {
             val auth by appViewModel.auth.collectAsStateWithLifecycle()
-            // 登录成功态页（demo okBadge）→「开始使用」进主界面；登出/需重登时复位
-            var enteredMain by rememberSaveable { mutableStateOf(false) }
-            LaunchedEffect(auth) {
-                if (auth is AuthUiState.NeedRelogin || auth is AuthUiState.Unconfigured) enteredMain = false
-            }
-            val showMain = (auth is AuthUiState.Online && enteredMain) || auth is AuthUiState.Offline
             // 键盘弹起时藏掉演示浮条（避免盖住输入区）
             val imeVisible = WindowInsets.isImeVisible
             Box(Modifier.fillMaxSize()) {
-                if (showMain) {
-                    MainScaffold(container, appViewModel)
-                } else {
-                    LoginScreen(appViewModel) { enteredMain = true }
+                when (auth) {
+                    // 登录中停在登录页（busy 转圈）；Offline 仅在有令牌的离线续用时进主界面
+                    // （真机踩坑：LoggingIn/无 token 的 Offline 漏进主界面 → 用户误以为登录成功）
+                    AuthUiState.Unconfigured, AuthUiState.NeedRelogin, AuthUiState.LoggingIn -> LoginScreen(appViewModel)
+                    else -> MainScaffold(container, appViewModel)
                 }
-                if (BuildConfig.DEBUG && !imeVisible && auth !is AuthUiState.Unconfigured && auth !is AuthUiState.NeedRelogin) {
+                if (BuildConfig.DEBUG && container.mode == nova.agent.app.settings.DataSource.DEMO &&
+                    !imeVisible && auth !is AuthUiState.Unconfigured && auth !is AuthUiState.NeedRelogin
+                ) {
                     val leaseActive by container.demoTriggers.lease.collectAsStateWithLifecycle()
                     nova.agent.app.ui.demo.DemoReplayBar(
                         theme = theme,
@@ -135,10 +133,31 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
     val nav = remember { AppNavState() }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded)
+    // skipHiddenState=false：键盘弹起要走 hide()（Material3 默认 true 时 hide() 抛 ISE——真机 12:14 闪退根因）
+    val sheetState = rememberStandardBottomSheetState(
+        initialValue = SheetValue.PartiallyExpanded,
+        skipHiddenState = false,
+    )
     val projects by appViewModel.projects.collectAsStateWithLifecycle()
     val currentId by appViewModel.currentProjectId.collectAsStateWithLifecycle()
     val currentProject = projects.firstOrNull { it.id == currentId } ?: CloudProject("p-0", "—", "—", 0, "—")
+    val approvals by appViewModel.approvals.collectAsStateWithLifecycle()
+    // 仓库级操作失败提示走全局 snackbar（FeedbackHost，阶段2补 FR8 统一）
+    val feedback = nova.agent.app.ui.common.rememberFeedback()
+
+    // 仓库级操作失败提示（项目增删/踢设备等）
+    LaunchedEffect(Unit) {
+        appViewModel.errors.collect { feedback(it) }
+    }
+    // 通知深链（审批通知 → 审批中心），消费后清空
+    LaunchedEffect(Unit) {
+        container.pendingRoute.collect { route ->
+            if (route != null) {
+                nav.push(route)
+                container.pendingRoute.value = null
+            }
+        }
+    }
 
     // 返回键优先级（单一 BackHandler + 纯函数判定）：sheet > 抽屉 > 路由栈 > 退出
     val sheetNotCollapsed = sheetState.currentValue != SheetValue.PartiallyExpanded ||
@@ -182,8 +201,9 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
             when (screen) {
                 Screen.Chat -> ChatBase(
                     chatViewModel = chatViewModel,
+                    appViewModel = appViewModel,
+                    approvalCount = approvals.size,
                     currentProject = currentProject,
-                    auth = appViewModel.auth.collectAsStateWithLifecycle().value,
                     sheetState = sheetState,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                     onOpenSettings = { nav.push(Screen.Settings) },
@@ -209,8 +229,9 @@ private fun MainScaffold(container: AppContainer, appViewModel: AppViewModel) {
 @Composable
 private fun ChatBase(
     chatViewModel: ChatViewModel,
+    appViewModel: AppViewModel,
+    approvalCount: Int,
     currentProject: CloudProject,
-    auth: AuthUiState,
     sheetState: androidx.compose.material3.SheetState,
     onOpenDrawer: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -220,7 +241,11 @@ private fun ChatBase(
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val feedback = nova.agent.app.ui.common.rememberFeedback()
-    // 内容 sheet 的 tab 受控状态：实体胶囊（entChip）点击可指定跳转 tab（PRD FR2.2）
+    val byokReady by chatViewModel.byokReady.collectAsStateWithLifecycle()
+    val auth by appViewModel.auth.collectAsStateWithLifecycle()
+    val projects by appViewModel.projects.collectAsStateWithLifecycle()
+    val activeCid by appViewModel.activeConversation.collectAsStateWithLifecycle()
+    // 内容 sheet 的 tab 受控状态：实体胶囊（entChip）点击可指定跳转 tab（阶段2补 FR2.2）
     var contentTab by rememberSaveable { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -248,7 +273,83 @@ private fun ChatBase(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            // 顶栏（demo L1113-1140）：☰ + 左对齐双行标题 + 连接胶囊 + ⋯ 菜单
+            // 离线横幅（真机实测：WiFi 掉线/切流量时引导重连，不静默空白）
+            if (auth == AuthUiState.Offline) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(palette.danger12)
+                        .clickable { appViewModel.retryConnection() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "离线中——无法连接服务器，请检查网络（本机 WiFi）",
+                        style = NovaTypography.labelSmall.copy(color = palette.danger),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("重试", style = NovaTypography.labelSmall.copy(color = palette.danger, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                }
+            }
+            // 空项目引导（新账号首启）：一键建书，不再让顶栏悬着「—」
+            if (auth is AuthUiState.Online && projects.isEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(palette.accent11)
+                        .clickable { appViewModel.createProject("我的新书") }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "还没有项目——创建你的第一本书开始写作",
+                        style = NovaTypography.labelSmall.copy(color = palette.accent),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("创建项目", style = NovaTypography.labelSmall.copy(color = palette.accent, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                }
+            }
+            // 无活跃会话引导（在线 + 有项目但未开会话：此时发消息不会有 run）
+            if (auth is AuthUiState.Online && projects.isNotEmpty() && activeCid == null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(palette.accent11)
+                        .clickable { appViewModel.openConversation(null, currentProject.takeIf { it.id != "p-0" }?.id) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "还没有打开会话——发消息前先开一个",
+                        style = NovaTypography.labelSmall.copy(color = palette.accent),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("新建会话", style = NovaTypography.labelSmall.copy(color = palette.accent, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                }
+            }
+            // BYOK 未配置引导（FR9）：跳设置，不弹错误堆栈
+            if (!byokReady) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(palette.warn.copy(alpha = 0.12f))
+                        .clickable { onOpenSettings() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "未配置模型（BYOK）——续写前请先在设置中填写 Provider 与 API Key",
+                        style = NovaTypography.labelSmall.copy(color = palette.warn),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("去设置", style = NovaTypography.labelSmall.copy(color = palette.warn, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                }
+            }
+            // 顶栏（demo L1113-1140）：☰ + 左对齐双行标题 + 连接胶囊 + 铃铛 + ⋯ 菜单
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -263,12 +364,30 @@ private fun ChatBase(
                 }
                 Column(Modifier.weight(1f)) {
                     Text(currentProject.name, style = NovaTypography.titleSmall)
+                    // demo 会话上下文（第 2 章 · 追逃段修订 · 第 3 轮）；真实模式回落项目进度
                     Text(
-                        chatViewModel.sessionSubtitle,
+                        chatViewModel.sessionSubtitle.ifBlank { currentProject.progress },
                         style = NovaText.mono12.copy(color = palette.muted, fontSize = 11.sp),
                     )
                 }
                 ConnChip(auth = auth, onClick = onOpenSettings)
+                Box {
+                    IconButton(onClick = { /* 审批中心入口由抽屉/路由承担，顶栏铃铛留演示位 */ }) {
+                        Icon(Icons.Outlined.Notifications, contentDescription = "审批中心", tint = palette.fg)
+                    }
+                    if (approvalCount > 0) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 8.dp, end = 8.dp)
+                                .size(16.dp)
+                                .background(palette.warn, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(approvalCount.toString(), color = palette.surface, fontSize = 10.sp)
+                        }
+                    }
+                }
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Outlined.MoreVert, contentDescription = "会话菜单", tint = palette.fg)

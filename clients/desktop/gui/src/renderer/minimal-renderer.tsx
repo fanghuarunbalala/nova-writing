@@ -9,9 +9,9 @@ import { createRoot } from "react-dom/client";
 import { expose, wrap } from "kkrpc/remote-refs";
 import { electronIpcTransport } from "kkrpc/electron";
 import type { NovelApiClient } from "@novel/core/client";
-import type { Logger, ProjectedEvent } from "@novel/core";
+import type { Logger, ProjectedEvent, ServerAuthState } from "@novel/core";
 import type { ConfigApi, ConfigMutation, ConnectionTestInput, McpServerInput } from "@novel/core";
-import { emitApprovalsChanged, emitAskingsChanged, emitNovelChanged } from "@novel/ui";
+import { emitApprovalsChanged, emitAskingsChanged, emitNovelChanged, emitServerAuthStateChanged } from "@novel/ui";
 import {
   NovelApp,
   WorkspaceController,
@@ -41,6 +41,8 @@ declare global {
     };
     __NOVEL_DEBUG__?: boolean;
     __NOVEL_LIBRARY_ENABLED__?: boolean;
+    /** 固定 server 地址（preload 桥，构建期 define 注入）；空串 = 未注入 */
+    __NOVEL_DEFAULT_SERVER_URL__?: string;
   }
 }
 
@@ -64,6 +66,12 @@ expose(
   },
   electronIpcTransport({ endpoint: bridge as never, channel: "ui-rpc" }),
 );
+
+// server 认证状态推送（main ServerAuthSession → server-auth-changed → preload 桥 → 此处）：
+// UI 从「启动一次性拉取的乐观快照」变为推送驱动——offline/needRelogin 翻转后登录门才能及时弹开
+window.novelEvents?.onServerAuthChange?.((state) => {
+  emitServerAuthStateChanged(state as ServerAuthState);
+});
 
 const configTransport = electronIpcTransport({ endpoint: bridge as never, channel: "config-rpc" });
 const configApi = wrap<ConfigApi>(configTransport);
@@ -237,6 +245,7 @@ function AppRoot() {
         onboardingPort={onboardingPort}
         windowChrome={windowChrome}
         cloudProjects={workspaceApi.cloudProjects}
+        defaultServerUrl={window.__NOVEL_DEFAULT_SERVER_URL__?.trim() || undefined}
       />
     </StrictMode>
   );

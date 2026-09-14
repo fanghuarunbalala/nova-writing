@@ -92,6 +92,23 @@ class OpenAICompatProviderTest {
     }
 
     @Test
+    fun jsonNullDeltaFramesAreNotConcatenatedAsNull() = runTest {
+        // DeepSeek 实测空帧：content/reasoning_content 为 JSON null；JsonNull.content == "null"（字符串）——真机曾拼出 16 个 "null"
+        val sse = listOf(
+            """data: {"choices":[{"delta":{"role":"assistant","content":null}}]}""",
+            """data: {"choices":[{"delta":{"reasoning_content":null,"content":"你好"}}]}""",
+            """data: {"choices":[{"delta":{"content":"呀！"}}]}""",
+            """data: {"choices":[{"delta":{},"finish_reason":"stop"}]}""",
+            """data: [DONE]""",
+        ).joinToString("\n\n")
+        server.enqueue(MockResponse().setBody(sse).setHeader("Content-Type", "text/event-stream"))
+
+        val result = provider.call(request()) { }
+        assertEquals("你好呀！", result.message.content)
+        assertEquals("", result.message.reasoning)
+    }
+
+    @Test
     fun plainTextCompletion() = runTest {
         val sse = listOf(
             """data: {"choices":[{"delta":{"content":"第12章"}}]}""",

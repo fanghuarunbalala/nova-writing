@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +41,9 @@ fun DevicesScreen(vm: nova.agent.app.ui.vm.AppViewModel, onBack: () -> Unit) {
     val devices by vm.devices.collectAsStateWithLifecycle()
     var kickTarget by remember { mutableStateOf<DeviceUi?>(null) }
     val feedback = nova.agent.app.ui.common.rememberFeedback()
+
+    // 进入页面即拉取一次（server 权威列表）
+    LaunchedEffect(Unit) { vm.refreshDevices() }
 
     ScreenScaffold(title = "设备管理", onBack = onBack) {
         LazyColumn(

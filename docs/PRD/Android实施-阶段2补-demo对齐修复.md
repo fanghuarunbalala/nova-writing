@@ -256,3 +256,12 @@ demo 1571-1602 对照 App `ui/login/LoginScreen.kt`:
 - **导出 Markdown** = 本地拼接 items + ACTION_SEND 分享面板 + demo snackbar 文案(不涉网络)。
 
 **顺延**:demo↔真机并排逐屏目检(持机者执行);若目检发现视觉细节差异,按"以 demo 实测为准"原则修正(沿用阶段 2 实施记录①的先例)。
+
+**rebase 记录(2026-09-14,并入 main 阶段3+固定server)**:main 侧合入 PR #30(阶段3 真实数据接线)、#31(stylelib 1.6.0)、#32(固定 server,登录页去地址输入)后,本分支以最新 main 为基准 merge 解决 10 处冲突,取舍如下(均已回归验证:全工程 `./gradlew test` 绿,debug+core 共 185 用例;`--rerun-tasks` 三连跑稳定):
+
+1. **登录门/登录页以 main 为准**:main 的收紧版登录门(LoggingIn 不漏主界面——真机僵尸登录态修复)与固定 server 方案(构建期注入 `BuildConfig.DEFAULT_SERVER` > 已保存地址,地址输入退役)**取代** FR6 的「服务器输入框 + 成功态 okBadge 页」;本分支仅保留不冲突的 reloginBanner。FR6 该两项记为「被 main 方案取代」。
+2. **设置页以 main 真 BYOK 表单为准**(Keystore 持久化 + 连通测试,功能性优于 FR1 的只读展示行);本分支补「服务器地址」只读展示行(固定 server 下的查看价值)。
+3. **顶栏共存**:保留 main 的铃铛角标(阶段3 真实待审计数,原先按 demo 基准移除的决定撤回),与本分支的左对齐双行标题/连接胶囊/⋯菜单并存;标题第二行在真实模式(sessionSubtitle 为空)回落项目进度。
+4. **演示语义全部以 `DataSource.DEMO` 门控**(ChatViewModel isDemo 分支):demo 接续 409 snackbar 链/只看进度/刷新进度;真实模式走 main 的 LeaseCoordinator/SSE。DemoTriggers 合并 main 的 `ChatSideChannels` 接口与本分支的 demoEvents/租约参数。断线降级/四态循环等方法经 `DemoAppRepository` 造型调用(仅演示数据源生效)。
+5. **审批中心/EventReducer/ChatUiState 自动合并良好**:本分支的行 UI(chips/倒计时/meta)与 main 的 refreshApprovals/SSE 聚合共存;runError 等新字段并入。
+6. **顺手修复 main 遗留红测**:`DefinitionBundleTest.parseGoldenFixture` 在 main 上即失败(stylelib PR 把夹具升 1.6.0 却漏改断言)——按夹具实测修为 16 项(6 static + 10 dynamic)/definitionVersion 1.6.0。另 `RealChatRepositoryTest` 在合并期增量编译状态下偶发假红,`--rerun-tasks` 全新编译后稳定绿(main 工作树同验证 3 次绿)。

@@ -98,21 +98,32 @@ def main(argv: list[str] | None = None) -> int:
 	parser.add_argument("--fixtures-dir", type=Path, default=DEFAULT_FIXTURES)
 	parser.add_argument("--out", type=Path, default=Path("artifacts/windows.jsonl"))
 	parser.add_argument(
+		"--tier",
+		default="small",
+		choices=("small", "large"),
+		help="窗口策略档位：small=自适应段窗（现行）；large=整章一窗（预留，配大上下文编码器整章编码）",
+	)
+	parser.add_argument(
 		"--size",
 		type=int,
 		default=None,
-		help="窗口段数；缺省按段长自适应（目标 ≤420 字/窗，clamp 3..8；一句一段书通常为 8）",
+		help="窗口段数；缺省按档位：small 按段长自适应（≤420 字/窗，clamp 3..8），large 整章一窗",
 	)
 	parser.add_argument("--step", type=int, default=None, help="滑窗步长；缺省 size//2")
 	args = parser.parse_args(argv)
 
 	book_path = args.fixtures_dir / args.book / "book.json"
 	if not book_path.exists():
-		raise SystemExit(f"夹具不存在：{book_path}（evals 里先 pnpm fixture:build 或 scripts/import_book.py）")
+		raise SystemExit(f"夹具不存在：{args.book}（evals 里先 pnpm fixture:build 或 scripts/import_book.py）")
 	book = json.loads(book_path.read_text(encoding="utf-8"))
-	lengths = [len(p["text"]) for p in book["paragraphs"]]
-	avg = max(sum(lengths) // max(len(lengths), 1), 1)
-	size = args.size or max(3, min(8, round(420 / avg)))
+	if args.size:
+		size = args.size
+	elif args.tier == "large":
+		size = 4096  # 整章一窗：章段数远小于此，build_windows 对 len<=size 直接单窗
+	else:
+		lengths = [len(p["text"]) for p in book["paragraphs"]]
+		avg = max(sum(lengths) // max(len(lengths), 1), 1)
+		size = max(3, min(8, round(420 / avg)))
 	step = args.step or max(1, size // 2)
 	records = build_book_windows(book_path, size=size, step=step)
 	write_jsonl(records, args.out)
@@ -121,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
 		hist[rec["source"]] = hist.get(rec["source"], 0) + 1
 	print(
 		f"{args.book} → {args.out}：{len(records)} 窗（{hist}），"
-		f"特征维度 {len(FEATURE_KEYS)}，总段数 {sum(len(r['texts']) for r in records)}"
+		f"tier={args.tier} size={size}，特征维度 {len(FEATURE_KEYS)}，总段数 {sum(len(r['texts']) for r in records)}"
 	)
 	return 0
 

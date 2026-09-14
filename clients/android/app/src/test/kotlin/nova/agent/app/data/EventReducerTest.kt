@@ -204,6 +204,14 @@ class EventReducerTest {
 
     @Test
     fun `历史用户消息按 runSeq 幂等去重`() {
+        // 双路上屏幂等：Submitted 本地气泡（u-N）后，AgentLoop 的 UserMessage 回放（UserEchoed）同文本跳过
+        val submitted = ChatUiState().reduce(ChatUiEvent.Submitted("你好呀", ts = 1))
+        val echoed = submitted.reduce(ChatUiEvent.UserEchoed(1, "你好呀", ts = 2))
+        assertEquals(1, echoed.items.count { it is ChatItem.UserMsg && it.text == "你好呀" })
+        // 纯回放路径不受影响
+        val replay = ChatUiState().reduce(ChatUiEvent.UserEchoed(2, "历史消息", ts = 1))
+        assertEquals(1, replay.items.count { it is ChatItem.UserMsg && it.text == "历史消息" })
+
         val once = ChatUiState().reduce(ChatUiEvent.UserEchoed(3, "历史", ts = 1))
         val twice = once.reduce(ChatUiEvent.UserEchoed(3, "历史", ts = 2))
         assertEquals(once, twice)

@@ -37,7 +37,7 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
             if (firstGhost >= 0) promoted.take(firstGhost) + roundLabel + promoted.drop(firstGhost)
             else promoted + roundLabel
         } ?: promoted
-        copy(items = withLabel, runStatus = RunStatus.Thinking, draft = "", runStartedAt = event.ts)
+        copy(items = withLabel, runStatus = RunStatus.Thinking, draft = "", runStartedAt = event.ts, runError = null)
     }
 
     is ChatUiEvent.DeltaArrived -> {
@@ -174,14 +174,20 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
 
     is ChatUiEvent.RunClosed -> when (event.reason) {
         RunEndReason.COMPLETED, RunEndReason.ABORTED, RunEndReason.MAX_TURNS ->
-            copy(runStatus = RunStatus.Idle, draft = "", runStartedAt = null)
+            copy(runStatus = RunStatus.Idle, draft = "", runStartedAt = null, runError = null)
         RunEndReason.FAILED ->
-            copy(runStatus = RunStatus.FailedRetry, draft = "", runStartedAt = null)
+            copy(runStatus = RunStatus.FailedRetry, draft = "", runStartedAt = null, runError = event.error ?: "未知错误")
     }
 
     is ChatUiEvent.UserEchoed -> {
         val id = "u-r${event.runSeq}"
-        if (items.any { it.id == id }) this
+        // 双路上屏幂等：AgentLoop run 开头也发射 UserMessage（回放语义）——与本地 Submitted 气泡
+        // （u-<n> id 体系）内容配对，同文本则跳过回放投影（真机实证曾双「你好呀」）；
+        // 纯历史回放（无本地气泡）不受影响。
+        val locallySubmitted = items.any {
+            it is ChatItem.UserMsg && it.id.startsWith("u-") && !it.id.startsWith("u-r") && it.text == event.text
+        }
+        if (items.any { it.id == id } || locallySubmitted) this
         else copy(items = items + ChatItem.UserMsg(id, event.text))
     }
 
@@ -194,6 +200,13 @@ fun ChatUiState.reduce(event: ChatUiEvent): ChatUiState = when (event) {
     is ChatUiEvent.ExecModeChanged -> copy(pendingExecMode = event.mode)
 
     is ChatUiEvent.LeaseObserved -> copy(lease = event.lease)
+
+    is ChatUiEvent.SysPillAdded -> {
+        val nextId = localId + 1
+        copy(items = items + ChatItem.SysPill("sp-$nextId", event.text, event.kind), localId = nextId)
+    }
+
+    ChatUiEvent.ConversationReset -> ChatUiState()
 
     is ChatUiEvent.ReasoningToggled -> copy(items = items.map { item ->
         if (item.id == event.itemId && item is ChatItem.AssistantMsg) {

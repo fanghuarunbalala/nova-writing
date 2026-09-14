@@ -11,25 +11,34 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import nova.agent.app.data.ChatItem
 import nova.agent.app.data.ChatOneShot
 import nova.agent.app.data.ChatRepository
+import nova.agent.app.data.ChatSideChannels
 import nova.agent.app.data.ChatUiEvent
 import nova.agent.app.data.ChatUiState
 import nova.agent.app.data.ExecMode
+import nova.agent.app.data.PillKind
 import nova.agent.app.data.mapLoopEvent
 import nova.agent.app.data.reduce
 import nova.agent.app.di.AppContainer
-import nova.agent.app.di.DemoTriggers
+import nova.agent.app.di.DemoSignal
 
 /**
  * 聊天状态机壳：事件进 reducer 纯函数，一次性副作用走 oneShot。
- * 仓库（Fake→阶段3真）经 ChatRepository 接口注入，UI 不感知实现。
+ * 仓库（Fake/Real）经 ChatRepository 接口注入，旁路通道（demo 触发器/真实协调层）经
+ * ChatSideChannels 注入——UI 不感知实现（阶段3 FR11 双形态同构）。
+ * 阶段2补：feedback 流（2.6s snackbar 文案）/轮次标签/模式待生效/审批超时三态/离线排队，
+ * 演示语义部分以 DataSource.DEMO 门控，真实模式行为与 main 阶段3 一致。
  */
 class ChatViewModel private constructor(
     private val repo: ChatRepository,
-    triggers: DemoTriggers,
+    private val channels: ChatSideChannels,
+    private val container: AppContainer,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -38,9 +47,18 @@ class ChatViewModel private constructor(
     private val _oneShot = MutableSharedFlow<ChatOneShot>(extraBufferCapacity = 16)
     val oneShot: SharedFlow<ChatOneShot> = _oneShot.asSharedFlow()
 
-    /** VM 侧发起的操作反馈（snackbar 文案），ChatScreen 收集后走全局 SnackbarHost */
+    /** VM 侧发起的操作反馈（snackbar 文案），ChatScreen 收集后走全局 SnackbarHost（阶段2补 FR8） */
     private val _feedback = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val feedback: SharedFlow<String> = _feedback.asSharedFlow()
+
+    /** BYOK 就绪（真实模式读设置；演示模式恒 true）。发送前置检查 → 引导横幅。 */
+    val byokReady: StateFlow<Boolean> =
+        if (container.mode == nova.agent.app.settings.DataSource.REAL) {
+            container.settings.byok.map { it != null }
+                .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+        } else {
+            MutableStateFlow(true)
+        }
 
     /** 顶栏第二行（会话上下文，demo「第 2 章 · 追逃段修订 · 第 3 轮」） */
     val sessionSubtitle: String get() = repo.sessionSubtitle
@@ -51,11 +69,13 @@ class ChatViewModel private constructor(
     /** 只看进度跟随协程（只读态清除时取消） */
     private var followJob: Job? = null
 
+    private val isDemo: Boolean get() = container.mode == nova.agent.app.settings.DataSource.DEMO
+
     init {
         viewModelScope.launch {
             repo.events.collect { event ->
                 val mapped = mapLoopEvent(event) { System.currentTimeMillis() }
-                // RunStart 补轮次标签（demo roundDivider）
+                // RunStart 补轮次标签（demo roundDivider；真实仓库返回 null 即不插）
                 if (mapped is ChatUiEvent.RunStarted) {
                     dispatch(mapped.copy(roundLabel = repo.roundLabelFor(mapped.runSeq)))
                 } else {
@@ -64,22 +84,30 @@ class ChatViewModel private constructor(
             }
         }
         viewModelScope.launch {
-            triggers.oneShots.collect { _oneShot.tryEmit(it) }
+            channels.oneShots.collect { _oneShot.tryEmit(it) }
         }
         viewModelScope.launch {
-            triggers.lease.collect {
+            channels.lease.collect {
                 if (it == null) followJob?.cancel()
                 dispatch(ChatUiEvent.LeaseObserved(it))
             }
         }
         viewModelScope.launch {
-            triggers.demoEvents.collect { signal ->
+            channels.pills.collect { dispatch(ChatUiEvent.SysPillAdded(it, PillKind.INFO)) }
+        }
+        // 会话切换：整场重置（首屏历史经事件流重放）
+        viewModelScope.launch {
+            container.conversationSwitched.collect { dispatch(ChatUiEvent.ConversationReset) }
+        }
+        // 演示信号（抽屉演示控制区 FR9；DemoTriggers 专属，真实模式不发射）
+        viewModelScope.launch {
+            (channels as? nova.agent.app.di.DemoTriggers)?.demoEvents?.collect { signal ->
                 when (signal) {
-                    nova.agent.app.di.DemoSignal.FailGeneration -> repo.injectDemoFailure()
-                    nova.agent.app.di.DemoSignal.SpeedApproval -> _uiState.value.pendingApproval?.let { pa ->
+                    DemoSignal.FailGeneration -> repo.injectDemoFailure()
+                    DemoSignal.SpeedApproval -> _uiState.value.pendingApproval?.let { pa ->
                         dispatch(ChatUiEvent.ApprovalDeadlineShortened(pa.requestId, 6_000, System.currentTimeMillis()))
                     }
-                    nova.agent.app.di.DemoSignal.CycleConnection -> Unit // 由 AppViewModel.demoCycleConnection 处理
+                    DemoSignal.CycleConnection -> Unit // 由 AppViewModel.demoCycleConnection 处理
                 }
             }
         }
@@ -93,33 +121,63 @@ class ChatViewModel private constructor(
         val text = _uiState.value.input.trim()
         if (text.isEmpty()) return
         dispatch(ChatUiEvent.Submitted(text, System.currentTimeMillis()))
+        val activeCid = container.activeConversation.value
+        nova.agent.app.di.D { "Send text=${text.take(16)} active=$activeCid mode=${container.mode}" }
+        // 无活跃会话：发送即自动建（PRD FR3 语义——不要求用户先手动开会话）
+        if (container.mode == nova.agent.app.settings.DataSource.REAL && activeCid == null) {
+            val opener = container.conversationOpener
+            if (opener != null) {
+                viewModelScope.launch {
+                    val pid = container.appRepo.currentProjectId.value
+                    val outcome = runCatching { opener(pid, null) }
+                        .onFailure { nova.agent.app.di.D { "Send open threw: ${it::class.simpleName} ${it.message}" } }
+                        .getOrNull()
+                    nova.agent.app.di.D { "Send open outcome=${outcome?.let { o -> o::class.simpleName } ?: "throw"} pid=$pid" }
+                    when (outcome) {
+                        is nova.agent.app.data.conversation.ConversationCoordinator.OpenOutcome.Holder -> repo.submit(text)
+                        is nova.agent.app.data.conversation.ConversationCoordinator.OpenOutcome.ReadOnly ->
+                            dispatch(ChatUiEvent.SysPillAdded("会话被 ${outcome.holderDeviceName} 持有（只读），发送未执行", PillKind.WARN))
+                        else -> dispatch(ChatUiEvent.SysPillAdded("无法连接服务器——消息已暂存，请恢复网络后重发", PillKind.WARN))
+                    }
+                }
+                return
+            }
+        }
         repo.submit(text)
     }
 
     fun stop() {
         if (repo.running.value) {
             repo.stop()
-        } else {
+        } else if (isDemo) {
             // demo 首屏伪运行（历史快照停在「生成中」）没有真实 job：本地复位五态条
             dispatch(ChatUiEvent.RunClosed(nova.agent.loop.RunEndReason.ABORTED, null, System.currentTimeMillis()))
         }
     }
 
-    /** 只读接续（demo L2392-2399）：申请租约 → 900ms 后 409（TTL/心跳文案）；阶段3 接 LeaseClient */
+    /**
+     * 只读「接续」：真实 = 重取租约（结果经 oneShots/lease 回流）；
+     * demo = 申请中 snackbar → 900ms 后 409（TTL/心跳文案，阶段2补 FR3）。
+     */
     fun resumeLease() {
-        val lease = _uiState.value.lease ?: return
-        viewModelScope.launch {
-            _feedback.emit("申请租约中（acquire conv_2）…")
-            delay(900)
-            _feedback.emit(
-                "409 · 租约仍由 ${lease.deviceId} 持有（TTL ${lease.ttlSec}s / 心跳 ${lease.heartbeatSec}s）" +
-                    "——稍后再试，或先只读看进度",
-            )
+        if (isDemo) {
+            val lease = _uiState.value.lease ?: return
+            viewModelScope.launch {
+                _feedback.emit("申请租约中（acquire conv_2）…")
+                delay(900)
+                _feedback.emit(
+                    "409 · 租约仍由 ${lease.deviceId} 持有（TTL ${lease.ttlSec}s / 心跳 ${lease.heartbeatSec}s）" +
+                        "——稍后再试，或先只读看进度",
+                )
+            }
+        } else {
+            viewModelScope.launch { channels.resumeLease() }
         }
     }
 
     /** 只看进度（demo roBanner 第二动作）：只读跟随，seq 每 1.2s 推进 */
     fun followLease() {
+        if (!isDemo) return
         if (followJob?.isActive == true) return
         _feedback.tryEmit("只读跟随中——对方每写一批，这里推进一格")
         followJob = viewModelScope.launch {
@@ -132,6 +190,7 @@ class ChatViewModel private constructor(
 
     /** 刷新进度（demo roFooter）：seq +7 */
     fun refreshLease() {
+        if (!isDemo) return
         val lease = _uiState.value.lease ?: return
         val next = lease.seq + 7
         dispatch(ChatUiEvent.LeaseObserved(lease.copy(seq = next)))
@@ -153,7 +212,7 @@ class ChatViewModel private constructor(
 
     fun inputChange(text: String) = dispatch(ChatUiEvent.InputChanged(text))
 
-    /** 切执行模式 → 只挂「待生效」，随下一条消息生效（demo applyModeIfPending） */
+    /** 切执行模式 → 只挂「待生效」，随下一条消息生效（demo applyModeIfPending，阶段2补 FR2.3） */
     fun execModeChange(mode: ExecMode) {
         val current = _uiState.value.execMode
         dispatch(ChatUiEvent.ExecModeChanged(mode))
@@ -197,7 +256,7 @@ class ChatViewModel private constructor(
         }
     }
 
-    /** 120s 倒计时归零：全批「已过期」（demo server 懒过期）+ 留痕 + snackbar */
+    /** 120s 倒计时归零：全批「已过期」（demo server 懒过期）+ 留痕 + snackbar（阶段2补 FR4.3） */
     fun approvalTimeout(requestId: String) {
         dispatch(ChatUiEvent.ApprovalTimedOut(requestId, System.currentTimeMillis()))
         _feedback.tryEmit("120s 无决策——本批已自动拒绝")
@@ -210,9 +269,9 @@ class ChatViewModel private constructor(
         if (queued) _feedback.tryEmit("离线排队中——指令进待发队列（上限 10k），恢复后按序补推")
     }
 
-    /** 重连恢复（AppRepository 退避完成后回调）：按序补推幽灵队列 */
+    /** 重连恢复（demo 退避完成后回调）：按序补推幽灵队列 */
     fun onConnectionRestored() {
-        val ghosts = _uiState.value.items.filterIsInstance<nova.agent.app.data.ChatItem.GhostItem>()
+        val ghosts = _uiState.value.items.filterIsInstance<ChatItem.GhostItem>()
         dispatch(ChatUiEvent.OfflineQueueToggled(false))
         if (ghosts.isNotEmpty()) {
             _feedback.tryEmit("已重连——待发队列按序补推 ${ghosts.size} 条")
@@ -228,7 +287,7 @@ class ChatViewModel private constructor(
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     require(modelClass == ChatViewModel::class.java)
-                    return ChatViewModel(container.chatRepo, container.demoTriggers) as T
+                    return ChatViewModel(container.chatRepo, container.chatChannels, container) as T
                 }
             }
     }

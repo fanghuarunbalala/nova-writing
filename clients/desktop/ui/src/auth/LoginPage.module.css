@@ -170,15 +170,6 @@
   color: var(--color-muted);
 }
 
-.badge {
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  color: var(--color-accent);
-  background: var(--color-accent-8-transparent);
-  border-radius: var(--radius-pill);
-  padding: var(--space-1-5px) var(--space-2);
-}
-
 .fieldHint {
   margin-top: var(--space-1);
   font-size: var(--fs-meta);

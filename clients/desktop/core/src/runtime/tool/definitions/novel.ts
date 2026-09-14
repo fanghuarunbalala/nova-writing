@@ -23,6 +23,7 @@ import type { NovelMutateResult } from "../../../novel/contract/snapshot.js";
 import type { OrderKey } from "../../../novel/model/outline.js";
 import { LEAF_RHYTHMS } from "../../../novel/model/outline.js";
 import { ID_PATTERN, ORDER_KEY_PATTERN } from "../../../novel/keys.js";
+import type { WritingFocusRecorder } from "../../agent/stylelib/WritingFocusStore.js";
 import {
   novelReadPreview,
   novelWritePreview,
@@ -711,15 +712,126 @@ function validateEditArgs(
  * 创建 novel 实体通用工具（kind 分发；组 novel.entities 的全部 4 件）
  * @param handle novel 客户端（query/mutate/mutateBatch）
  * @param options requireApproval 覆盖（缺省写工具需审批；后台无人审批会话——
- *   BookAnalyst——传 false，对齐 analyst.files 免审批先例）
+ *   BookAnalyst——传 false，对齐 analyst.files 免审批先例）+ writingFocus 写作焦点
+ *   记录面（NovelWrite/NovelEdit 成功执行后记录，stylelib 注入用；缺省不记录）
  * @returns [NovelRead, NovelWrite, NovelEdit, NovelDelete]
  */
 export function createNovelEntityTools(
 	handle: NovelHandle,
-	options?: { requireApproval?: boolean },
+	options?: { requireApproval?: boolean; writingFocus?: WritingFocusRecorder },
 ): ToolDef[] {
 	const approval = options?.requireApproval ?? true;
-	return [novelRead(handle), novelWrite(handle, approval), novelEdit(handle, approval), novelDelete(handle, approval)];
+	const tools = [
+		novelRead(handle),
+		novelWrite(handle, approval),
+		novelEdit(handle, approval),
+		novelDelete(handle, approval),
+	];
+	if (options?.writingFocus !== undefined) {
+		const write = tools[1];
+		const edit = tools[2];
+		if (write !== undefined) tools[1] = withWritingFocus(write, options.writingFocus);
+		if (edit !== undefined) tools[2] = withWritingFocus(edit, options.writingFocus);
+	}
+	return tools;
+}
+
+/**
+ * 包装写工具：成功执行后按调用参数记录写作焦点（记录失败不影响工具结果）
+ * @param tool 原工具
+ * @param recorder 焦点记录面
+ * @returns 包装后工具
+ */
+function withWritingFocus(tool: ToolDef, recorder: WritingFocusRecorder): ToolDef {
+	const inner = tool.handler.execute;
+	return {
+		...tool,
+		handler: {
+			execute: async (call) => {
+				const result = await inner(call);
+				try {
+					recordFocusFromCall(recorder, call, result);
+				} catch {
+					// 焦点记录失败不掩盖工具结果
+				}
+				return result;
+			},
+		},
+	};
+}
+
+/**
+ * 从 NovelWrite/NovelEdit 调用参数提取写作焦点（纯函数）：paragraph 取
+ * storyUnitId；story_unit 取自选 id（缺省从结果 items 解析宿主生成 id）；
+ * chapter 取来源提示 storyUnitId（缺省不构成焦点）。其余 kind 不记录。
+ * @param recorder 焦点记录面
+ * @param call 工具调用（args 为 JSON 字符串）
+ * @param result 工具结果文本（items JSON——宿主生成 id 的回传通道）
+ */
+export function recordFocusFromCall(
+	recorder: WritingFocusRecorder,
+	call: ToolCall,
+	result: string,
+): void {
+	let args: { kind?: unknown; values?: unknown };
+	try {
+		args = JSON.parse(call.args) as { kind?: unknown; values?: unknown };
+	} catch {
+		return;
+	}
+	const kind = typeof args.kind === "string" ? args.kind : "";
+	const capturedAt = Date.now();
+	const values = Array.isArray(args.values) ? args.values : [];
+	const first = values[0];
+	const firstValue =
+		typeof first === "object" && first !== null ? (first as Record<string, unknown>) : undefined;
+	if (kind === "paragraph") {
+		const unit = firstValue?.storyUnitId;
+		if (typeof unit === "string" && unit.length > 0) {
+			recorder.record({ kind, storyUnitId: unit, capturedAt });
+		}
+		return;
+	}
+	if (kind === "story_unit") {
+		const selfId = firstValue?.id;
+		if (typeof selfId === "string" && selfId.length > 0) {
+			recorder.record({ kind, storyUnitId: selfId, capturedAt });
+			return;
+		}
+		const generated = firstAppliedId(result);
+		if (generated !== undefined) {
+			recorder.record({ kind, storyUnitId: generated, capturedAt });
+		}
+		return;
+	}
+	if (kind === "chapter") {
+		const hint = firstValue?.storyUnitId;
+		if (typeof hint === "string" && hint.length > 0) {
+			recorder.record({ kind, storyUnitId: hint, capturedAt });
+		}
+	}
+}
+
+/** 从批量结果文本解析首个成功项的实体 id（自选 id 缺省时宿主生成 id 回传于此） */
+function firstAppliedId(result: string): string | undefined {
+	try {
+		const items = JSON.parse(result) as ReadonlyArray<{
+			id?: unknown;
+			status?: unknown;
+		}>;
+		const first = Array.isArray(items) ? items[0] : undefined;
+		if (
+			first !== undefined &&
+			typeof first === "object" &&
+			(first.status === undefined || first.status === "applied") &&
+			typeof first.id === "string"
+		) {
+			return first.id;
+		}
+	} catch {
+		// 结果非 JSON（意外形态）：无 id 可解析
+	}
+	return undefined;
 }
 
 // ── NovelRead ──

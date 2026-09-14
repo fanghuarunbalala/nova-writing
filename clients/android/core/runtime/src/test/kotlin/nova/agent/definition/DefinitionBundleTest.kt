@@ -12,13 +12,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * 定义包测试：golden 夹具 = core TS 导出器产出的 1.5.0 全策略面包（对拍种子——
+ * 定义包测试：golden 夹具 = core TS 导出器产出的 1.6.0 全策略面包（对拍种子——
  * 双端读同一份 JSON，static 段文案/compact 参数/工具组清单逐字段一致）。
  */
 class DefinitionBundleTest {
 
     private fun golden(): DefinitionBundle {
-        val path: Path = Path.of(javaClass.classLoader.getResource("definition-novel-1.5.0.json")!!.toURI())
+        val path: Path = Path.of(javaClass.classLoader.getResource("definition-novel-1.6.0.json")!!.toURI())
         return DefinitionBundleCodec.decode(Files.readString(path))
     }
 
@@ -26,11 +26,12 @@ class DefinitionBundleTest {
     fun parseGoldenFixture() {
         val bundle = golden()
         assertEquals(1, bundle.bundleSchemaVersion)
-        assertEquals("1.5.0", bundle.definitionVersion)
+        assertEquals("1.6.0", bundle.definitionVersion)
         assertEquals("novel", bundle.agentType)
-        assertEquals(15, bundle.prompt.recipe.size)
+        // stylelib（1.6.0）新增 novel-style-guide Dynamic 段：15→16（6 static + 10 dynamic）
+        assertEquals(16, bundle.prompt.recipe.size)
         assertEquals(6, bundle.prompt.recipe.count { it is RecipeItem.Static })
-        assertEquals(9, bundle.prompt.recipe.count { it is RecipeItem.Dynamic })
+        assertEquals(10, bundle.prompt.recipe.count { it is RecipeItem.Dynamic })
         // 双端对拍种子：static 文案非空（identity 段）
         val identity = bundle.prompt.recipe.first() as RecipeItem.Static
         assertEquals("novel.identity", identity.sectionId)
